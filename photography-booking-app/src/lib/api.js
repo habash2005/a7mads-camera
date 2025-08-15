@@ -1,6 +1,5 @@
 // src/lib/api.js
 import {
-  addDoc,
   collection,
   getDocs,
   query,
@@ -13,96 +12,102 @@ import {
 import { db } from "./firebase";
 
 /** --- Config --- */
-const OPEN_MIN  = 9 * 60 + 30;   // 09:30   -> 570
-const CLOSE_MIN = 21 * 60 + 30;  // 21:30   -> 1290
+const OPEN_MIN  = 9 * 60 + 30;   // 09:30 -> 570
+const CLOSE_MIN = 21 * 60 + 30;  // 21:30 -> 1290
 
-// Safety window around requested start (in minutes)
-const BUFFER_BEFORE_MIN = 90;    // block anything starting within 90 min before
-const BUFFER_AFTER_MIN  = 90;    // and within 90 min after
+// Safety window: block bookings that START within this window around requested start
+const BUFFER_BEFORE_MIN = 90;
+const BUFFER_AFTER_MIN  = 90;
 
 /** --- Helpers --- */
-
-/** Build a local Date from "YYYY-MM-DD" + "HH:mm" (24h) in the user's local TZ */
 function toLocalDate(dateStr, timeStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const [hh, mm]  = timeStr.split(":").map(Number);
   return new Date(y, m - 1, d, hh, mm, 0, 0);
 }
-
-/** Minutes since midnight from "HH:mm" */
 function minutesFromHHMM(hhmm) {
   const [hh, mm] = hhmm.split(":").map(Number);
   return hh * 60 + mm;
 }
-
-/** Is the time within 09:30–21:30 inclusive? */
 function isWithinBusinessHours(timeStr) {
-  const minutes = minutesFromHHMM(timeStr);
-  return minutes >= OPEN_MIN && minutes <= CLOSE_MIN;
+  const m = minutesFromHHMM(timeStr);
+  return m >= OPEN_MIN && m <= CLOSE_MIN;
 }
-
-/** Exactly on :00 or :30 ? */
 function isThirtyMinuteIncrement(timeStr) {
   const mm = Number(timeStr.split(":")[1] || 0);
   return mm % 30 === 0;
 }
-
-/** Add minutes to a Date */
 function addMinutes(date, min) {
   return new Date(date.getTime() + min * 60 * 1000);
+}
+/** Parse pkg.duration like "60–90 min", "3 hours", "60 min" → minutes (first number) */
+function parseDurationMinutes(pkg) {
+  if (!pkg || typeof pkg.duration !== "string") return 60;
+  const s = pkg.duration.toLowerCase().trim().replace(/\s+/g, " ");
+  const nums = s.match(/\d+/g);
+  if (!nums || nums.length === 0) return 60;
+  const n = Number(nums[0]);
+  return s.includes("hour") ? n * 60 : n;
+}
+
+/** Call Netlify function to send emails (non‑blocking) */
+async function fireConfirmationEmail(bookingPayload) {
+  try {
+    await fetch("/.netlify/functions/send-confirmation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ booking: bookingPayload }),
+    });
+  } catch {
+    // don't block UI on email failures; check Netlify logs if needed
+  }
 }
 
 /** --- Public API --- */
 
 /**
  * Check if a slot is free with a safety buffer.
- * Unavailable if ANY booking starts within the buffer window and is not canceled.
- * NOTE: If you don't keep a "status" field, remove the `where("status","in",...)` line.
+ * NOTE: This checks for conflicting *starts* within buffer window.
+ * Pass the selected package so we can validate end time vs hours.
  */
-export async function checkAvailability({ date, time, durationMin = 60 }) {
+export async function checkAvailability({ date, time, pkg }) {
   try {
-    if (!date || !time) {
-      return { available: false, reason: "Missing date/time" };
-    }
+    if (!date || !time) return { available: false, reason: "Missing date/time" };
 
-    // Hard guard: 30-minute grid only
+    // 30-min grid only
     if (!isThirtyMinuteIncrement(time)) {
       return { available: false, reason: "Please choose a :00 or :30 time." };
     }
 
-    // Hard guard: within business hours (start AND end)
+    // start within business hours
     if (!isWithinBusinessHours(time)) {
       return { available: false, reason: "Outside hours (09:30–21:30)" };
     }
+
+    // end within business hours (derived from package duration)
     const start = toLocalDate(date, time);
+    const durationMin = parseDurationMinutes(pkg);
     const end = addMinutes(start, durationMin);
-    const endHH = String(end.getHours()).padStart(2, "0");
-    const endMM = String(end.getMinutes()).padStart(2, "0");
-    const endHHMM = `${endHH}:${endMM}`;
+    const endHHMM = `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
     if (!isWithinBusinessHours(endHHMM)) {
       return { available: false, reason: "Outside hours (09:30–21:30)" };
     }
 
-    // Buffer window around requested start
+    // buffer around requested start
     const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
     const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
 
-    const bookingsCol = collection(db, "bookings");
     const qy = query(
-      bookingsCol,
+      collection(db, "bookings"),
       where("startAt", ">=", Timestamp.fromDate(windowStart)),
       where("startAt", "<=", Timestamp.fromDate(windowEnd)),
-      // Remove this line if you don't store a status field
-      where("status", "in", ["pending", "confirmed"])
+      where("status", "in", ["pending", "confirmed"]) // keep if you store status
     );
 
     const snap = await getDocs(qy);
     const conflict = !snap.empty;
 
-    return {
-      available: !conflict,
-      reason: conflict ? "Conflicts with another session" : null,
-    };
+    return { available: !conflict, reason: conflict ? "Conflicts with another session" : null };
   } catch (err) {
     console.error("checkAvailability error:", err);
     return { available: false, reason: "Availability check failed" };
@@ -110,52 +115,81 @@ export async function checkAvailability({ date, time, durationMin = 60 }) {
 }
 
 /**
- * Submit a booking after re-validating increments, hours, and conflicts.
- * Uses a transaction to prevent race conditions (two users booking the same slot).
+ * Submit a booking that MATCHES your Firestore rules exactly:
+ * Top-level keys ONLY: reference, status, package, date, time, startAt, details, createdAt
+ * - status: "pending"
+ * - package: { id (string), name (string), price (number), duration (string) }
+ * - details: { name (string), email (string), phone (string), location (string) }
+ *
+ * Also fires the Netlify function to email client + admin.
  */
-export async function submitBooking({ package: pkg, date, time, details, durationMin = 60 }) {
+export async function submitBooking({ pkg, date, time, details }) {
   try {
-    // Re-validate fast
-    const { available, reason } = await checkAvailability({ date, time, durationMin });
-    if (!available) {
-      return { ok: false, error: reason || "Not available" };
+    // Availability + business-hours validation
+    const avail = await checkAvailability({ date, time, pkg });
+    if (!avail.available) return { ok: false, error: avail.reason || "Not available" };
+
+    // Validate shapes required by your Firestore rules
+    if (!pkg || typeof pkg.id !== "string" || typeof pkg.name !== "string" ||
+        typeof pkg.price !== "number" || typeof pkg.duration !== "string") {
+      return { ok: false, error: "Invalid package format" };
+    }
+    if (!details || typeof details.name !== "string" || typeof details.email !== "string" ||
+        typeof details.phone !== "string" || typeof details.location !== "string") {
+      return { ok: false, error: "Missing contact details" };
     }
 
     const start = toLocalDate(date, time);
     const reference = Math.random().toString(36).slice(2, 8).toUpperCase();
     const bookingsCol = collection(db, "bookings");
-    const newDocRef = doc(bookingsCol); // create id now so we can return it deterministically
+    const newDocRef = doc(bookingsCol);
 
+    // Transaction for race-safety
     await runTransaction(db, async (tx) => {
-      // Re-check conflict INSIDE the transaction window
+      // re-check conflict inside transaction
       const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
       const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
-
       const qy = query(
         bookingsCol,
         where("startAt", ">=", Timestamp.fromDate(windowStart)),
         where("startAt", "<=", Timestamp.fromDate(windowEnd)),
-        // Remove this line if you don't store a status field
         where("status", "in", ["pending", "confirmed"])
       );
-
       const snap = await getDocs(qy);
-      if (!snap.empty) {
-        throw new Error("Conflicts with another session");
-      }
+      if (!snap.empty) throw new Error("Conflicts with another session");
 
-      // Still clear: write the booking
+      // Write EXACTLY the allowed keys
       tx.set(newDocRef, {
-        package: pkg,
-        date,
-        time,
+        reference,                // string
+        status: "pending",        // required exact value
+        package: {
+          id: pkg.id,
+          name: pkg.name,
+          price: pkg.price,
+          duration: pkg.duration, // e.g., "60 min" / "3 hours" / "60–90 min"
+        },
+        date,                     // "YYYY-MM-DD" (string)
+        time,                     // "HH:mm" (string)
         startAt: Timestamp.fromDate(start),
-        durationMin,
-        details,
-        status: "pending",        // you can confirm/cancel in admin
+        details: {
+          name: details.name,
+          email: details.email,
+          phone: details.phone,
+          location: details.location,
+        },
         createdAt: serverTimestamp(),
-        reference,                 // single source of truth
       });
+    });
+
+    // Fire-and-forget email (does not write back to Firestore)
+    fireConfirmationEmail({
+      id: newDocRef.id,
+      reference,
+      status: "pending",
+      package: { ...pkg },
+      details: { ...details },
+      date,
+      time,
     });
 
     return { ok: true, id: newDocRef.id, reference };

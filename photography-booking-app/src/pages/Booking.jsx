@@ -54,15 +54,18 @@ export default function Booking() {
     if (!date || !time) return;
 
     setChecking(true);
-    const res = await checkAvailability({ date, time });
+    // ✅ pass the selected package so end-time can be validated properly
+    const res = await checkAvailability({ date, time, pkg: selected });
     setAvailability(res.available);
     if (!res.available && res.reason) setErr(res.reason);
     setChecking(false);
   };
 
   const confirm = async () => {
+    if (submitting) return; // guard double-clicks
     setSubmitting(true);
-    const res = await submitBooking({ package: selected, date, time, details });
+    // submitBooking writes exactly what your Firestore rules require
+    const res = await submitBooking({ pkg: selected, date, time, details });
     setResult(res);
     setSubmitting(false);
   };
@@ -87,7 +90,7 @@ export default function Booking() {
           <div>
             <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Book a Session</h2>
             <p className="text-charcoal/70 mt-1">
-              Complete the steps to request your slot. <span className="text-rose/80">(Demo only—no emails are sent.)</span>
+              Complete the steps to request your slot. <span className="text-rose/80"></span>
             </p>
           </div>
           <Stepper step={step} />
