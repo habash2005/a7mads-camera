@@ -9,14 +9,16 @@ import {
   query,
   where,
   limit,
+  doc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 
 // ✅ STATIC lazy imports so Vite can bundle them:
 const AdminUpload   = React.lazy(() => import("./AdminUpload"));
 const AdminGallery  = React.lazy(() => import("./AdminGallery"));
-const AdminBookings = React.lazy(() => import("./AdminBookings")); // create this if you haven’t
+const AdminBookings = React.lazy(() => import("./AdminBookings")); // (optional page)
 
-/* ---------- Helpers ---------- */
 async function safeCount(qy) {
   try {
     const res = await getCountFromServer(qy);
@@ -33,7 +35,6 @@ function jumpTo(title) {
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-/* ---------- Page ---------- */
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [upcoming, setUpcoming] = useState({ rows: [], loading: true, error: "" });
@@ -54,21 +55,46 @@ export default function AdminDashboard() {
       setStats({ totalBookings, pending, confirmedUpcoming, galleries });
       setLoadingStats(false);
 
-      try {
-        const qy = query(
-          bookingsCol,
-          where("startAt", ">=", new Date()),
-          orderBy("startAt", "asc"),
-          limit(6)
-        );
-        const snap = await getDocs(qy);
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setUpcoming({ rows, loading: false, error: "" });
-      } catch (e) {
-        setUpcoming({ rows: [], loading: false, error: "Couldn’t load upcoming bookings (index needed?)." });
-      }
+      await refreshUpcoming(setUpcoming);
     })();
   }, []);
+
+  async function refreshUpcoming(setter) {
+    try {
+      const bookingsCol = collection(db, "bookings");
+      const qy = query(
+        bookingsCol,
+        where("startAt", ">=", new Date()),
+        orderBy("startAt", "asc"),
+        limit(6)
+      );
+      const snap = await getDocs(qy);
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setter({ rows, loading: false, error: "" });
+    } catch (e) {
+      console.warn("Upcoming query failed:", e);
+      setter({ rows: [], loading: false, error: "Couldn’t load upcoming bookings (index needed?)." });
+    }
+  }
+
+  // 🔻 Cancel a booking
+  async function cancelBooking(id) {
+    const ok = window.confirm("Cancel this appointment? This cannot be undone.");
+    if (!ok) return;
+    try {
+      await updateDoc(doc(db, "bookings", id), {
+        status: "canceled",
+        canceledAt: serverTimestamp(),
+      });
+      // Refresh upcoming list
+      setUpcoming((p) => ({ ...p, loading: true }));
+      await refreshUpcoming(setUpcoming);
+    } catch (e) {
+      console.error("Cancel failed:", e);
+      alert("Could not cancel. Check Firestore rules/connection.");
+      setUpcoming((p) => ({ ...p, loading: false }));
+    }
+  }
 
   return (
     <section className="w-full py-10 md:py-14 bg-ivory">
@@ -76,7 +102,7 @@ export default function AdminDashboard() {
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Admin</h1>
+            <h1 className="text-2xl md:3xl font-serif font-semibold text-charcoal">Admin</h1>
             <p className="text-sm text-charcoal/70">Manage uploads, client galleries, and bookings in one place.</p>
           </div>
           <button
@@ -143,41 +169,69 @@ export default function AdminDashboard() {
               <div className="text-sm text-charcoal/60">No upcoming bookings.</div>
             ) : (
               <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-rose-50 text-charcoal/80">
-                    <tr>
-                      <Th>When</Th><Th>Client</Th><Th>Package</Th><Th>Ref</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {upcoming.rows.map((b) => {
-                      const dt = b.startAt?.toDate?.();
-                      const when = dt
-                        ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-                        : `${b.date} ${b.time}`;
-                      return (
-                        <tr key={b.id} className="border-t border-slate-100">
-                          <Td>
-                            <div>{when}</div>
-                            <div className="text-slate-500">{b.details?.location}</div>
-                          </Td>
-                          <Td>
-                            <div className="font-medium">{b.details?.name}</div>
-                            <div className="text-slate-500">{b.details?.email}</div>
-                            <div className="text-slate-500">{b.details?.phone}</div>
-                          </Td>
-                          <Td>
-                            <div className="font-medium">{b.package?.name}</div>
-                            <div className="text-slate-500">
-                              ${b.package?.price} — {b.package?.duration}
-                            </div>
-                          </Td>
-                            <Td className="font-mono">{b.reference}</Td>
+                {/* scroll wrappers so the card doesn't get cut off */}
+                <div className="overflow-x-auto">
+                  <div className="max-h-[28rem] overflow-y-auto">
+                    <table className="w-full text-sm min-w-[760px]">
+                      <thead className="bg-rose-50 text-charcoal/80 sticky top-0 z-10">
+                        <tr>
+                          <Th>When</Th>
+                          <Th>Client</Th>
+                          <Th>Package</Th>
+                          <Th>Ref</Th>
+                          <Th className="w-36">Actions</Th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {upcoming.rows.map((b) => {
+                          const dt = b.startAt?.toDate?.();
+                          const when = dt
+                            ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+                            : `${b.date} ${b.time}`;
+                          const isPast = dt ? dt.getTime() < Date.now() : false;
+                          const isCanceled = (b.status || "").toLowerCase() === "canceled";
+                          return (
+                            <tr key={b.id} className="border-t border-slate-100">
+                              <Td>
+                                <div className="flex items-center gap-2">
+                                  {isCanceled && <span className="text-rose font-semibold">●</span>}
+                                  <span>{when}</span>
+                                </div>
+                                <div className="text-slate-500">{b.details?.location}</div>
+                              </Td>
+                              <Td>
+                                <div className="font-medium">{b.details?.name}</div>
+                                <div className="text-slate-500">{b.details?.email}</div>
+                                <div className="text-slate-500">{b.details?.phone}</div>
+                              </Td>
+                              <Td>
+                                <div className="font-medium">{b.package?.name}</div>
+                                <div className="text-slate-500">
+                                  ${b.package?.price} — {b.package?.duration}
+                                </div>
+                              </Td>
+                              <Td className="font-mono">{b.reference}</Td>
+                              <Td>
+                                {isCanceled ? (
+                                  <span className="text-rose font-semibold">Canceled</span>
+                                ) : (
+                                  <button
+                                    className="rounded-full px-3 py-2 text-xs font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all"
+                                    onClick={() => cancelBooking(b.id)}
+                                    disabled={isPast}
+                                    title={isPast ? "This time has already passed" : "Cancel appointment"}
+                                  >
+                                    Cancel
+                                  </button>
+                                )}
+                              </Td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             )}
           </Card>
@@ -234,8 +288,12 @@ function Card({ title, className, children }) {
     </section>
   );
 }
-const Th = ({ children }) => <th className="text-left px-4 py-3">{children}</th>;
-const Td = ({ children, className }) => <td className={cls("px-4 py-3 align-top", className)}>{children}</td>;
+function Th({ children, className }) {
+  return <th className={cls("text-left px-4 py-3", className)}>{children}</th>;
+}
+function Td({ children, className }) {
+  return <td className={cls("px-4 py-3 align-top", className)}>{children}</td>;
+}
 function TableSkeleton({ rows = 4 }) {
   return (
     <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
