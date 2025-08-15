@@ -5,9 +5,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
-    <script src="https://upload-widget.cloudinary.com/global/all.js" async></script>
+
+    <!-- IMPORTANT: no async -->
+    <script src="https://upload-widget.cloudinary.com/global/all.js" defer></script>
+
+    <!-- Only keep these if you actually use the Cloudinary Product Gallery -->
     <link rel="stylesheet" href="https://product-gallery.cloudinary.com/all.css" />
-    <script src="https://product-gallery.cloudinary.com/all.js" async></script>
+    <script src="https://product-gallery.cloudinary.com/all.js" defer></script>
 
     <title>Lama Photo NC</title>
   </head>

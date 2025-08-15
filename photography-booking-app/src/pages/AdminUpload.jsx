@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
-const CLOUD_NAME = "lamaphoto";              // ← your Cloudinary cloud name
-const UPLOAD_PRESET = "lamaphoto_unsigned";  // ← your UNSIGNED upload preset
+const CLOUD_NAME = "lamaphoto";              // your Cloudinary cloud
+const UPLOAD_PRESET = "lamaphoto_unsigned";  // UNSIGNED preset name
 
 export default function AdminUpload() {
   const [mode, setMode] = useState("portfolio"); // "portfolio" | "client"
@@ -12,6 +12,33 @@ export default function AdminUpload() {
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [ready, setReady] = useState(!!window.cloudinary); // ← NEW
+
+  // Ensure Cloudinary widget script is present & loaded (mobile-safe)
+  useEffect(() => {
+    if (window.cloudinary) { setReady(true); return; }
+
+    const src = "https://upload-widget.cloudinary.com/global/all.js";
+    let script = document.querySelector(`script[src="${src}"]`);
+    const onload = () => setReady(true);
+    const onerror = () => setMsg("Failed to load upload widget. Try turning off content blockers or reload.");
+
+    if (!script) {
+      script = document.createElement("script");
+      script.src = src;
+      script.defer = true;
+      script.onload = onload;
+      script.onerror = onerror;
+      document.body.appendChild(script);
+    } else {
+      script.addEventListener("load", onload, { once: true });
+    }
+
+    const t = setTimeout(() => {
+      if (!window.cloudinary) setMsg("Still loading… if on iPhone, open in Safari and disable content blockers for this site.");
+    }, 6000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Load client galleries for dropdown
   useEffect(() => {
@@ -19,14 +46,14 @@ export default function AdminUpload() {
       try {
         setLoading(true);
         const snap = await getDocs(collection(db, "galleries"));
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                              .sort((a,b)=>(a.name||"").localeCompare(b.name||""));
         setGalleries(list);
         if (list.length) setSelectedId(list[0].id);
-        else if (mode === "client") setMsg("No galleries yet — create one at /admin/gallery.");
+        else if (mode === "client") setMsg("No galleries yet — create one at /admin (New Gallery).");
       } catch (e) {
         console.error(e);
-        setMsg("Failed to load galleries. Check Firestore.");
+        setMsg("Failed to load galleries. Check Firestore rules/connection.");
       } finally {
         setLoading(false);
       }
@@ -39,9 +66,8 @@ export default function AdminUpload() {
   );
 
   const openWidget = useCallback(() => {
-    if (!window.cloudinary) return setMsg("Upload widget not loaded yet. Try again in a second.");
+    if (!window.cloudinary) { setMsg("Widget not ready yet…"); return; }
 
-    // Decide target based on mode
     const isPortfolio = mode === "portfolio";
     const tag = isPortfolio ? "portfolio" : selected?.tag;
     const folder = isPortfolio ? "portfolio" : "client-galleries";
@@ -52,11 +78,11 @@ export default function AdminUpload() {
     const widget = window.cloudinary.createUploadWidget(
       {
         cloudName: CLOUD_NAME,
-        uploadPreset: UPLOAD_PRESET, // must be UNSIGNED
+        uploadPreset: UPLOAD_PRESET,    // must be UNSIGNED in Cloudinary console
         folder,
         tags: [tag],
         multiple: true,
-        sources: ["local", "camera", "google_drive", "dropbox", "url"],
+        sources: ["local", "camera", "url", "google_drive", "dropbox"], // iOS camera supported over HTTPS
         clientAllowedFormats: ["jpg", "jpeg", "png", "webp"],
         maxFileSize: 20_000_000,
         styles: {
@@ -82,7 +108,7 @@ export default function AdminUpload() {
           return;
         }
         if (result?.event === "success") {
-          setMsg(`✅ Uploaded to ${isPortfolio ? "Portfolio" : selected?.name}: ${result.info.original_filename}`);
+          setMsg(`✅ Uploaded: ${result.info.original_filename}`);
         }
       }
     );
@@ -101,28 +127,18 @@ export default function AdminUpload() {
         {/* Mode toggle */}
         <div className="mt-6 flex gap-4 items-center">
           <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="mode"
-              value="portfolio"
-              checked={mode === "portfolio"}
-              onChange={() => setMode("portfolio")}
-            />
+            <input type="radio" name="mode" value="portfolio"
+              checked={mode === "portfolio"} onChange={() => setMode("portfolio")} />
             <span>Portfolio</span>
           </label>
           <label className="flex items-center gap-2">
-            <input
-              type="radio"
-              name="mode"
-              value="client"
-              checked={mode === "client"}
-              onChange={() => setMode("client")}
-            />
+            <input type="radio" name="mode" value="client"
+              checked={mode === "client"} onChange={() => setMode("client")} />
             <span>Client Gallery</span>
           </label>
         </div>
 
-        {/* Client gallery picker */}
+        {/* Client picker */}
         {mode === "client" && (
           <div className="mt-4">
             <label className="text-sm font-medium text-charcoal">Select gallery</label>
@@ -138,9 +154,8 @@ export default function AdminUpload() {
                 </option>
               ))}
             </select>
-            {galleries.length === 0 && (
-              <div className="text-xs text-charcoal/70 mt-2">No galleries yet — create one at <code>/admin/gallery</code>.</div>
-            )}
+            {galleries.length === 0 &&
+              <div className="text-xs text-charcoal/70 mt-2">No galleries yet — create one in the Admin dashboard.</div>}
           </div>
         )}
 
@@ -148,9 +163,15 @@ export default function AdminUpload() {
         <div className="mt-6">
           <button
             onClick={openWidget}
-            className="rounded-full px-5 py-3 text-sm font-semibold shadow-md bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all"
+            disabled={!ready}
+            className={`rounded-full px-5 py-3 text-sm font-semibold shadow-md ${
+              ready ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                    : "bg-blush text-charcoal/50 cursor-not-allowed"
+            }`}
           >
-            {mode === "portfolio" ? "Upload to Portfolio" : "Upload to Selected Gallery"}
+            {ready
+              ? (mode === "portfolio" ? "Upload to Portfolio" : "Upload to Selected Gallery")
+              : "Loading…"}
           </button>
         </div>
 
