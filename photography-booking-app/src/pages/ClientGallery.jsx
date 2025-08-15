@@ -18,6 +18,11 @@ function originalDownloadUrl(publicId, format) {
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/fl_attachment/${publicId}.${format}`;
 }
 
+// Get selected public_ids from the latest images + map (prevents stale state issues)
+function getSelectedIds(images, selectedMap) {
+  return images.filter((i) => !!selectedMap[i.public_id]).map((i) => i.public_id);
+}
+
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -53,7 +58,7 @@ export default function ClientGallery() {
 
       setGallery(match);
 
-      // 3) fetch images by tag from Cloudinary Asset Lists (must be enabled in Cloudinary settings)
+      // 3) fetch images by tag from Cloudinary Asset Lists (must be enabled)
       try {
         const res = await fetch(
           `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${match.tag}.json`,
@@ -107,8 +112,16 @@ export default function ClientGallery() {
 
   // ZIP (originals) for selected public_ids via Netlify function
   async function downloadSelectedZip() {
-    const ids = images.filter((i) => selected[i.public_id]).map((i) => i.public_id);
+    // read FRESH selection at click time
+    const ids = getSelectedIds(images, selected);
     if (!ids.length) return;
+
+    // If user effectively selected all (or a large batch), use tag (server-side) for reliability
+    const LARGE_BATCH = 120; // tune this based on typical gallery sizes
+    if ((gallery?.tag && ids.length === images.length) || ids.length > LARGE_BATCH) {
+      return downloadAllZip();
+    }
+
     setZipping(true);
     try {
       const resp = await fetch("/.netlify/functions/cloudinary-zip", {
@@ -116,13 +129,17 @@ export default function ClientGallery() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ public_ids: ids, filename: "selected-images.zip" }),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || "Archive failed");
-      // open the Cloudinary archive URL (contains originals, no transforms)
+      const text = await resp.text(); // robust parse (handles non-JSON error pages)
+      const data = text ? JSON.parse(text) : {};
+      if (!resp.ok) {
+        console.error("Archive error detail (selected):", data);
+        throw new Error(data?.detail?.message || data?.error || "Archive failed");
+      }
+      // open the Cloudinary archive URL (originals, no transforms)
       window.location.assign(data.url);
     } catch (e) {
       console.error(e);
-      alert("Download failed. Please try again.");
+      alert(e.message || "Download failed. Please try again.");
     } finally {
       setZipping(false);
     }
@@ -130,20 +147,52 @@ export default function ClientGallery() {
 
   // ZIP (originals) for the whole tag via Netlify function
   async function downloadAllZip() {
-    if (!gallery?.tag) return;
+    // Prefer tag ZIP when available (Cloudinary batches server-side)
+    if (gallery?.tag) {
+      setZipping(true);
+      try {
+        const resp = await fetch("/.netlify/functions/cloudinary-zip", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tag: gallery.tag, filename: "all-images.zip" }),
+        });
+        const text = await resp.text();
+        const data = text ? JSON.parse(text) : {};
+        if (!resp.ok) {
+          console.error("Archive error detail (all by tag):", data);
+          throw new Error(data?.detail?.message || data?.error || "Archive failed");
+        }
+        window.location.assign(data.url);
+      } catch (e) {
+        console.error(e);
+        alert(e.message || "Download failed. Please try again.");
+      } finally {
+        setZipping(false);
+      }
+      return;
+    }
+
+    // Fallback: build from all current public_ids if tag missing
+    const ids = images.map((i) => i.public_id);
+    if (!ids.length) return;
+
     setZipping(true);
     try {
       const resp = await fetch("/.netlify/functions/cloudinary-zip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tag: gallery.tag, filename: "all-images.zip" }),
+        body: JSON.stringify({ public_ids: ids, filename: "all-images.zip" }),
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || "Archive failed");
+      const text = await resp.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!resp.ok) {
+        console.error("Archive error detail (all fallback):", data);
+        throw new Error(data?.detail?.message || data?.error || "Archive failed");
+      }
       window.location.assign(data.url);
     } catch (e) {
       console.error(e);
-      alert("Download failed. Please try again.");
+      alert(e.message || "Download failed. Please try again.");
     } finally {
       setZipping(false);
     }
@@ -192,13 +241,12 @@ export default function ClientGallery() {
           <div className="mt-8">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="font-serif text-xl text-charcoal">
-                  {gallery.name}
-                </h3>
+                <h3 className="font-serif text-xl text-charcoal">{gallery.name}</h3>
                 <div className="text-xs text-charcoal/60">
                   Tag: <code>{gallery.tag}</code>
                 </div>
               </div>
+
               <div className="flex items-center gap-3">
                 {/* Select all */}
                 <label className="flex items-center gap-2 text-sm">
@@ -288,9 +336,7 @@ export default function ClientGallery() {
                 })}
               </div>
             ) : (
-              <div className="mt-6 text-charcoal/60">
-                No images yet for this gallery.
-              </div>
+              <div className="mt-6 text-charcoal/60">No images yet for this gallery.</div>
             )}
           </div>
         )}
