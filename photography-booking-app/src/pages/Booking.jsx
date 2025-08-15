@@ -3,6 +3,7 @@ import Stepper from '../components/Stepper'
 import PackageCard from '../components/PackageCard'
 import { checkAvailability, submitBooking } from '../lib/api'
 
+
 const PACKAGES = [
   { id:'portrait', name:'Portrait', price:250, duration:'60–90 min', desc:'Clean, crisp portraits in studio or on location.', includes:['Up to 2 outfits','15 edited photos','Online gallery'] },
   { id:'event', name:'Event', price:700, duration:'3 hours', desc:'Coverage for birthdays, engagements, and more.', includes:['Candid + posed','Next-day sneak peek','Highlight reel add-on'] },

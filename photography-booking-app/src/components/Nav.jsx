@@ -24,8 +24,16 @@ export default function Nav() {
           <NavLink to="/booking" className="hover:text-gold transition-colors">
             Book
           </NavLink>
+          <NavLink to="/client" className="hover:text-gold transition-colors">
+            Clients
+          </NavLink>
           <NavLink to="/faq" className="hover:text-gold transition-colors">
             FAQ
+          </NavLink>
+
+          {/* Single Admin Link */}
+          <NavLink to="/admin" className="hover:text-gold transition-colors">
+            Admin
           </NavLink>
         </nav>
 
