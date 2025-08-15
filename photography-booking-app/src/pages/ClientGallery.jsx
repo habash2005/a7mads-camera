@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
-const CLOUD_NAME = "lamaphoto"; // <-- your Cloudinary cloud name
+const CLOUD_NAME = "lamaphoto"; // your Cloudinary cloud name
 
 async function sha256(text) {
   const buf = new TextEncoder().encode(text);
@@ -13,12 +13,12 @@ async function sha256(text) {
     .join("");
 }
 
-// Build an ORIGINAL download URL (no transforms), force attachment
+// ORIGINAL download URL (no transforms), as an attachment
 function originalDownloadUrl(publicId, format) {
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/fl_attachment/${publicId}.${format}`;
 }
 
-// Get selected public_ids from the latest images + map (prevents stale state issues)
+// Build selected ids from *current* state (prevents stale reads)
 function getSelectedIds(images, selectedMap) {
   return images.filter((i) => !!selectedMap[i.public_id]).map((i) => i.public_id);
 }
@@ -26,11 +26,10 @@ function getSelectedIds(images, selectedMap) {
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gallery, setGallery] = useState(null); // { name, slug, tag, ... }
+  const [gallery, setGallery] = useState(null);  // { name, slug, tag, ... }
   const [images, setImages] = useState([]);
   const [err, setErr] = useState("");
 
-  // selection + zipping states
   const [selected, setSelected] = useState({});
   const [zipping, setZipping] = useState(false);
 
@@ -42,7 +41,7 @@ export default function ClientGallery() {
     setSelected({});
 
     try {
-      // 1) load galleries
+      // 1) fetch galleries from Firestore
       const snap = await getDocs(collection(db, "galleries"));
       const galleries = snap.docs.map((d) => d.data());
 
@@ -55,10 +54,9 @@ export default function ClientGallery() {
         setLoading(false);
         return;
       }
-
       setGallery(match);
 
-      // 3) fetch images by tag from Cloudinary Asset Lists (must be enabled)
+      // 3) fetch images from Cloudinary Asset Lists (tag must match)
       try {
         const res = await fetch(
           `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${match.tag}.json`,
@@ -71,9 +69,7 @@ export default function ClientGallery() {
 
         // preselect all
         const pre = {};
-        imgs.forEach((img) => {
-          pre[img.public_id] = true;
-        });
+        imgs.forEach((img) => (pre[img.public_id] = true));
         setSelected(pre);
       } catch (imgErr) {
         console.error(imgErr);
@@ -104,22 +100,20 @@ export default function ClientGallery() {
   function toggleOne(publicId) {
     setSelected((s) => ({ ...s, [publicId]: !s[publicId] }));
   }
-  function toggleAll(v) {
+  function toggleAll(checked) {
     const next = {};
-    images.forEach((img) => (next[img.public_id] = v));
+    images.forEach((img) => (next[img.public_id] = checked));
     setSelected(next);
   }
 
-  // ZIP (originals) for selected public_ids via Netlify function
+  // Download ORIGINALS for selected (auto-uses tag when it's “all” or very large)
   async function downloadSelectedZip() {
-    // read FRESH selection at click time
     const ids = getSelectedIds(images, selected);
     if (!ids.length) return;
 
-    // If user effectively selected all (or a large batch), use tag (server-side) for reliability
-    const LARGE_BATCH = 120; // tune this based on typical gallery sizes
+    const LARGE_BATCH = 120;
     if ((gallery?.tag && ids.length === images.length) || ids.length > LARGE_BATCH) {
-      return downloadAllZip();
+      return downloadAllZip(); // switch to tag-based archive for reliability
     }
 
     setZipping(true);
@@ -129,13 +123,12 @@ export default function ClientGallery() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ public_ids: ids, filename: "selected-images.zip" }),
       });
-      const text = await resp.text(); // robust parse (handles non-JSON error pages)
+      const text = await resp.text();
       const data = text ? JSON.parse(text) : {};
       if (!resp.ok) {
         console.error("Archive error detail (selected):", data);
-        throw new Error(data?.detail?.message || data?.error || "Archive failed");
+        throw new Error(data?.detail?.message || data?.error || "Cloudinary error");
       }
-      // open the Cloudinary archive URL (originals, no transforms)
       window.location.assign(data.url);
     } catch (e) {
       console.error(e);
@@ -145,9 +138,8 @@ export default function ClientGallery() {
     }
   }
 
-  // ZIP (originals) for the whole tag via Netlify function
+  // Download ORIGINALS for entire gallery (by tag when available)
   async function downloadAllZip() {
-    // Prefer tag ZIP when available (Cloudinary batches server-side)
     if (gallery?.tag) {
       setZipping(true);
       try {
@@ -160,7 +152,7 @@ export default function ClientGallery() {
         const data = text ? JSON.parse(text) : {};
         if (!resp.ok) {
           console.error("Archive error detail (all by tag):", data);
-          throw new Error(data?.detail?.message || data?.error || "Archive failed");
+          throw new Error(data?.detail?.message || data?.error || "Cloudinary error");
         }
         window.location.assign(data.url);
       } catch (e) {
@@ -172,7 +164,7 @@ export default function ClientGallery() {
       return;
     }
 
-    // Fallback: build from all current public_ids if tag missing
+    // Fallback: gather all public_ids if tag missing
     const ids = images.map((i) => i.public_id);
     if (!ids.length) return;
 
@@ -187,7 +179,7 @@ export default function ClientGallery() {
       const data = text ? JSON.parse(text) : {};
       if (!resp.ok) {
         console.error("Archive error detail (all fallback):", data);
-        throw new Error(data?.detail?.message || data?.error || "Archive failed");
+        throw new Error(data?.detail?.message || data?.error || "Cloudinary error");
       }
       window.location.assign(data.url);
     } catch (e) {
@@ -248,7 +240,6 @@ export default function ClientGallery() {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Select all */}
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -259,7 +250,6 @@ export default function ClientGallery() {
                   Select all
                 </label>
 
-                {/* Download selected */}
                 <button
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
@@ -272,7 +262,6 @@ export default function ClientGallery() {
                   {zipping ? "Preparing…" : "Download Selected"}
                 </button>
 
-                {/* Download all */}
                 <button
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
@@ -294,11 +283,9 @@ export default function ClientGallery() {
               </div>
             </div>
 
-            {/* Grid */}
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {
-                  // fast preview (transformed). Downloads use originals.
                   const previewSrc = `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/c_fill,g_auto,f_auto,q_auto,w_800,h_800/${img.public_id}.${img.format}`;
                   return (
                     <figure
@@ -322,7 +309,6 @@ export default function ClientGallery() {
                             {img.public_id.split("/").pop()}
                           </span>
                         </label>
-                        {/* Single original download */}
                         <a
                           className="underline text-charcoal/70 hover:text-rose"
                           href={originalDownloadUrl(img.public_id, img.format)}

@@ -26,31 +26,47 @@ export const handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Provide public_ids[] or tag" }) };
     }
   
-    // ✅ Correct endpoint path:
+    // Correct endpoint
     const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image/generate_archive`;
     const auth = Buffer.from(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`).toString("base64");
   
-    // “tags” must be an array of strings; “public_ids” must be full ids (include folder if any)
-    const body = {
-      public_ids,
-      tags: tag ? [tag] : undefined,
-      resource_type: "image",
-      target_format: "zip",
-      flatten_folders: true,
-      mode: "download",                   // return a direct download URL
-      async: false,                       // return immediately
-      expires_at: Math.floor(Date.now() / 1000) + 60 * 10, // ~10 min link
-    };
+    // Use `tag` (singular) when archiving by a single tag; otherwise send public_ids
+    const body = tag
+      ? {
+          tag, // <- singular
+          resource_type: "image",
+          target_format: "zip",
+          flatten_folders: true,
+          mode: "download",
+          async: false,
+          expires_at: Math.floor(Date.now() / 1000) + 60 * 10,
+        }
+      : {
+          public_ids, // full public_ids including folder if any
+          resource_type: "image",
+          target_format: "zip",
+          flatten_folders: true,
+          mode: "download",
+          async: false,
+          expires_at: Math.floor(Date.now() / 1000) + 60 * 10,
+        };
   
     try {
-      console.log("Cloudinary generate_archive payload:", { count: public_ids.length, tag });
+      console.log("Cloudinary generate_archive payload:", {
+        by: tag ? "tag" : "public_ids",
+        count: public_ids?.length || 0,
+        tag,
+      });
+  
       const resp = await fetch(url, {
         method: "POST",
         headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
   
-      const data = await resp.json().catch(() => ({}));
+      const text = await resp.text();
+      const data = text ? JSON.parse(text) : {};
+  
       if (!resp.ok) {
         console.error("Cloudinary archive error", { status: resp.status, data });
         return {
@@ -60,7 +76,7 @@ export const handler = async (event) => {
         };
       }
   
-      // data.url is the one-time ZIP URL of ORIGINAL files (no transforms)
+      // data.url = one-time ZIP link for ORIGINAL assets
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, url: data.url, filename }) };
     } catch (e) {
       console.error("Archive request failed:", e);
