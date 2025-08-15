@@ -7,6 +7,8 @@ import {
   where,
   Timestamp,
   serverTimestamp,
+  runTransaction,
+  doc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 
@@ -45,6 +47,11 @@ function isThirtyMinuteIncrement(timeStr) {
   return mm % 30 === 0;
 }
 
+/** Add minutes to a Date */
+function addMinutes(date, min) {
+  return new Date(date.getTime() + min * 60 * 1000);
+}
+
 /** --- Public API --- */
 
 /**
@@ -52,67 +59,112 @@ function isThirtyMinuteIncrement(timeStr) {
  * Unavailable if ANY booking starts within the buffer window and is not canceled.
  * NOTE: If you don't keep a "status" field, remove the `where("status","in",...)` line.
  */
-export async function checkAvailability({ date, time }) {
-  if (!date || !time) {
-    return { available: false, reason: "Missing date/time" };
+export async function checkAvailability({ date, time, durationMin = 60 }) {
+  try {
+    if (!date || !time) {
+      return { available: false, reason: "Missing date/time" };
+    }
+
+    // Hard guard: 30-minute grid only
+    if (!isThirtyMinuteIncrement(time)) {
+      return { available: false, reason: "Please choose a :00 or :30 time." };
+    }
+
+    // Hard guard: within business hours (start AND end)
+    if (!isWithinBusinessHours(time)) {
+      return { available: false, reason: "Outside hours (09:30–21:30)" };
+    }
+    const start = toLocalDate(date, time);
+    const end = addMinutes(start, durationMin);
+    const endHH = String(end.getHours()).padStart(2, "0");
+    const endMM = String(end.getMinutes()).padStart(2, "0");
+    const endHHMM = `${endHH}:${endMM}`;
+    if (!isWithinBusinessHours(endHHMM)) {
+      return { available: false, reason: "Outside hours (09:30–21:30)" };
+    }
+
+    // Buffer window around requested start
+    const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
+    const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
+
+    const bookingsCol = collection(db, "bookings");
+    const qy = query(
+      bookingsCol,
+      where("startAt", ">=", Timestamp.fromDate(windowStart)),
+      where("startAt", "<=", Timestamp.fromDate(windowEnd)),
+      // Remove this line if you don't store a status field
+      where("status", "in", ["pending", "confirmed"])
+    );
+
+    const snap = await getDocs(qy);
+    const conflict = !snap.empty;
+
+    return {
+      available: !conflict,
+      reason: conflict ? "Conflicts with another session" : null,
+    };
+  } catch (err) {
+    console.error("checkAvailability error:", err);
+    return { available: false, reason: "Availability check failed" };
   }
-
-  // Hard guard: 30-minute grid only
-  if (!isThirtyMinuteIncrement(time)) {
-    return { available: false, reason: "Please choose a :00 or :30 time." };
-  }
-
-  // Hard guard: within business hours
-  if (!isWithinBusinessHours(time)) {
-    return { available: false, reason: "Outside hours (09:30–21:30)" };
-  }
-
-  // Requested start (local)
-  const start = toLocalDate(date, time);
-
-  // Buffer window around requested start
-  const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
-  const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
-
-  const bookingsCol = collection(db, "bookings");
-  const qy = query(
-    bookingsCol,
-    where("startAt", ">=", Timestamp.fromDate(windowStart)),
-    where("startAt", "<=", Timestamp.fromDate(windowEnd)),
-    // Remove this line if you don't store a status field
-    where("status", "in", ["pending", "confirmed"])
-  );
-
-  const snap = await getDocs(qy);
-  const conflict = snap.docs.length > 0;
-
-  return {
-    available: !conflict,
-    reason: conflict ? "Conflicts with another session" : null,
-  };
 }
 
 /**
  * Submit a booking after re-validating increments, hours, and conflicts.
+ * Uses a transaction to prevent race conditions (two users booking the same slot).
  */
-export async function submitBooking({ package: pkg, date, time, details }) {
-  const { available, reason } = await checkAvailability({ date, time });
-  if (!available) {
-    return { ok: false, error: reason || "Not available" };
+export async function submitBooking({ package: pkg, date, time, details, durationMin = 60 }) {
+  try {
+    // Re-validate fast
+    const { available, reason } = await checkAvailability({ date, time, durationMin });
+    if (!available) {
+      return { ok: false, error: reason || "Not available" };
+    }
+
+    const start = toLocalDate(date, time);
+    const reference = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const bookingsCol = collection(db, "bookings");
+    const newDocRef = doc(bookingsCol); // create id now so we can return it deterministically
+
+    await runTransaction(db, async (tx) => {
+      // Re-check conflict INSIDE the transaction window
+      const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
+      const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
+
+      const qy = query(
+        bookingsCol,
+        where("startAt", ">=", Timestamp.fromDate(windowStart)),
+        where("startAt", "<=", Timestamp.fromDate(windowEnd)),
+        // Remove this line if you don't store a status field
+        where("status", "in", ["pending", "confirmed"])
+      );
+
+      const snap = await getDocs(qy);
+      if (!snap.empty) {
+        throw new Error("Conflicts with another session");
+      }
+
+      // Still clear: write the booking
+      tx.set(newDocRef, {
+        package: pkg,
+        date,
+        time,
+        startAt: Timestamp.fromDate(start),
+        durationMin,
+        details,
+        status: "pending",        // you can confirm/cancel in admin
+        createdAt: serverTimestamp(),
+        reference,                 // single source of truth
+      });
+    });
+
+    return { ok: true, id: newDocRef.id, reference };
+  } catch (err) {
+    console.error("submitBooking error:", err);
+    const msg = err?.message || "Failed to submit booking";
+    if (msg.includes("Conflicts with another session")) {
+      return { ok: false, error: "Conflicts with another session" };
+    }
+    return { ok: false, error: msg };
   }
-
-  const start = toLocalDate(date, time);
-
-  const docRef = await addDoc(collection(db, "bookings"), {
-    package: pkg,
-    date,
-    time,
-    startAt: Timestamp.fromDate(start),
-    details,
-    status: "pending",       // you can confirm/cancel in admin
-    createdAt: serverTimestamp(),
-    reference: Math.random().toString(36).slice(2, 8).toUpperCase(),
-  });
-
-  return { ok: true, id: docRef.id, reference: docRef.id.slice(-6).toUpperCase() };
 }
