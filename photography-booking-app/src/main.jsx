@@ -1,7 +1,7 @@
 // src/main.jsx
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createHashRouter, RouterProvider } from 'react-router-dom' // ⬅️ Hash router
 import './index.css'
 
 import App from './App'
@@ -13,25 +13,22 @@ import ClientGallery from './pages/ClientGallery'
 
 // Admin / protected
 import AdminLogin from './pages/AdminLogin'
-import AdminDashboard from './pages/AdminDashboard'   // ✅ NEW
+import AdminDashboard from './pages/AdminDashboard'
 import ProtectedRoute from './components/ProtectedRoute'
 
-const router = createBrowserRouter([
+const router = createHashRouter([
   {
     path: '/',
     element: <App />,
     children: [
-      // Public pages
       { index: true, element: <Home /> },
       { path: 'portfolio', element: <Portfolio /> },
       { path: 'booking', element: <Booking /> },
       { path: 'faq', element: <FAQ /> },
       { path: 'client', element: <ClientGallery /> },
 
-      // Public admin login
       { path: 'admin-login', element: <AdminLogin /> },
 
-      // One unified protected admin route
       {
         path: 'admin',
         element: (
