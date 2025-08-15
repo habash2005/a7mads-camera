@@ -3,8 +3,8 @@ import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
-const CLOUD_NAME = "lamaphoto";              // your Cloudinary cloud
-const UPLOAD_PRESET = "lamaphoto_unsigned";  // UNSIGNED preset name
+const CLOUD_NAME = "lamaphoto";
+const UPLOAD_PRESET = "lamaphoto_unsigned";
 
 export default function AdminUpload() {
   const [mode, setMode] = useState("portfolio"); // "portfolio" | "client"
@@ -12,52 +12,26 @@ export default function AdminUpload() {
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
-  const [ready, setReady] = useState(!!window.cloudinary); // ← NEW
 
-  // Ensure Cloudinary widget script is present & loaded (mobile-safe)
   useEffect(() => {
-    if (window.cloudinary) { setReady(true); return; }
-
-    const src = "https://upload-widget.cloudinary.com/global/all.js";
-    let script = document.querySelector(`script[src="${src}"]`);
-    const onload = () => setReady(true);
-    const onerror = () => setMsg("Failed to load upload widget. Try turning off content blockers or reload.");
-
-    if (!script) {
-      script = document.createElement("script");
-      script.src = src;
-      script.defer = true;
-      script.onload = onload;
-      script.onerror = onerror;
-      document.body.appendChild(script);
-    } else {
-      script.addEventListener("load", onload, { once: true });
-    }
-
-    const t = setTimeout(() => {
-      if (!window.cloudinary) setMsg("Still loading… if on iPhone, open in Safari and disable content blockers for this site.");
-    }, 6000);
-    return () => clearTimeout(t);
-  }, []);
-
-  // Load client galleries for dropdown
-  useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         setLoading(true);
         const snap = await getDocs(collection(db, "galleries"));
+        if (cancelled) return;
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-                              .sort((a,b)=>(a.name||"").localeCompare(b.name||""));
+                              .sort((a,b) => (a.name||"").localeCompare(b.name||""));
         setGalleries(list);
         if (list.length) setSelectedId(list[0].id);
-        else if (mode === "client") setMsg("No galleries yet — create one at /admin (New Gallery).");
       } catch (e) {
-        console.error(e);
-        setMsg("Failed to load galleries. Check Firestore rules/connection.");
+        console.error("[AdminUpload] Firestore galleries fetch failed:", e);
+        setMsg("Couldn’t load galleries (check network/rules). You can still upload to Portfolio.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   const selected = useMemo(
@@ -66,23 +40,32 @@ export default function AdminUpload() {
   );
 
   const openWidget = useCallback(() => {
-    if (!window.cloudinary) { setMsg("Widget not ready yet…"); return; }
+    // Don’t block portfolio uploads on gallery fetch
+    if (!window.cloudinary) {
+      setMsg("Upload widget not loaded yet. Try again in a second.");
+      console.warn("[AdminUpload] window.cloudinary is undefined. Is the script loading?");
+      return;
+    }
 
     const isPortfolio = mode === "portfolio";
-    const tag = isPortfolio ? "portfolio" : selected?.tag;
+    const tag   = isPortfolio ? "portfolio" : selected?.tag;
     const folder = isPortfolio ? "portfolio" : "client-galleries";
-    if (!tag) return setMsg("Pick a client gallery first.");
+
+    if (!isPortfolio && !tag) {
+      setMsg("Pick a client gallery first.");
+      return;
+    }
 
     setMsg("");
 
     const widget = window.cloudinary.createUploadWidget(
       {
         cloudName: CLOUD_NAME,
-        uploadPreset: UPLOAD_PRESET,    // must be UNSIGNED in Cloudinary console
+        uploadPreset: UPLOAD_PRESET,      // unsigned preset
         folder,
         tags: [tag],
         multiple: true,
-        sources: ["local", "camera", "url", "google_drive", "dropbox"], // iOS camera supported over HTTPS
+        sources: ["local", "camera", "url", "google_drive", "dropbox"],
         clientAllowedFormats: ["jpg", "jpeg", "png", "webp"],
         maxFileSize: 20_000_000,
         styles: {
@@ -103,12 +86,13 @@ export default function AdminUpload() {
       },
       (error, result) => {
         if (error) {
-          console.error(error);
+          console.error("[AdminUpload] Upload error:", error);
           setMsg("Upload error — see console.");
           return;
         }
         if (result?.event === "success") {
-          setMsg(`✅ Uploaded: ${result.info.original_filename}`);
+          const where = isPortfolio ? "Portfolio" : (selected?.name || "Gallery");
+          setMsg(`✅ Uploaded to ${where}: ${result.info.original_filename}`);
         }
       }
     );
@@ -127,18 +111,28 @@ export default function AdminUpload() {
         {/* Mode toggle */}
         <div className="mt-6 flex gap-4 items-center">
           <label className="flex items-center gap-2">
-            <input type="radio" name="mode" value="portfolio"
-              checked={mode === "portfolio"} onChange={() => setMode("portfolio")} />
+            <input
+              type="radio"
+              name="mode"
+              value="portfolio"
+              checked={mode === "portfolio"}
+              onChange={() => setMode("portfolio")}
+            />
             <span>Portfolio</span>
           </label>
           <label className="flex items-center gap-2">
-            <input type="radio" name="mode" value="client"
-              checked={mode === "client"} onChange={() => setMode("client")} />
+            <input
+              type="radio"
+              name="mode"
+              value="client"
+              checked={mode === "client"}
+              onChange={() => setMode("client")}
+            />
             <span>Client Gallery</span>
           </label>
         </div>
 
-        {/* Client picker */}
+        {/* Client gallery picker */}
         {mode === "client" && (
           <div className="mt-4">
             <label className="text-sm font-medium text-charcoal">Select gallery</label>
@@ -148,38 +142,37 @@ export default function AdminUpload() {
               value={selectedId}
               onChange={e => setSelectedId(e.target.value)}
             >
-              {galleries.map(g => (
+              {loading && <option>Loading…</option>}
+              {!loading && galleries.length === 0 && <option>No galleries found</option>}
+              {!loading && galleries.map(g => (
                 <option key={g.id} value={g.id}>
                   {g.name} — {g.slug} ({g.tag})
                 </option>
               ))}
             </select>
-            {galleries.length === 0 &&
-              <div className="text-xs text-charcoal/70 mt-2">No galleries yet — create one in the Admin dashboard.</div>}
+            {!loading && galleries.length === 0 && (
+              <div className="text-xs text-charcoal/70 mt-2">
+                Create one in the “New Gallery” box above, then come back.
+              </div>
+            )}
           </div>
         )}
 
-        {/* Upload button */}
+        {/* Upload button (always enabled) */}
         <div className="mt-6">
           <button
             onClick={openWidget}
-            disabled={!ready}
-            className={`rounded-full px-5 py-3 text-sm font-semibold shadow-md ${
-              ready ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-                    : "bg-blush text-charcoal/50 cursor-not-allowed"
-            }`}
+            className="rounded-full px-5 py-3 text-sm font-semibold shadow-md bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all"
           >
-            {ready
-              ? (mode === "portfolio" ? "Upload to Portfolio" : "Upload to Selected Gallery")
-              : "Loading…"}
+            {mode === "portfolio" ? "Upload to Portfolio" : "Upload to Selected Gallery"}
           </button>
         </div>
 
         {msg && <div className="mt-3 text-sm text-charcoal">{msg}</div>}
 
         <div className="mt-4 text-xs text-charcoal/70">
-          Portfolio uploads use tag <code>portfolio</code>. Client uploads use the gallery’s tag
-          (<code>{mode === "client" ? (galleries.find(g=>g.id===selectedId)?.tag || "gal-&lt;slug&gt;") : "portfolio"}</code>).
+          Portfolio uploads use tag <code>portfolio</code>. Client uploads use the gallery’s tag (
+          <code>{mode === "client" ? (galleries.find(g => g.id === selectedId)?.tag || "gal-&lt;slug&gt;") : "portfolio"}</code>).
         </div>
       </div>
     </section>
