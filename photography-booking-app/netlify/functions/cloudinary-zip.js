@@ -22,22 +22,23 @@ export const handler = async (event) => {
     }
   
     const { public_ids = [], tag = null, filename = "gallery.zip" } = payload;
-  
     if ((!public_ids || public_ids.length === 0) && !tag) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "Provide public_ids[] or tag" }) };
     }
   
-    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/generate_archive`;
+    // ✅ Correct endpoint path:
+    const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image/generate_archive`;
     const auth = Buffer.from(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`).toString("base64");
   
+    // “tags” must be an array of strings; “public_ids” must be full ids (include folder if any)
     const body = {
       public_ids,
       tags: tag ? [tag] : undefined,
       resource_type: "image",
       target_format: "zip",
       flatten_folders: true,
-      mode: "download",         // return a direct download URL
-      async: false,             // return immediately
+      mode: "download",                   // return a direct download URL
+      async: false,                       // return immediately
       expires_at: Math.floor(Date.now() / 1000) + 60 * 10, // ~10 min link
     };
   
@@ -59,6 +60,7 @@ export const handler = async (event) => {
         };
       }
   
+      // data.url is the one-time ZIP URL of ORIGINAL files (no transforms)
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, url: data.url, filename }) };
     } catch (e) {
       console.error("Archive request failed:", e);
