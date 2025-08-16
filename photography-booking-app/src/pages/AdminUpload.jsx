@@ -1,7 +1,7 @@
 // src/admin/AdminUpload.jsx (or your existing file)
 import { useState } from 'react'
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
-import { db } from '../firebase' // your initialized Firestore
+import { db } from "../lib/firebase"
 
 const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
 const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
