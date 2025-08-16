@@ -3,8 +3,9 @@ import React, { useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
-const CLOUD_NAME = "lamaphoto"; // your Cloudinary cloud name
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "lamaphoto";
 
+// Hash the access code client-side
 async function sha256(text) {
   const buf = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", buf);
@@ -23,10 +24,34 @@ function getSelectedIds(images, selectedMap) {
   return images.filter((i) => !!selectedMap[i.public_id]).map((i) => i.public_id);
 }
 
+// Safe POST that handles 404/HTML responses gracefully
+async function postJSON(url, body) {
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const ct = resp.headers.get("content-type") || "";
+  const text = await resp.text();
+  const isJSON = ct.includes("application/json");
+  const data = isJSON && text ? JSON.parse(text) : {};
+
+  if (!resp.ok) {
+    if (resp.status === 404) {
+      throw new Error(
+        "Function not found. Make sure you're running with `netlify dev` or have a Vite proxy to http://localhost:8888."
+      );
+    }
+    throw new Error(data?.detail?.message || data?.error || `HTTP ${resp.status}: ${text.slice(0, 160)}`);
+  }
+  return data;
+}
+
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gallery, setGallery] = useState(null);  // { name, slug, tag, ... }
+  const [gallery, setGallery] = useState(null); // { name, slug, tag, ... }
   const [images, setImages] = useState([]);
   const [err, setErr] = useState("");
 
@@ -116,23 +141,16 @@ export default function ClientGallery() {
       return downloadAllZip(); // switch to tag-based archive for reliability
     }
 
-    setZipping(true);
     try {
-      const resp = await fetch("/.netlify/functions/cloudinary-zip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ public_ids: ids, filename: "selected-images.zip" }),
+      setZipping(true);
+      const { url } = await postJSON("/.netlify/functions/cloudinary-zip", {
+        public_ids: ids,
+        filename: "selected-images.zip",
       });
-      const text = await resp.text();
-      const data = text ? JSON.parse(text) : {};
-      if (!resp.ok) {
-        console.error("Archive error detail (selected):", data);
-        throw new Error(data?.detail?.message || data?.error || "Cloudinary error");
-      }
-      window.location.assign(data.url);
+      window.location.assign(url);
     } catch (e) {
-      console.error(e);
-      alert(e.message || "Download failed. Please try again.");
+      console.error("Archive error (selected):", e);
+      alert(e.message || "Could not prepare ZIP. Please try again.");
     } finally {
       setZipping(false);
     }
@@ -140,51 +158,19 @@ export default function ClientGallery() {
 
   // Download ORIGINALS for entire gallery (by tag when available)
   async function downloadAllZip() {
-    if (gallery?.tag) {
-      setZipping(true);
-      try {
-        const resp = await fetch("/.netlify/functions/cloudinary-zip", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tag: gallery.tag, filename: "all-images.zip" }),
-        });
-        const text = await resp.text();
-        const data = text ? JSON.parse(text) : {};
-        if (!resp.ok) {
-          console.error("Archive error detail (all by tag):", data);
-          throw new Error(data?.detail?.message || data?.error || "Cloudinary error");
-        }
-        window.location.assign(data.url);
-      } catch (e) {
-        console.error(e);
-        alert(e.message || "Download failed. Please try again.");
-      } finally {
-        setZipping(false);
-      }
-      return;
-    }
+    if (!images.length) return;
 
-    // Fallback: gather all public_ids if tag missing
-    const ids = images.map((i) => i.public_id);
-    if (!ids.length) return;
-
-    setZipping(true);
     try {
-      const resp = await fetch("/.netlify/functions/cloudinary-zip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ public_ids: ids, filename: "all-images.zip" }),
-      });
-      const text = await resp.text();
-      const data = text ? JSON.parse(text) : {};
-      if (!resp.ok) {
-        console.error("Archive error detail (all fallback):", data);
-        throw new Error(data?.detail?.message || data?.error || "Cloudinary error");
-      }
-      window.location.assign(data.url);
+      setZipping(true);
+      const body = gallery?.tag
+        ? { tag: gallery.tag, filename: "all-images.zip" }
+        : { public_ids: images.map((i) => i.public_id), filename: "all-images.zip" };
+
+      const { url } = await postJSON("/.netlify/functions/cloudinary-zip", body);
+      window.location.assign(url);
     } catch (e) {
-      console.error(e);
-      alert(e.message || "Download failed. Please try again.");
+      console.error("Archive error (all):", e);
+      alert(e.message || "Could not prepare ZIP. Please try again.");
     } finally {
       setZipping(false);
     }
@@ -200,9 +186,7 @@ export default function ClientGallery() {
         {/* Step 1: Access form */}
         {!gallery && (
           <div className="mt-6 max-w-md space-y-3">
-            <p className="text-charcoal/70">
-              Enter your access code to view your photos.
-            </p>
+            <p className="text-charcoal/70">Enter your access code to view your photos.</p>
             <input
               type="password"
               value={code}
