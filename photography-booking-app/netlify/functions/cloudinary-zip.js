@@ -1,5 +1,13 @@
 // netlify/functions/cloudinary-zip.js
-// Node 18+ on Netlify has global `fetch`.
+// Node 18+ on Netlify has global fetch.
+
+import { v2 as cloudinary } from "cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export const handler = async (event) => {
   const headers = {
@@ -11,11 +19,6 @@ export const handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers };
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, headers, body: JSON.stringify({ error: "Method not allowed" }) };
-  }
-
-  const { CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET } = process.env;
-  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Missing Cloudinary env vars" }) };
   }
 
   let payload = {};
@@ -30,61 +33,21 @@ export const handler = async (event) => {
     return { statusCode: 400, headers, body: JSON.stringify({ error: "Provide public_ids[] or tag" }) };
   }
 
-  // Cloudinary Admin API endpoint for archives
-  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/resources/image/generate_archive`;
-  const auth = Buffer.from(`${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}`).toString("base64");
-
-  const common = {
-    resource_type: "image",
-    target_format: "zip",
-    target_public_id: String(filename).replace(/\.zip$/i, ""), // sets the zip name
-    flatten_folders: true,
-    mode: "download",
-    async: false,
-    expires_at: Math.floor(Date.now() / 1000) + 60 * 10, // 10 minutes
-  };
-
-  const body = tag
-    ? {
-        ...common,
-        // IMPORTANT: must be an ARRAY for tag-based archives
-        tags: [tag],
-      }
-    : {
-        ...common,
-        public_ids, // include folder segments if your public_ids contain them
-      };
-
   try {
-    console.log("Cloudinary generate_archive payload:", {
-      by: tag ? "tag" : "public_ids",
-      count: public_ids?.length || 0,
-      tag,
-      filename,
-    });
+    const opts = {
+      resource_type: "image",
+      type: "upload",
+      target_public_id: String(filename).replace(/\.zip$/i, ""),
+      flatten_folders: true,
+      allow_missing: true,
+    };
+    if (tag) opts.tags = [tag];                 // download by tag
+    if (public_ids?.length) opts.public_ids = public_ids; // or by ids
 
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    const text = await resp.text();
-    const data = text ? JSON.parse(text) : {};
-
-    if (!resp.ok) {
-      console.error("Cloudinary archive error", { status: resp.status, data });
-      return {
-        statusCode: 502,
-        headers,
-        body: JSON.stringify({ error: "Cloudinary error", status: resp.status, detail: data }),
-      };
-    }
-
-    // data.url is the one-time ZIP URL for the originals
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, url: data.url, filename }) };
-  } catch (e) {
-    console.error("Archive request failed:", e);
-    return { statusCode: 500, headers, body: JSON.stringify({ error: "Archive failed", detail: String(e) }) };
+    const { download_url } = await cloudinary.utils.download_zip_url(opts);
+    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, url: download_url, filename }) };
+  } catch (err) {
+    console.error("[cloudinary-zip] error", err);
+    return { statusCode: 502, headers, body: JSON.stringify({ error: "Cloudinary error", detail: String(err) }) };
   }
 };
