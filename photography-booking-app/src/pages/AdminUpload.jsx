@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 
 const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET; // e.g. lamaphoto_unsigned
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 
@@ -30,6 +30,7 @@ const randomHash = () =>
 
 export default function AdminUpload() {
   const fileInputRef = useRef(null);
+  const dropdownRef = useRef(null);
   const [me, setMe] = useState(null);
 
   // destination
@@ -45,11 +46,10 @@ export default function AdminUpload() {
   const [rejected, setRejected] = useState([]); // [{name, size, reason}]
   const [busy, setBusy] = useState(false);
 
-  // surface env missing early
   const missingEnv = !CLOUD || !PRESET;
 
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => setMe(u));
+    const unsub = auth.onAuthStateChanged((u) => setMe(u || null));
     return () => unsub();
   }, []);
 
@@ -75,6 +75,18 @@ export default function AdminUpload() {
       }
     })();
   }, []);
+
+  // close dropdown if clicking outside
+  useEffect(() => {
+    function onDocClick(e) {
+      if (!open) return;
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return galleries;
@@ -222,7 +234,7 @@ export default function AdminUpload() {
       return;
     }
 
-    // 🔎 Preflight preset check — fails fast with helpful message
+    // Preflight check so errors are clear up front
     try {
       await verifyCloudinaryPreset();
     } catch (e) {
@@ -319,7 +331,7 @@ export default function AdminUpload() {
           )}
         >
           {notAdmin
-            ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by Firestore rules."
+            ? "Not signed in as the admin. Uploads will be blocked by Firestore rules."
             : `Signed in as ${me?.email}.`}
         </div>
         {missingEnv ? (
@@ -364,8 +376,8 @@ export default function AdminUpload() {
           </p>
         </div>
 
-        {/* Searchable gallery dropdown (only when gallery mode) */}
-        <div className="lg:col-span-5">
+        {/* Searchable gallery dropdown */}
+        <div className="lg:col-span-5" ref={dropdownRef}>
           <label className="block text-sm font-medium text-charcoal/80 mb-1">
             {mode === "portfolio" ? "Gallery (disabled in Portfolio mode)" : "Choose a gallery"}
           </label>
