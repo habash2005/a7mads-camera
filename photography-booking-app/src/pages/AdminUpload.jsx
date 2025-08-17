@@ -1,6 +1,6 @@
 // src/pages/AdminUpload.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { auth, db } from "../lib/firebase";
+import { auth, db, storage } from "../lib/firebase";
 import {
   addDoc,
   collection,
@@ -12,9 +12,8 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
+import { ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-const CLOUD = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET; // e.g. lamaphoto_unsigned
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 
@@ -45,8 +44,6 @@ export default function AdminUpload() {
   const [files, setFiles] = useState([]);
   const [rejected, setRejected] = useState([]); // [{name, size, reason}]
   const [busy, setBusy] = useState(false);
-
-  const missingEnv = !CLOUD || !PRESET;
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => setMe(u || null));
@@ -127,74 +124,69 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  // ---------- cloudinary upload ----------
-  async function uploadToCloudinary(file, galleryTag) {
-    if (missingEnv) {
-      throw new Error(
-        "Cloudinary env missing: set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET"
-      );
-    }
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("upload_preset", PRESET);
-    if (galleryTag) {
-      fd.append("tags", galleryTag);
-      const folder = galleryTag === "portfolio" ? "portfolio" : `clients/${galleryTag}`;
-      fd.append("folder", folder);
-    }
-    const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-      method: "POST",
-      body: fd,
+  // ---------- helpers ----------
+  function chunk(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+  function formatBytes(n = 0) {
+    if (n < 1024) return `${n} B`;
+    const kb = n / 1024;
+    if (kb < 1024) return `${kb.toFixed(1)} KB`;
+    const mb = kb / 1024;
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    const gb = mb / 1024;
+    return `${gb.toFixed(1)} GB`;
+  }
+  function extOf(name = "") {
+    const p = name.split(".").pop();
+    return (p || "jpg").toLowerCase();
+  }
+  async function getImageDims(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.width, height: img.height });
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        resolve({ width: 0, height: 0 });
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
     });
-    const text = await r.text();
-    if (!r.ok) {
-      let msg = "Upload failed";
-      try {
-        msg = JSON.parse(text)?.error?.message || msg;
-      } catch {}
-      console.error("Cloudinary upload error:", { status: r.status, body: text });
-      throw new Error(msg);
-    }
-    const j = JSON.parse(text);
-    return {
-      public_id: j.public_id,
-      format: String(j.format || ""),
-      bytes: Number(j.bytes || 0),
-      width: Number(j.width || 0),
-      height: Number(j.height || 0),
-      secure_url: j.secure_url,
-      original_filename: String(j.original_filename || ""),
-      version: Number(j.version || 0),
-    };
   }
 
-  // ---------- preset preflight (shows exact Cloudinary reason) ----------
-  async function verifyCloudinaryPreset() {
-    if (missingEnv) {
-      throw new Error(
-        "Cloudinary env missing: VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET"
-      );
-    }
-    const fd = new FormData();
-    // tiny 1x1 PNG data URI
-    fd.append(
-      "file",
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4BwQACfsD/ceS2qkAAAAASUVORK5CYII="
-    );
-    fd.append("upload_preset", PRESET);
-    const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-      method: "POST",
-      body: fd,
+  async function uploadToStorage(file, tag) {
+    const { width, height } = await getImageDims(file);
+    const base = tag === "portfolio" ? "portfolio" : `clients/${tag}`;
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const path = `${base}/${id}.${extOf(file.name)}`;
+
+    const objRef = sRef(storage, path);
+    const task = uploadBytesResumable(objRef, file, {
+      contentType: file.type || "image/jpeg",
     });
-    const text = await r.text();
-    if (!r.ok) {
-      let msg = "Upload preset check failed";
-      try {
-        msg = JSON.parse(text)?.error?.message || msg;
-      } catch {}
-      throw new Error(msg);
-    }
-    return true;
+
+    await new Promise((resolve, reject) => {
+      task.on("state_changed", null, reject, resolve);
+    });
+
+    const url = await getDownloadURL(objRef);
+
+    // match Firestore rules fields exactly
+    return {
+      public_id: path,
+      format: extOf(file.name),
+      bytes: file.size,
+      width,
+      height,
+      secure_url: url,
+      original_filename: file.name,
+      version: 1,
+    };
   }
 
   // ---------- gallery doc helpers ----------
@@ -220,10 +212,6 @@ export default function AdminUpload() {
       alert("You must be signed in as the admin to upload.");
       return;
     }
-    if (missingEnv) {
-      alert("Cloudinary env missing: VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET");
-      return;
-    }
     if (files.length === 0) {
       alert("Pick some image files first.");
       return;
@@ -231,14 +219,6 @@ export default function AdminUpload() {
     const tag = mode === "portfolio" ? "portfolio" : selected?.tag;
     if (mode === "gallery" && !selected) {
       alert("Choose a gallery to upload to.");
-      return;
-    }
-
-    // Preflight check so errors are clear up front
-    try {
-      await verifyCloudinaryPreset();
-    } catch (e) {
-      alert(`Cloudinary preset error: ${e.message}`);
       return;
     }
 
@@ -259,7 +239,7 @@ export default function AdminUpload() {
       let failures = [];
 
       for (const group of batches) {
-        const res = await Promise.allSettled(group.map((f) => uploadToCloudinary(f, tag)));
+        const res = await Promise.allSettled(group.map((f) => uploadToStorage(f, tag)));
         uploaded.push(...res.filter((r) => r.status === "fulfilled").map((r) => r.value));
         failures.push(
           ...res
@@ -322,27 +302,16 @@ export default function AdminUpload() {
 
   return (
     <section className="p-4 md:p-5">
-      {/* Admin/env status */}
-      <div className="mb-3 grid grid-cols-1 gap-2">
-        <div
-          className={cls(
-            "text-xs rounded-lg px-3 py-2",
-            notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
-          )}
-        >
-          {notAdmin
-            ? "Not signed in as the admin. Uploads will be blocked by Firestore rules."
-            : `Signed in as ${me?.email}.`}
-        </div>
-        {missingEnv ? (
-          <div className="text-xs rounded-lg px-3 py-2 bg-rose-50 text-rose-800">
-            Missing VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET
-          </div>
-        ) : (
-          <div className="text-[11px] rounded-lg px-3 py-2 bg-slate-50 text-slate-600">
-            Cloudinary: <code>{CLOUD}</code> • Preset: <code>{PRESET}</code>
-          </div>
+      {/* Admin status */}
+      <div
+        className={cls(
+          "mb-3 text-xs rounded-lg px-3 py-2",
+          notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
         )}
+      >
+        {notAdmin
+          ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by rules."
+          : `Signed in as ${me?.email}.`}
       </div>
 
       {/* Destination selector */}
@@ -562,20 +531,4 @@ export default function AdminUpload() {
       </div>
     </section>
   );
-}
-
-/* ---------- helpers ---------- */
-function chunk(arr, size) {
-  const out = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-function formatBytes(n = 0) {
-  if (n < 1024) return `${n} B`;
-  const kb = n / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  const gb = mb / 1024;
-  return `${gb.toFixed(1)} GB`;
 }

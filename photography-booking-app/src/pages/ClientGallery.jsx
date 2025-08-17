@@ -1,11 +1,8 @@
 // src/pages/ClientGallery.jsx
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
 
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "lamaphoto";
-
-// Hash the access code client-side
 async function sha256(text) {
   const buf = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", buf);
@@ -14,49 +11,34 @@ async function sha256(text) {
     .join("");
 }
 
-// ORIGINAL download URL (no transforms), as an attachment
-function originalDownloadUrl(publicId, format) {
-  return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/fl_attachment/${publicId}.${format}`;
+function fileNameFrom(img) {
+  // try to preserve original name, fallback to last segment of public_id
+  const base = img.original_filename || img.public_id.split("/").pop() || "image";
+  const ext = (img.format || "jpg").toLowerCase();
+  return `${base}.${ext}`;
 }
 
-// Build selected ids from *current* state (prevents stale reads)
-function getSelectedIds(images, selectedMap) {
-  return images.filter((i) => !!selectedMap[i.public_id]).map((i) => i.public_id);
-}
-
-// Safe POST that handles 404/HTML responses gracefully
-async function postJSON(url, body) {
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  const ct = resp.headers.get("content-type") || "";
-  const text = await resp.text();
-  const isJSON = ct.includes("application/json");
-  const data = isJSON && text ? JSON.parse(text) : {};
-
-  if (!resp.ok) {
-    if (resp.status === 404) {
-      throw new Error(
-        "Function not found. Make sure you're running with `netlify dev` or have a Vite proxy to http://localhost:8888."
-      );
-    }
-    throw new Error(data?.detail?.message || data?.error || `HTTP ${resp.status}: ${text.slice(0, 160)}`);
-  }
-  return data;
-}
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gallery, setGallery] = useState(null); // { name, slug, tag, ... }
-  const [images, setImages] = useState([]);
+  const [gallery, setGallery] = useState(null);  // { id, name, slug, tag, ... }
+  const [images, setImages] = useState([]);      // docs from Firestore subcollection
   const [err, setErr] = useState("");
 
   const [selected, setSelected] = useState({});
   const [zipping, setZipping] = useState(false);
+
+  const someChecked = images.some((img) => !!selected[img.public_id]);
+  const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
+
+  const toggleOne = (pid) => setSelected((s) => ({ ...s, [pid]: !s[pid] }));
+  const toggleAll = (checked) => {
+    const next = {};
+    images.forEach((img) => (next[img.public_id] = checked));
+    setSelected(next);
+  };
 
   const checkCode = async () => {
     setErr("");
@@ -66,14 +48,12 @@ export default function ClientGallery() {
     setSelected({});
 
     try {
-      // 1) fetch galleries from Firestore
+      // 1) fetch galleries and find by codeHash
       const snap = await getDocs(collection(db, "galleries"));
-      const galleries = snap.docs.map((d) => d.data());
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      // 2) verify code
       const hash = await sha256(code.trim());
-      const match = galleries.find((g) => g.codeHash === hash);
-
+      const match = rows.find((g) => g.codeHash === hash);
       if (!match) {
         setErr("Invalid access code. Double-check and try again.");
         setLoading(false);
@@ -81,27 +61,17 @@ export default function ClientGallery() {
       }
       setGallery(match);
 
-      // 3) fetch images from Cloudinary Asset Lists (tag must match)
-      try {
-        const res = await fetch(
-          `https://res.cloudinary.com/${CLOUD_NAME}/image/list/${match.tag}.json`,
-          { cache: "no-store" }
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const imgs = data.resources || [];
-        setImages(imgs);
+      // 2) fetch images from subcollection
+      const imgsSnap = await getDocs(collection(db, `galleries/${match.id}/images`));
+      const imgs = imgsSnap.docs.map((d) => d.data());
+      // newest first (optional)
+      imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setImages(imgs);
 
-        // preselect all
-        const pre = {};
-        imgs.forEach((img) => (pre[img.public_id] = true));
-        setSelected(pre);
-      } catch (imgErr) {
-        console.error(imgErr);
-        setErr(
-          "Could not load images. Make sure Cloudinary ‘Asset lists’ are enabled and your photos are tagged with the gallery tag."
-        );
-      }
+      // preselect all
+      const pre = {};
+      imgs.forEach((img) => (pre[img.public_id] = true));
+      setSelected(pre);
     } catch (e) {
       console.error(e);
       setErr("There was a problem checking your code. Please try again.");
@@ -119,61 +89,47 @@ export default function ClientGallery() {
     setErr("");
   };
 
-  const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
-  const someChecked = images.some((img) => !!selected[img.public_id]);
-
-  function toggleOne(publicId) {
-    setSelected((s) => ({ ...s, [publicId]: !s[publicId] }));
-  }
-  function toggleAll(checked) {
-    const next = {};
-    images.forEach((img) => (next[img.public_id] = checked));
-    setSelected(next);
-  }
-
-  // Download ORIGINALS for selected (auto-uses tag when it's “all” or very large)
-  async function downloadSelectedZip() {
-    const ids = getSelectedIds(images, selected);
-    if (!ids.length) return;
-
-    const LARGE_BATCH = 120;
-    if ((gallery?.tag && ids.length === images.length) || ids.length > LARGE_BATCH) {
-      return downloadAllZip(); // switch to tag-based archive for reliability
-    }
-
+  async function downloadZip(files, outName) {
+    if (!files.length) return;
+    setZipping(true);
     try {
-      setZipping(true);
-      const { url } = await postJSON("/.netlify/functions/cloudinary-zip", {
-        public_ids: ids,
-        filename: "selected-images.zip",
+      const resp = await fetch("/.netlify/functions/storage-zip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ files, filename: outName || "gallery.zip" }),
       });
-      window.location.assign(url);
+      if (!resp.ok) {
+        const text = await resp.text();
+        console.error("ZIP error:", resp.status, text);
+        throw new Error("Preparing ZIP failed.");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = outName || "gallery.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (e) {
-      console.error("Archive error (selected):", e);
-      alert(e.message || "Could not prepare ZIP. Please try again.");
+      console.error(e);
+      alert(e.message || "Download failed. Please try again.");
     } finally {
       setZipping(false);
     }
   }
 
-  // Download ORIGINALS for entire gallery (by tag when available)
+  async function downloadSelectedZip() {
+    const files = images
+      .filter((i) => !!selected[i.public_id])
+      .map((i) => ({ url: i.secure_url, name: fileNameFrom(i) }));
+    await downloadZip(files, "selected-images.zip");
+  }
+
   async function downloadAllZip() {
-    if (!images.length) return;
-
-    try {
-      setZipping(true);
-      const body = gallery?.tag
-        ? { tag: gallery.tag, filename: "all-images.zip" }
-        : { public_ids: images.map((i) => i.public_id), filename: "all-images.zip" };
-
-      const { url } = await postJSON("/.netlify/functions/cloudinary-zip", body);
-      window.location.assign(url);
-    } catch (e) {
-      console.error("Archive error (all):", e);
-      alert(e.message || "Could not prepare ZIP. Please try again.");
-    } finally {
-      setZipping(false);
-    }
+    const files = images.map((i) => ({ url: i.secure_url, name: fileNameFrom(i) }));
+    await downloadZip(files, "all-images.zip");
   }
 
   return (
@@ -186,7 +142,9 @@ export default function ClientGallery() {
         {/* Step 1: Access form */}
         {!gallery && (
           <div className="mt-6 max-w-md space-y-3">
-            <p className="text-charcoal/70">Enter your access code to view your photos.</p>
+            <p className="text-charcoal/70">
+              Enter your access code to view your photos.
+            </p>
             <input
               type="password"
               value={code}
@@ -200,11 +158,12 @@ export default function ClientGallery() {
             <button
               onClick={checkCode}
               disabled={loading || !code.trim()}
-              className={`rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all ${
+              className={cls(
+                "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
                 loading || !code.trim()
                   ? "bg-blush text-charcoal/50 cursor-not-allowed"
                   : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-              }`}
+              )}
             >
               {loading ? "Checking…" : "Open Gallery"}
             </button>
@@ -237,11 +196,12 @@ export default function ClientGallery() {
                 <button
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold shadow-md ${
+                  className={cls(
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-md",
                     !someChecked || zipping
                       ? "bg-blush text-charcoal/50"
                       : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-                  }`}
+                  )}
                 >
                   {zipping ? "Preparing…" : "Download Selected"}
                 </button>
@@ -249,11 +209,12 @@ export default function ClientGallery() {
                 <button
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
-                  className={`rounded-full px-4 py-2 text-sm font-semibold shadow-md ${
+                  className={cls(
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-md",
                     !images.length || zipping
                       ? "bg-blush text-charcoal/50"
                       : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
-                  }`}
+                  )}
                 >
                   {zipping ? "Please wait…" : "Download All"}
                 </button>
@@ -270,7 +231,8 @@ export default function ClientGallery() {
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {
-                  const previewSrc = `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/c_fill,g_auto,f_auto,q_auto,w_800,h_800/${img.public_id}.${img.format}`;
+                  // Use a sized display thumbnail (Storage URL already optimized via browser cache/CDN)
+                  const previewSrc = img.secure_url; // or leave as-is
                   return (
                     <figure
                       key={img.public_id}
@@ -290,13 +252,15 @@ export default function ClientGallery() {
                             onChange={() => toggleOne(img.public_id)}
                           />
                           <span className="truncate max-w-[10rem]">
-                            {img.public_id.split("/").pop()}
+                            {fileNameFrom(img)}
                           </span>
                         </label>
                         <a
                           className="underline text-charcoal/70 hover:text-rose"
-                          href={originalDownloadUrl(img.public_id, img.format)}
+                          href={img.secure_url}
                           title="Download original"
+                          target="_blank"
+                          rel="noreferrer"
                         >
                           Original
                         </a>
