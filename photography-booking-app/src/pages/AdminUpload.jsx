@@ -156,6 +156,35 @@ export default function AdminUpload() {
     };
   }
 
+  // ---------- preset preflight (shows exact Cloudinary reason) ----------
+  async function verifyCloudinaryPreset() {
+    if (missingEnv) {
+      throw new Error(
+        "Cloudinary env missing: VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET"
+      );
+    }
+    const fd = new FormData();
+    // tiny 1x1 PNG data URI
+    fd.append(
+      "file",
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGP4BwQACfsD/ceS2qkAAAAASUVORK5CYII="
+    );
+    fd.append("upload_preset", PRESET);
+    const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
+      method: "POST",
+      body: fd,
+    });
+    const text = await r.text();
+    if (!r.ok) {
+      let msg = "Upload preset check failed";
+      try {
+        msg = JSON.parse(text)?.error?.message || msg;
+      } catch {}
+      throw new Error(msg);
+    }
+    return true;
+  }
+
   // ---------- gallery doc helpers ----------
   async function getOrCreateGalleryByTag(tag, displayNameIfNew) {
     const qy = query(collection(db, "galleries"), where("tag", "==", tag), limit(1));
@@ -187,10 +216,17 @@ export default function AdminUpload() {
       alert("Pick some image files first.");
       return;
     }
-
     const tag = mode === "portfolio" ? "portfolio" : selected?.tag;
     if (mode === "gallery" && !selected) {
       alert("Choose a gallery to upload to.");
+      return;
+    }
+
+    // 🔎 Preflight preset check — fails fast with helpful message
+    try {
+      await verifyCloudinaryPreset();
+    } catch (e) {
+      alert(`Cloudinary preset error: ${e.message}`);
       return;
     }
 
@@ -200,10 +236,8 @@ export default function AdminUpload() {
       if (mode === "portfolio") {
         galRef = await getOrCreateGalleryByTag("portfolio", "Portfolio");
       } else if (selected?.id) {
-        // existing gallery
-        galRef = doc(collection(db, "galleries"), selected.id);
+        galRef = doc(db, "galleries", selected.id);
       } else {
-        // just in case: create by tag
         galRef = await getOrCreateGalleryByTag(tag, selected?.name);
       }
 
@@ -288,9 +322,13 @@ export default function AdminUpload() {
             ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by Firestore rules."
             : `Signed in as ${me?.email}.`}
         </div>
-        {missingEnv && (
+        {missingEnv ? (
           <div className="text-xs rounded-lg px-3 py-2 bg-rose-50 text-rose-800">
             Missing VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET
+          </div>
+        ) : (
+          <div className="text-[11px] rounded-lg px-3 py-2 bg-slate-50 text-slate-600">
+            Cloudinary: <code>{CLOUD}</code> • Preset: <code>{PRESET}</code>
           </div>
         )}
       </div>
