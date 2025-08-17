@@ -50,41 +50,33 @@ function parseDurationMinutes(pkg) {
   return s.includes("hour") ? n * 60 : n;
 }
 
-/** Call Netlify function to send emails (non‑blocking) */
-async function fireConfirmationEmail(bookingPayload) {
+/** --- SMS via IFTTT (fire-and-forget) --- */
+async function fireSmsNotification(booking) {
   try {
-    await fetch("/.netlify/functions/send-confirmation", {
+    // Call your Netlify function which holds the secret IFTTT URL
+    await fetch("/.netlify/functions/sms-booking", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ booking: bookingPayload }),
+      body: JSON.stringify({ booking }),
     });
   } catch {
-    // don't block UI on email failures; check Netlify logs if needed
+    // Don't block the UI on SMS failures
   }
 }
 
 /** --- Public API --- */
-
-/**
- * Check if a slot is free with a safety buffer.
- * NOTE: This checks for conflicting *starts* within buffer window.
- * Pass the selected package so we can validate end time vs hours.
- */
 export async function checkAvailability({ date, time, pkg }) {
   try {
     if (!date || !time) return { available: false, reason: "Missing date/time" };
 
-    // 30-min grid only
     if (!isThirtyMinuteIncrement(time)) {
       return { available: false, reason: "Please choose a :00 or :30 time." };
     }
 
-    // start within business hours
     if (!isWithinBusinessHours(time)) {
       return { available: false, reason: "Outside hours (09:30–21:30)" };
     }
 
-    // end within business hours (derived from package duration)
     const start = toLocalDate(date, time);
     const durationMin = parseDurationMinutes(pkg);
     const end = addMinutes(start, durationMin);
@@ -93,7 +85,6 @@ export async function checkAvailability({ date, time, pkg }) {
       return { available: false, reason: "Outside hours (09:30–21:30)" };
     }
 
-    // buffer around requested start
     const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
     const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
 
@@ -101,7 +92,7 @@ export async function checkAvailability({ date, time, pkg }) {
       collection(db, "bookings"),
       where("startAt", ">=", Timestamp.fromDate(windowStart)),
       where("startAt", "<=", Timestamp.fromDate(windowEnd)),
-      where("status", "in", ["pending", "confirmed"]) // keep if you store status
+      where("status", "in", ["pending", "confirmed"])
     );
 
     const snap = await getDocs(qy);
@@ -117,19 +108,12 @@ export async function checkAvailability({ date, time, pkg }) {
 /**
  * Submit a booking that MATCHES your Firestore rules exactly:
  * Top-level keys ONLY: reference, status, package, date, time, startAt, details, createdAt
- * - status: "pending"
- * - package: { id (string), name (string), price (number), duration (string) }
- * - details: { name (string), email (string), phone (string), location (string) }
- *
- * Also fires the Netlify function to email client + admin.
  */
 export async function submitBooking({ pkg, date, time, details }) {
   try {
-    // Availability + business-hours validation
     const avail = await checkAvailability({ date, time, pkg });
     if (!avail.available) return { ok: false, error: avail.reason || "Not available" };
 
-    // Validate shapes required by your Firestore rules
     if (!pkg || typeof pkg.id !== "string" || typeof pkg.name !== "string" ||
         typeof pkg.price !== "number" || typeof pkg.duration !== "string") {
       return { ok: false, error: "Invalid package format" };
@@ -144,9 +128,7 @@ export async function submitBooking({ pkg, date, time, details }) {
     const bookingsCol = collection(db, "bookings");
     const newDocRef = doc(bookingsCol);
 
-    // Transaction for race-safety
     await runTransaction(db, async (tx) => {
-      // re-check conflict inside transaction
       const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
       const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
       const qy = query(
@@ -158,18 +140,17 @@ export async function submitBooking({ pkg, date, time, details }) {
       const snap = await getDocs(qy);
       if (!snap.empty) throw new Error("Conflicts with another session");
 
-      // Write EXACTLY the allowed keys
       tx.set(newDocRef, {
-        reference,                // string
-        status: "pending",        // required exact value
+        reference,
+        status: "pending",
         package: {
           id: pkg.id,
           name: pkg.name,
           price: pkg.price,
-          duration: pkg.duration, // e.g., "60 min" / "3 hours" / "60–90 min"
+          duration: pkg.duration,
         },
-        date,                     // "YYYY-MM-DD" (string)
-        time,                     // "HH:mm" (string)
+        date,
+        time,
         startAt: Timestamp.fromDate(start),
         details: {
           name: details.name,
@@ -181,8 +162,8 @@ export async function submitBooking({ pkg, date, time, details }) {
       });
     });
 
-    // Fire-and-forget email (does not write back to Firestore)
-    fireConfirmationEmail({
+    // SMS notify (non-blocking)
+    fireSmsNotification({
       id: newDocRef.id,
       reference,
       status: "pending",

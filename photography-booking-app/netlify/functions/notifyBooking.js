@@ -1,29 +1,50 @@
-// netlify/functions/notifyBooking.js  (optional manual notifier)
-import sendgrid from '@sendgrid/mail';
+// netlify/functions/notifyBooking.js
+const { IFTTT_EVENT, IFTTT_KEY } = process.env;
 
-sendgrid.setApiKey(process.env.SENDGRID_API_KEY);
-const FROM_EMAIL = process.env.FROM_EMAIL;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+function trunc(s = "", n = 160) {
+  const t = String(s).replace(/\s+/g, " ").trim();
+  return t.length <= n ? t : t.slice(0, n - 3) + "...";
+}
 
-const headers = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
-
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: 'Method not allowed' };
+exports.handler = async (event) => {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
+  if (!IFTTT_EVENT || !IFTTT_KEY) {
+    return { statusCode: 500, body: "IFTTT_EVENT / IFTTT_KEY not set" };
+  }
 
   try {
-    const { subject, html, text, to = ADMIN_EMAIL } = JSON.parse(event.body || '{}');
-    if (!subject || !(html || text)) {
-      return { statusCode: 400, headers, body: 'Missing subject/html or text' };
+    const data = JSON.parse(event.body || "{}");
+    const { pkg = {}, date = "", time = "", details = {} } = data;
+
+    const what = [pkg.name || "Session", pkg.price ? `$${pkg.price}` : ""]
+      .filter(Boolean).join(" ");
+    const when = [date, time].filter(Boolean).join(" ");
+    const who  = [details.name, details.phone].filter(Boolean).join(" ");
+
+    const payload = {
+      value1: trunc(what, 60),  // e.g. "Portrait $250"
+      value2: trunc(when, 40),  // e.g. "2025-08-17 02:00 PM"
+      value3: trunc(who, 60),   // e.g. "Lama NC 919-xxx-xxxx"
+    };
+
+    const url = `https://maker.ifttt.com/trigger/${encodeURIComponent(IFTTT_EVENT)}/json/with/key/${encodeURIComponent(IFTTT_KEY)}`;
+
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!r.ok) {
+      const text = await r.text().catch(() => "");
+      throw new Error(`IFTTT ${r.status}: ${text || "request failed"}`);
     }
-    const msg = { to, from: FROM_EMAIL, subject, html: html || undefined, text: text || undefined };
-    await sendgrid.send(msg);
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
-  } catch (e) {
-    console.error(e);
-    return { statusCode: 500, headers, body: 'Notification failed' };
+
+    return { statusCode: 200, body: JSON.stringify({ ok: true }) };
+  } catch (err) {
+    console.error("[notifyBooking] error:", err);
+    return { statusCode: 500, body: JSON.stringify({ ok: false, error: String(err.message || err) }) };
   }
 };
