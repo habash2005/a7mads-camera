@@ -42,9 +42,7 @@ export default function Portfolio() {
     <section className="w-full py-16 md:py-24 bg-ivory">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Portfolio</h2>
-        <p className="mt-2 text-charcoal/70">
-          Images uploaded to the <code>portfolio</code> gallery appear here automatically.
-        </p>
+        
 
         {err && <div className="mt-4 text-red-700 text-sm">{err}</div>}
 
