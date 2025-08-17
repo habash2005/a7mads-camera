@@ -1,7 +1,8 @@
 // src/pages/ClientGallery.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
+import { Zip } from "fflate";
 
 async function sha256(text) {
   const buf = new TextEncoder().encode(text);
@@ -18,13 +19,23 @@ function fileNameFrom(img) {
   return `${base}.${ext}`;
 }
 
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
+function cls(...xs) {
+  return xs.filter(Boolean).join(" ");
+}
+
+// fetch a file as Uint8Array (works with Firebase Storage signed URLs)
+async function fetchAsU8(url) {
+  const res = await fetch(url, { mode: "cors", cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buf = await res.arrayBuffer();
+  return new Uint8Array(buf);
+}
 
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gallery, setGallery] = useState(null);  // { id, name, slug, tag, ... }
-  const [images, setImages] = useState([]);      // docs from Firestore subcollection
+  const [gallery, setGallery] = useState(null); // { id, name, slug, tag, ... }
+  const [images, setImages] = useState([]); // docs from Firestore subcollection
   const [err, setErr] = useState("");
 
   const [selected, setSelected] = useState({});
@@ -89,29 +100,58 @@ export default function ClientGallery() {
     setErr("");
   };
 
+  // Client-side zipping with fflate (no Netlify Function; avoids 6MB response cap)
   async function downloadZip(files, outName) {
     if (!files.length) return;
     setZipping(true);
     try {
-      const resp = await fetch("/.netlify/functions/storage-zip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files, filename: outName || "gallery.zip" }),
+      // Ensure unique names inside the zip
+      const seen = new Set();
+      const uniqueFiles = files.map(({ url, name }) => {
+        if (!seen.has(name)) {
+          seen.add(name);
+          return { url, name };
+        }
+        const dot = name.lastIndexOf(".");
+        const base = dot > -1 ? name.slice(0, dot) : name;
+        const ext = dot > -1 ? name.slice(dot) : "";
+        let i = 2;
+        let next = `${base} (${i})${ext}`;
+        while (seen.has(next)) {
+          i += 1;
+          next = `${base} (${i})${ext}`;
+        }
+        seen.add(next);
+        return { url, name: next };
       });
-      if (!resp.ok) {
-        const text = await resp.text();
-        console.error("ZIP error:", resp.status, text);
-        throw new Error("Preparing ZIP failed.");
+
+      const chunks = [];
+      const zip = new Zip((err, chunk, final) => {
+        if (err) {
+          console.error("Zip error:", err);
+          alert("Preparing ZIP failed.");
+          return;
+        }
+        chunks.push(chunk);
+        if (final) {
+          const blob = new Blob(chunks, { type: "application/zip" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = outName || "gallery.zip";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        }
+      });
+
+      // Add each file (sequential keeps memory reasonable)
+      for (const f of uniqueFiles) {
+        const data = await fetchAsU8(f.url);
+        zip.add(f.name, data);
       }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = outName || "gallery.zip";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      zip.end();
     } catch (e) {
       console.error(e);
       alert(e.message || "Download failed. Please try again.");
@@ -142,9 +182,7 @@ export default function ClientGallery() {
         {/* Step 1: Access form */}
         {!gallery && (
           <div className="mt-6 max-w-md space-y-3">
-            <p className="text-charcoal/70">
-              Enter your access code to view your photos.
-            </p>
+            <p className="text-charcoal/70">Enter your access code to view your photos.</p>
             <input
               type="password"
               value={code}
@@ -231,8 +269,7 @@ export default function ClientGallery() {
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {
-                  // Use a sized display thumbnail (Storage URL already optimized via browser cache/CDN)
-                  const previewSrc = img.secure_url; // or leave as-is
+                  const previewSrc = img.secure_url;
                   return (
                     <figure
                       key={img.public_id}
@@ -251,9 +288,7 @@ export default function ClientGallery() {
                             checked={!!selected[img.public_id]}
                             onChange={() => toggleOne(img.public_id)}
                           />
-                          <span className="truncate max-w-[10rem]">
-                            {fileNameFrom(img)}
-                          </span>
+                          <span className="truncate max-w-[10rem]">{fileNameFrom(img)}</span>
                         </label>
                         <a
                           className="underline text-charcoal/70 hover:text-rose"

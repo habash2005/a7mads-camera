@@ -13,10 +13,10 @@ export default function Footer() {
         {/* Contact Links */}
         <div className="flex items-center gap-4">
           <a href="mailto:lamawafa13@gmail.com" className="hover:text-gold transition-colors">
-            hello@example.com
+            lamawafa13@gmail.com
           </a>
           <a href="tel:+19195930459" className="hover:text-gold transition-colors">
-            (555) 123-4567
+            (919) 593-0459
           </a>
         </div>
       </div>
