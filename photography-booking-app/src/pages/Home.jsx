@@ -39,7 +39,7 @@ export default function Home() {
         <div className="glass rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] border border-rose/30 p-4 md:p-6 bg-white/80">
           <img
             className="rounded-xl w-full object-cover aspect-[4/3]"
-            src="https://picsum.photos/800/600?blur=0"
+            src="photography-booking-app/dist/assets/_DSC0154.jpg"
             alt="Featured photography sample"
           />
         </div>
