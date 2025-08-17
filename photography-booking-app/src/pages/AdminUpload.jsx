@@ -21,6 +21,7 @@ import {
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
 const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || ""; // e.g. limlim-32e6a.appspot.com
+const CONCURRENCY = 4; // parallel uploads per batch
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 const toSlug = (s) =>
@@ -48,9 +49,13 @@ export default function AdminUpload() {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null); // {id,name,slug,tag}
 
-  // files
+  // files (chosen, before upload starts)
   const [files, setFiles] = useState([]);
   const [rejected, setRejected] = useState([]); // [{name, size, reason}]
+
+  // upload queue (for progress)
+  // item: {id, file, status: 'queued'|'uploading'|'done'|'error', progress, bytesTransferred, totalBytes, url, error}
+  const [queue, setQueue] = useState([]);
   const [busy, setBusy] = useState(false);
 
   // ---------- auth ----------
@@ -173,7 +178,7 @@ export default function AdminUpload() {
     });
   }
 
-  // ---------- storage preflight (pinpoint App Check / CORS / Rules issues) ----------
+  // ---------- storage preflight ----------
   async function storagePreflight() {
     try {
       const blob = new Blob(["ok"], { type: "text/plain" });
@@ -188,7 +193,6 @@ export default function AdminUpload() {
       await getDownloadURL(testRef);
       return true;
     } catch (e) {
-      // Provide actionable messages
       let hint = "";
       const msg = String(e?.message || e);
       if (msg.includes("appCheck")) {
@@ -199,45 +203,13 @@ export default function AdminUpload() {
           "Storage rules blocked the write. Confirm you're signed in as the admin email and rules allow admin writes.";
       } else if (msg.includes("Failed to fetch") || msg.includes("preflight")) {
         hint =
-          "Browser preflight failed. Ensure your domain is in Firebase Auth Authorized domains and (only if needed) set bucket CORS to allow your origin.";
+          "Browser preflight failed. Ensure your domain is in Firebase Auth Authorized domains and set bucket CORS only if needed.";
       }
       throw new Error(hint ? `${msg}\n\n${hint}` : msg);
     }
   }
 
-  // ---------- one file upload ----------
-  async function uploadToStorage(file, tag) {
-    const { width, height } = await getImageDims(file);
-    const base = tag === "portfolio" ? "portfolio" : `clients/${tag}`;
-    const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const path = `${base}/${id}.${extOf(file.name)}`;
-
-    const objRef = sRef(storage, path);
-    const task = uploadBytesResumable(objRef, file, {
-      contentType: file.type || "image/jpeg",
-      cacheControl: "public,max-age=31536000,immutable",
-    });
-
-    await new Promise((resolve, reject) => {
-      task.on("state_changed", null, reject, resolve);
-    });
-
-    const url = await getDownloadURL(objRef);
-
-    // match Firestore rules fields exactly
-    return {
-      public_id: path,
-      format: extOf(file.name),
-      bytes: file.size,
-      width,
-      height,
-      secure_url: url,
-      original_filename: file.name,
-      version: 1,
-    };
-  }
-
-  // ---------- gallery doc helpers ----------
+  // ---------- Firestore helpers ----------
   async function getOrCreateGalleryByTag(tag, displayNameIfNew) {
     const qy = query(collection(db, "galleries"), where("tag", "==", tag), limit(1));
     const snap = await getDocs(qy);
@@ -254,7 +226,98 @@ export default function AdminUpload() {
     return ref;
   }
 
-  // ---------- submit ----------
+  // ---------- upload single file with progress ----------
+  function uploadOne({ item, tag, galRef }) {
+    return new Promise(async (resolve) => {
+      const file = item.file;
+      const base = tag === "portfolio" ? "portfolio" : `clients/${tag}`;
+      const id = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const path = `${base}/${id}.${extOf(file.name)}`;
+
+      const objRef = sRef(storage, path);
+      const task = uploadBytesResumable(objRef, file, {
+        contentType: file.type || "image/jpeg",
+        cacheControl: "public,max-age=31536000,immutable",
+      });
+
+      // mark as uploading + store task
+      setQueue((q) =>
+        q.map((qit) =>
+          qit.id === item.id ? { ...qit, status: "uploading", task } : qit
+        )
+      );
+
+      task.on(
+        "state_changed",
+        (snap) => {
+          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+          setQueue((q) =>
+            q.map((qit) =>
+              qit.id === item.id
+                ? {
+                    ...qit,
+                    progress: pct,
+                    bytesTransferred: snap.bytesTransferred,
+                    totalBytes: snap.totalBytes,
+                  }
+                : qit
+            )
+          );
+        },
+        (err) => {
+          setQueue((q) =>
+            q.map((qit) =>
+              qit.id === item.id
+                ? { ...qit, status: "error", error: String(err?.message || err) }
+                : qit
+            )
+          );
+          resolve({ ok: false, error: err, file });
+        },
+        async () => {
+          try {
+            const url = await getDownloadURL(task.snapshot.ref);
+            const { width, height } = await getImageDims(file);
+
+            const imagesCol = collection(db, `galleries/${galRef.id}/images`);
+            const docId = path.replace(/\//g, "__");
+            await setDoc(doc(imagesCol, docId), {
+              public_id: path,
+              format: extOf(file.name),
+              bytes: file.size,
+              width,
+              height,
+              secure_url: url,
+              original_filename: file.name,
+              version: 1,
+              tag,
+              createdAt: serverTimestamp(),
+            });
+
+            setQueue((q) =>
+              q.map((qit) =>
+                qit.id === item.id
+                  ? { ...qit, status: "done", progress: 100, url }
+                  : qit
+              )
+            );
+            resolve({ ok: true, url });
+          } catch (err) {
+            setQueue((q) =>
+              q.map((qit) =>
+                qit.id === item.id
+                  ? { ...qit, status: "error", error: String(err?.message || err) }
+                  : qit
+              )
+            );
+            resolve({ ok: false, error: err, file });
+          }
+        }
+      );
+    });
+  }
+
+  // ---------- submit (with progress) ----------
   async function onUpload() {
     if (notAdmin) {
       alert("You must be signed in as the admin to upload.");
@@ -270,7 +333,7 @@ export default function AdminUpload() {
       return;
     }
 
-    // Preflight: fail fast with helpful reason
+    // Preflight: fail fast
     try {
       await storagePreflight();
     } catch (e) {
@@ -280,6 +343,20 @@ export default function AdminUpload() {
     }
 
     setBusy(true);
+    setQueue(
+      files.map((f) => ({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+        file: f,
+        status: "queued",
+        progress: 0,
+        bytesTransferred: 0,
+        totalBytes: f.size || 0,
+        url: "",
+        error: "",
+        task: null,
+      }))
+    );
+
     try {
       let galRef;
       if (mode === "portfolio") {
@@ -290,60 +367,26 @@ export default function AdminUpload() {
         galRef = await getOrCreateGalleryByTag(tag, selected?.name);
       }
 
-      // upload in small batches; collect detailed failures
-      const batches = chunk(files, 5);
-      let uploaded = [];
-      let failures = [];
+      // Upload in small parallel batches to avoid hammering the network
+      const items = (prev => prev)(queue.length ? queue : files.map((f) => ({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, file: f })));
+      const batches = chunk(items, CONCURRENCY);
+
+      let successCount = 0;
+      let failCount = 0;
 
       for (const group of batches) {
-        const res = await Promise.allSettled(group.map((f) => uploadToStorage(f, tag)));
-        uploaded.push(...res.filter((r) => r.status === "fulfilled").map((r) => r.value));
-        failures.push(
-          ...res
-            .map((r, i) => ({ r, file: group[i] }))
-            .filter(({ r }) => r.status === "rejected")
-            .map(({ r, file }) => ({
-              name: file.name,
-              reason: r.reason?.message || String(r.reason),
-            }))
+        const res = await Promise.all(
+          group.map((it) => uploadOne({ item: it, tag, galRef }))
         );
+        successCount += res.filter((r) => r.ok).length;
+        failCount += res.filter((r) => !r.ok).length;
       }
 
-      if (uploaded.length === 0) {
-        const list = failures.slice(0, 4).map((f) => `${f.name}: ${f.reason}`).join("\n");
-        throw new Error(list || "All uploads failed.");
-      }
-
-      // write subcollection docs (match Firestore rules exactly)
-      const imagesCol = collection(db, `galleries/${galRef.id}/images`);
-      for (const img of uploaded) {
-        const id = img.public_id.replace(/\//g, "__");
-        await setDoc(doc(imagesCol, id), {
-          public_id: img.public_id,
-          format: img.format,
-          bytes: img.bytes,
-          width: img.width,
-          height: img.height,
-          secure_url: img.secure_url,
-          original_filename: img.original_filename,
-          version: img.version,
-          tag,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      let msg = `Uploaded ${uploaded.length} image(s) to ${
-        mode === "portfolio" ? "Portfolio" : selected.name
-      }.`;
-      if (failures.length) {
-        msg +=
-          `\n${failures.length} failed:\n` +
-          failures
-            .slice(0, 4)
-            .map((f) => `• ${f.name}: ${f.reason}`)
-            .join("\n");
-      }
-      alert(msg);
+      alert(
+        `Uploaded ${successCount} file${successCount === 1 ? "" : "s"}${
+          failCount ? `, ${failCount} failed` : ""
+        }.`
+      );
 
       setFiles([]);
       setRejected([]);
@@ -354,6 +397,21 @@ export default function AdminUpload() {
       setBusy(false);
     }
   }
+
+  // ---------- overall progress ----------
+  const overall = useMemo(() => {
+    const totals = queue.reduce(
+      (acc, it) => {
+        const tb = it.totalBytes || it.file?.size || 0;
+        const bt =
+          it.bytesTransferred ||
+          (it.status === "done" ? tb : 0);
+        return { total: acc.total + tb, done: acc.done + bt };
+      },
+      { total: 0, done: 0 }
+    );
+    return totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
+  }, [queue]);
 
   // ---------- totals ----------
   const totalSize = useMemo(
@@ -559,6 +617,7 @@ export default function AdminUpload() {
             onClick={() => {
               setFiles([]);
               setRejected([]);
+              setQueue([]);
             }}
             disabled={(files.length === 0 && rejected.length === 0) || busy}
             className="rounded-full px-4 py-2 text-sm font-semibold text-charcoal/70 hover:text-rose underline disabled:text-charcoal/30"
@@ -595,6 +654,66 @@ export default function AdminUpload() {
           </button>
         </div>
       </div>
+
+      {/* Upload progress UI */}
+      {queue.length > 0 && (
+        <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="text-sm text-charcoal/70">
+              Overall progress: <span className="font-semibold text-charcoal">{overall}%</span>
+            </div>
+            <div className="text-xs text-charcoal/50">
+              {queue.filter((i) => i.status === "done").length}/{queue.length} done
+            </div>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-blush/40">
+            <div className="h-full bg-rose transition-all" style={{ width: `${overall}%` }} />
+          </div>
+
+          <ul className="mt-4 space-y-2">
+            {queue.map((it) => (
+              <li key={it.id} className="rounded-lg border border-rose/20 p-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-charcoal">
+                      {it.file?.name}
+                    </div>
+                    <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-blush/30">
+                      <div
+                        className={cls(
+                          "h-full transition-all",
+                          it.status === "done"
+                            ? "bg-gold"
+                            : it.status === "error"
+                            ? "bg-red-500"
+                            : "bg-rose"
+                        )}
+                        style={{ width: `${it.progress || 0}%` }}
+                      />
+                    </div>
+                    <div className="mt-1 text-xs text-charcoal/60">
+                      {it.status === "uploading" && `${it.progress || 0}%`}
+                      {it.status === "done" && "Uploaded ✓"}
+                      {it.status === "error" && `Error: ${it.error}`}
+                      {it.status === "queued" && "Queued"}
+                    </div>
+                  </div>
+                  {it.url && (
+                    <a
+                      className="shrink-0 text-xs underline text-charcoal/70 hover:text-rose"
+                      href={it.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   );
 }

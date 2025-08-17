@@ -1,5 +1,7 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+// src/pages/Home.jsx
+import React from "react";
+import { Link } from "react-router-dom";
+import heroImg from "./_DSC0154.jpg"; // <-- import because file is under src/pages
 
 export default function Home() {
   return (
@@ -36,14 +38,32 @@ export default function Home() {
         </div>
 
         {/* Image / Hero Card */}
-        <div className="glass rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] border border-rose/30 p-4 md:p-6 bg-white/80">
-          <img
-            className="rounded-xl w-full object-cover aspect-[4/3]"
-            src="/_DSC0154.jpg"
-            alt="Featured photography sample"
-          />
+        <div className="relative overflow-hidden rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
+          {/* lock layout with a nice aspect; image absolutely fills it */}
+          <div className="relative aspect-[4/3] w-full">
+            <img
+              src={heroImg}
+              alt="Lama holding a camera on a wooden bridge"
+              loading="eager"
+              decoding="async"
+              fetchpriority="high"
+              draggable={false}
+              className="
+                absolute inset-0 h-full w-full
+                object-cover
+                object-top                     /* bias crop to the top */
+                [object-position:50%_18%]      /* fine-tune: center horizontally, top-ish vertically */
+                rounded-[14px]
+                will-change-transform
+              "
+              onError={(e) => console.error('Hero image failed to load', e)}
+            />
+          </div>
+
+          {/* subtle inner ring for your aesthetic */}
+          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-rose/20" />
         </div>
       </div>
     </section>
-  )
+  );
 }
