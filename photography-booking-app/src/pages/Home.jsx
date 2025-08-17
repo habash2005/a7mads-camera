@@ -1,5 +1,7 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+// src/pages/Home.jsx
+import React from "react";
+import { Link } from "react-router-dom";
+import heroImg from "../_DSC0154.jpg"; // ← one level up from pages/
 
 export default function Home() {
   return (
@@ -36,14 +38,29 @@ export default function Home() {
         </div>
 
         {/* Image / Hero Card */}
-        <div className="glass rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] border border-rose/30 p-4 md:p-6 bg-white/80">
-          <img
-            className="rounded-xl w-full object-cover aspect-[4/3]"
-            src="photography-booking-app/src/_DSC0154.jpg"
-            alt="Featured photography sample"
-          />
+        <div className="relative overflow-hidden rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-4 md:p-6">
+          <div className="relative w-full overflow-hidden rounded-xl">
+            {/* Lock layout; image fills and focuses on the top (face + camera) */}
+            <div className="relative aspect-[4/3] w-full">
+              <img
+                src={heroImg}
+                alt="Lama holding a camera on a wooden bridge"
+                loading="eager"
+                decoding="async"
+                fetchpriority="high"
+                draggable="false"
+                className="
+                  absolute inset-0 h-full w-full
+                  object-cover
+                  [object-position:50%_12%]  md:[object-position:50%_18%]
+                  will-change-transform
+                "
+              />
+            </div>
+          </div>
+          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-rose/20" />
         </div>
       </div>
     </section>
-  )
+  );
 }
