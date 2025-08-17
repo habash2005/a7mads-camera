@@ -14,7 +14,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// use the gs:// URL so Storage never complains about default bucket
+// explicitly bind to the bucket; avoids “no default bucket”
 const bucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET; // limlim-32e6a.appspot.com
 export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
 
