@@ -1,3 +1,4 @@
+// src/lib/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -15,13 +16,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// App Check (reCAPTCHA v3)
+// ✅ App Check with reCAPTCHA v3 (public site key)
 initializeAppCheck(app, {
   provider: new ReCaptchaV3Provider(import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY),
   isTokenAutoRefreshEnabled: true,
 });
 
-// bind storage to bucket explicitly (prevents "no default bucket")
+// ✅ Force-bind the bucket so Storage never complains about default bucket
 const bucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET; // limlim-32e6a.appspot.com
 export const storage = bucket ? getStorage(app, `gs://${bucket}`) : getStorage(app);
 

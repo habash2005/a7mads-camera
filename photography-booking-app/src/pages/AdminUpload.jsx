@@ -1,5 +1,5 @@
-// src/pages/AdminUpload.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
 import {
   addDoc,
@@ -12,10 +12,15 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import {
+  ref as sRef,
+  uploadBytesResumable,
+  getDownloadURL,
+} from "firebase/storage";
 
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const MAX_SIZE = 25 * 1024 * 1024; // 25MB
+const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || ""; // e.g. limlim-32e6a.appspot.com
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 const toSlug = (s) =>
@@ -30,7 +35,10 @@ const randomHash = () =>
 export default function AdminUpload() {
   const fileInputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // auth/admin
   const [me, setMe] = useState(null);
+  const notAdmin = !me || me.email !== ADMIN_EMAIL;
 
   // destination
   const [mode, setMode] = useState("portfolio"); // 'portfolio' | 'gallery'
@@ -45,24 +53,32 @@ export default function AdminUpload() {
   const [rejected, setRejected] = useState([]); // [{name, size, reason}]
   const [busy, setBusy] = useState(false);
 
+  // ---------- auth ----------
   useEffect(() => {
-    const unsub = auth.onAuthStateChanged((u) => setMe(u || null));
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setMe(u || null);
+      if (import.meta.env.DEV) {
+        console.log("[auth]", u?.email || "signed out");
+      }
+    });
     return () => unsub();
   }, []);
 
+  // ---------- galleries load ----------
   useEffect(() => {
     (async () => {
       try {
         setLoadingGals(true);
         const snap = await getDocs(collection(db, "galleries"));
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const norm = rows.map((g) => ({
-          id: g.id,
-          name: g.name || g.tag || g.slug || g.id,
-          slug: g.slug || toSlug(g.name || g.tag || ""),
-          tag: g.tag,
-        }));
-        norm.sort((a, b) => a.name.localeCompare(b.name));
+        const norm = rows
+          .map((g) => ({
+            id: g.id,
+            name: g.name || g.tag || g.slug || g.id,
+            slug: g.slug || toSlug(g.name || g.tag || ""),
+            tag: g.tag,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
         setGalleries(norm);
       } catch (e) {
         console.error("Load galleries failed:", e);
@@ -96,9 +112,7 @@ export default function AdminUpload() {
     );
   }, [search, galleries]);
 
-  const notAdmin = !me || me.email !== ADMIN_EMAIL;
-
-  // ---------- files pick/drop ----------
+  // ---------- file pick/drop ----------
   const acceptFiles = (list) => {
     const ok = [];
     const bad = [];
@@ -159,6 +173,39 @@ export default function AdminUpload() {
     });
   }
 
+  // ---------- storage preflight (pinpoint App Check / CORS / Rules issues) ----------
+  async function storagePreflight() {
+    try {
+      const blob = new Blob(["ok"], { type: "text/plain" });
+      const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
+      const task = uploadBytesResumable(testRef, blob, {
+        contentType: "text/plain",
+        cacheControl: "public,max-age=60",
+      });
+      await new Promise((resolve, reject) => {
+        task.on("state_changed", null, reject, resolve);
+      });
+      await getDownloadURL(testRef);
+      return true;
+    } catch (e) {
+      // Provide actionable messages
+      let hint = "";
+      const msg = String(e?.message || e);
+      if (msg.includes("appCheck")) {
+        hint =
+          "App Check is enforced. Make sure initializeAppCheck(...) with your reCAPTCHA v3 SITE KEY is in src/lib/firebase.js, and the key allows your domain.";
+      } else if (msg.includes("unauthorized")) {
+        hint =
+          "Storage rules blocked the write. Confirm you're signed in as the admin email and rules allow admin writes.";
+      } else if (msg.includes("Failed to fetch") || msg.includes("preflight")) {
+        hint =
+          "Browser preflight failed. Ensure your domain is in Firebase Auth Authorized domains and (only if needed) set bucket CORS to allow your origin.";
+      }
+      throw new Error(hint ? `${msg}\n\n${hint}` : msg);
+    }
+  }
+
+  // ---------- one file upload ----------
   async function uploadToStorage(file, tag) {
     const { width, height } = await getImageDims(file);
     const base = tag === "portfolio" ? "portfolio" : `clients/${tag}`;
@@ -168,6 +215,7 @@ export default function AdminUpload() {
     const objRef = sRef(storage, path);
     const task = uploadBytesResumable(objRef, file, {
       contentType: file.type || "image/jpeg",
+      cacheControl: "public,max-age=31536000,immutable",
     });
 
     await new Promise((resolve, reject) => {
@@ -219,6 +267,15 @@ export default function AdminUpload() {
     const tag = mode === "portfolio" ? "portfolio" : selected?.tag;
     if (mode === "gallery" && !selected) {
       alert("Choose a gallery to upload to.");
+      return;
+    }
+
+    // Preflight: fail fast with helpful reason
+    try {
+      await storagePreflight();
+    } catch (e) {
+      console.error("[Storage preflight]", e);
+      alert(e.message || "Storage preflight failed.");
       return;
     }
 
@@ -279,8 +336,12 @@ export default function AdminUpload() {
         mode === "portfolio" ? "Portfolio" : selected.name
       }.`;
       if (failures.length) {
-        msg += `\n${failures.length} failed:\n` +
-          failures.slice(0, 4).map((f) => `• ${f.name}: ${f.reason}`).join("\n");
+        msg +=
+          `\n${failures.length} failed:\n` +
+          failures
+            .slice(0, 4)
+            .map((f) => `• ${f.name}: ${f.reason}`)
+            .join("\n");
       }
       alert(msg);
 
@@ -302,16 +363,21 @@ export default function AdminUpload() {
 
   return (
     <section className="p-4 md:p-5">
-      {/* Admin status */}
-      <div
-        className={cls(
-          "mb-3 text-xs rounded-lg px-3 py-2",
-          notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
-        )}
-      >
-        {notAdmin
-          ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by rules."
-          : `Signed in as ${me?.email}.`}
+      {/* Status banners */}
+      <div className="mb-3 grid grid-cols-1 gap-2">
+        <div
+          className={cls(
+            "text-xs rounded-lg px-3 py-2",
+            notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
+          )}
+        >
+          {notAdmin
+            ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by rules."
+            : `Signed in as ${me?.email}.`}
+        </div>
+        <div className="text-[11px] rounded-lg px-3 py-2 bg-slate-50 text-slate-600">
+          Bucket: <code>{BUCKET || "(not set)"}</code>
+        </div>
       </div>
 
       {/* Destination selector */}
