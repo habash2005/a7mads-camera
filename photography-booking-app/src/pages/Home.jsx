@@ -1,5 +1,5 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React from 'react'
+import { Link } from 'react-router-dom'
 
 export default function Home() {
   return (
@@ -11,11 +11,10 @@ export default function Home() {
             Book stunning, story-driven photography.
           </h1>
           <p className="mt-4 text-charcoal/70 text-base md:text-lg">
-            Portraits, events, and weddings—crafted with care and delivered fast. Pick a package,
-            choose a time, and lock it in.
+            Portraits, events, and weddings—crafted with care and delivered fast. Pick a package, choose a time, and lock it in.
           </p>
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          <div className="mt-6 flex gap-3">
             <Link
               to="/booking"
               className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
@@ -31,30 +30,20 @@ export default function Home() {
           </div>
 
           <div className="mt-6 flex items-center gap-2 text-sm text-charcoal/70">
-            <span aria-hidden="true">★★★★★</span>
-            <span className="sr-only">5 out of 5 stars</span>
+            <span>★★★★★</span>
             <span>100+ happy clients</span>
           </div>
         </div>
 
         {/* Image / Hero Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
-          {/* Wider aspect on mobile to keep more headroom; tighter on md+ */}
-          <div className="relative aspect-[3/2] md:aspect-[4/3] w-full">
-            <img
-              src="/_DSC0154.jpg"
-              alt="Lama holding a camera on a wooden bridge"
-              loading="eager"
-              decoding="async"
-              fetchpriority="high"
-              sizes="(min-width: 768px) 50vw, 100vw"
-              className="absolute inset-0 h-full w-full object-cover rounded-2xl"
-              style={{ objectPosition: "18% 35%" }} // adjust left/top focus if needed
-            />
-          </div>
-          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-rose/20" />
+        <div className="glass rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.08)] border border-rose/30 p-4 md:p-6 bg-white/80">
+          <img
+            className="rounded-xl w-full object-cover aspect-[4/3]"
+            src="/_DSC0154.jpg"
+            alt="Featured photography sample"
+          />
         </div>
       </div>
     </section>
-  );
+  )
 }

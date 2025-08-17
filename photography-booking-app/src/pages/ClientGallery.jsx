@@ -2,44 +2,57 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs } from "firebase/firestore";
-import { Zip } from "fflate";
+
+// 🔽 NEW: zip + storage imports
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
+import { getStorage, ref as sref, getBlob } from "firebase/storage";
+
+const storage = getStorage(); // uses the bucket from your firebase config
 
 async function sha256(text) {
   const buf = new TextEncoder().encode(text);
   const hash = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
 }
 
+// Try to keep filename; fall back to last path segment
 function fileNameFrom(img) {
-  // try to preserve original name, fallback to last segment of public_id
-  const base = img.original_filename || img.public_id.split("/").pop() || "image";
-  const ext = (img.format || "jpg").toLowerCase();
-  return `${base}.${ext}`;
+  const base =
+    img.original_filename ||
+    (img.public_id && img.public_id.split("/").pop()) ||
+    (img.secure_url && (decodeURIComponent((img.secure_url.match(/\/o\/([^?]+)/)?.[1] || "")).split("/").pop())) ||
+    "image";
+  // try extension from metadata, else from URL, else jpg
+  const ext =
+    (img.format && String(img.format).toLowerCase()) ||
+    (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
+    "jpg";
+  return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
 }
 
-function cls(...xs) {
-  return xs.filter(Boolean).join(" ");
+// Get Storage object path from our doc
+function storagePathOf(img) {
+  // Prefer an explicit field if you saved it on upload
+  if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
+  // Derive from a Firebase download URL (works with *.firebasestorage.app or googleapis)
+  // Looks for ".../o/<ENCODED_PATH>?..."
+  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
-// fetch a file as Uint8Array (works with Firebase Storage signed URLs)
-async function fetchAsU8(url) {
-  const res = await fetch(url, { mode: "cors", cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const buf = await res.arrayBuffer();
-  return new Uint8Array(buf);
-}
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gallery, setGallery] = useState(null); // { id, name, slug, tag, ... }
-  const [images, setImages] = useState([]); // docs from Firestore subcollection
+  const [gallery, setGallery] = useState(null);
+  const [images, setImages] = useState([]);
   const [err, setErr] = useState("");
 
   const [selected, setSelected] = useState({});
   const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState(0);
 
   const someChecked = images.some((img) => !!selected[img.public_id]);
   const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
@@ -59,7 +72,6 @@ export default function ClientGallery() {
     setSelected({});
 
     try {
-      // 1) fetch galleries and find by codeHash
       const snap = await getDocs(collection(db, "galleries"));
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -72,14 +84,11 @@ export default function ClientGallery() {
       }
       setGallery(match);
 
-      // 2) fetch images from subcollection
       const imgsSnap = await getDocs(collection(db, `galleries/${match.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
-      // newest first (optional)
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
-      // preselect all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -97,79 +106,68 @@ export default function ClientGallery() {
     setImages([]);
     setSelected({});
     setZipping(false);
+    setZipProgress(0);
     setErr("");
   };
 
-  // Client-side zipping with fflate (no Netlify Function; avoids 6MB response cap)
-  async function downloadZip(files, outName) {
-    if (!files.length) return;
+  // 🔽 NEW: pure client-side zipping using Firebase Storage + JSZip
+  async function zipAndDownload(files, outName) {
+    if (!files.length) {
+      alert("No files selected");
+      return;
+    }
+
+    // Soft safety: very large batches can crash the browser
+    const TOTAL_LIMIT_MB = 500; // adjust if you like
+    let approx = 0;
+    for (const f of files) approx += (f.size || 5_000_000); // rough guess if size unknown
+    if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
+      alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
+      return;
+    }
+
     setZipping(true);
+    setZipProgress(0);
     try {
-      // Ensure unique names inside the zip
-      const seen = new Set();
-      const uniqueFiles = files.map(({ url, name }) => {
-        if (!seen.has(name)) {
-          seen.add(name);
-          return { url, name };
-        }
-        const dot = name.lastIndexOf(".");
-        const base = dot > -1 ? name.slice(0, dot) : name;
-        const ext = dot > -1 ? name.slice(dot) : "";
-        let i = 2;
-        let next = `${base} (${i})${ext}`;
-        while (seen.has(next)) {
-          i += 1;
-          next = `${base} (${i})${ext}`;
-        }
-        seen.add(next);
-        return { url, name: next };
-      });
+      const zip = new JSZip();
 
-      const chunks = [];
-      const zip = new Zip((err, chunk, final) => {
-        if (err) {
-          console.error("Zip error:", err);
-          alert("Preparing ZIP failed.");
-          return;
+      // Fetch each blob directly from Storage (no CORS issues)
+      for (let i = 0; i < files.length; i++) {
+        const img = files[i];
+        const path = storagePathOf(img);
+        if (!path) {
+          console.warn("Cannot derive storage path for", img);
+          continue;
         }
-        chunks.push(chunk);
-        if (final) {
-          const blob = new Blob(chunks, { type: "application/zip" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = outName || "gallery.zip";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
-        }
-      });
+        const blob = await getBlob(sref(storage, path)); // Firebase SDK call
+        zip.file(fileNameFrom(img), blob, { compression: "STORE" }); // JPEG/PNG already compressed
 
-      // Add each file (sequential keeps memory reasonable)
-      for (const f of uniqueFiles) {
-        const data = await fetchAsU8(f.url);
-        zip.add(f.name, data);
+        setZipProgress(Math.round(((i + 1) / files.length) * 80)); // 0–80% during fetch loop
       }
-      zip.end();
+
+      // Generate zip blob
+      const zipBlob = await zip.generateAsync(
+        { type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } },
+        (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2)) // 80–100% while packaging
+      );
+
+      saveAs(zipBlob, outName || "gallery.zip");
     } catch (e) {
       console.error(e);
-      alert(e.message || "Download failed. Please try again.");
+      alert(e.message || "Preparing ZIP failed.");
     } finally {
       setZipping(false);
+      setZipProgress(0);
     }
   }
 
   async function downloadSelectedZip() {
-    const files = images
-      .filter((i) => !!selected[i.public_id])
-      .map((i) => ({ url: i.secure_url, name: fileNameFrom(i) }));
-    await downloadZip(files, "selected-images.zip");
+    const files = images.filter((i) => !!selected[i.public_id]);
+    await zipAndDownload(files, "selected-images.zip");
   }
 
   async function downloadAllZip() {
-    const files = images.map((i) => ({ url: i.secure_url, name: fileNameFrom(i) }));
-    await downloadZip(files, "all-images.zip");
+    await zipAndDownload(images, "all-images.zip");
   }
 
   return (
@@ -241,7 +239,7 @@ export default function ClientGallery() {
                       : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
                   )}
                 >
-                  {zipping ? "Preparing…" : "Download Selected"}
+                  {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
                 </button>
 
                 <button
@@ -254,13 +252,10 @@ export default function ClientGallery() {
                       : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
                   )}
                 >
-                  {zipping ? "Please wait…" : "Download All"}
+                  {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
                 </button>
 
-                <button
-                  onClick={reset}
-                  className="text-sm underline text-charcoal/70 hover:text-rose"
-                >
+                <button onClick={reset} className="text-sm underline text-charcoal/70 hover:text-rose">
                   Use a different code
                 </button>
               </div>
@@ -269,7 +264,7 @@ export default function ClientGallery() {
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {
-                  const previewSrc = img.secure_url;
+                  const previewSrc = img.secure_url; // keep your existing preview URL
                   return (
                     <figure
                       key={img.public_id}
