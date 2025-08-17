@@ -37,7 +37,7 @@ export default function AdminUpload() {
   const [galleries, setGalleries] = useState([]); // [{id,name,slug,tag}]
   const [loadingGals, setLoadingGals] = useState(true);
   const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false); // dropdown open
+  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null); // {id,name,slug,tag}
 
   // files
@@ -45,26 +45,26 @@ export default function AdminUpload() {
   const [rejected, setRejected] = useState([]); // [{name, size, reason}]
   const [busy, setBusy] = useState(false);
 
+  // surface env missing early
+  const missingEnv = !CLOUD || !PRESET;
+
   useEffect(() => {
     const unsub = auth.onAuthStateChanged((u) => setMe(u));
     return () => unsub();
   }, []);
 
   useEffect(() => {
-    // fetch galleries so dropdown can search
     (async () => {
       try {
         setLoadingGals(true);
         const snap = await getDocs(collection(db, "galleries"));
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        // normalize fields used in UI
         const norm = rows.map((g) => ({
           id: g.id,
           name: g.name || g.tag || g.slug || g.id,
           slug: g.slug || toSlug(g.name || g.tag || ""),
           tag: g.tag,
         }));
-        // optional: sort by name
         norm.sort((a, b) => a.name.localeCompare(b.name));
         setGalleries(norm);
       } catch (e) {
@@ -117,13 +117,16 @@ export default function AdminUpload() {
 
   // ---------- cloudinary upload ----------
   async function uploadToCloudinary(file, galleryTag) {
-    if (!CLOUD || !PRESET) throw new Error("Cloudinary env missing (VITE_CLOUDINARY_*).");
+    if (missingEnv) {
+      throw new Error(
+        "Cloudinary env missing: set VITE_CLOUDINARY_CLOUD_NAME and VITE_CLOUDINARY_UPLOAD_PRESET"
+      );
+    }
     const fd = new FormData();
     fd.append("file", file);
     fd.append("upload_preset", PRESET);
     if (galleryTag) {
       fd.append("tags", galleryTag);
-      // folder for organization
       const folder = galleryTag === "portfolio" ? "portfolio" : `clients/${galleryTag}`;
       fd.append("folder", folder);
     }
@@ -137,7 +140,7 @@ export default function AdminUpload() {
       try {
         msg = JSON.parse(text)?.error?.message || msg;
       } catch {}
-      console.error("Cloudinary upload error:", text);
+      console.error("Cloudinary upload error:", { status: r.status, body: text });
       throw new Error(msg);
     }
     const j = JSON.parse(text);
@@ -155,12 +158,10 @@ export default function AdminUpload() {
 
   // ---------- gallery doc helpers ----------
   async function getOrCreateGalleryByTag(tag, displayNameIfNew) {
-    // try find by tag
     const qy = query(collection(db, "galleries"), where("tag", "==", tag), limit(1));
     const snap = await getDocs(qy);
     if (!snap.empty) return snap.docs[0].ref;
 
-    // create new (allowed by your admin-only rules)
     const name = displayNameIfNew || (tag === "portfolio" ? "Portfolio" : tag);
     const ref = await addDoc(collection(db, "galleries"), {
       name,
@@ -178,39 +179,59 @@ export default function AdminUpload() {
       alert("You must be signed in as the admin to upload.");
       return;
     }
+    if (missingEnv) {
+      alert("Cloudinary env missing: VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET");
+      return;
+    }
     if (files.length === 0) {
       alert("Pick some image files first.");
       return;
     }
-    let tag;
-    if (mode === "portfolio") {
-      tag = "portfolio";
-    } else {
-      if (!selected) {
-        alert("Choose a gallery to upload to.");
-        return;
-      }
-      tag = selected.tag;
+
+    const tag = mode === "portfolio" ? "portfolio" : selected?.tag;
+    if (mode === "gallery" && !selected) {
+      alert("Choose a gallery to upload to.");
+      return;
     }
 
     setBusy(true);
     try {
-      const galRef =
-        mode === "portfolio"
-          ? await getOrCreateGalleryByTag("portfolio", "Portfolio")
-          : doc(collection(db, "galleries"), selected.id) ||
-            (await getOrCreateGalleryByTag(tag, selected?.name));
+      let galRef;
+      if (mode === "portfolio") {
+        galRef = await getOrCreateGalleryByTag("portfolio", "Portfolio");
+      } else if (selected?.id) {
+        // existing gallery
+        galRef = doc(collection(db, "galleries"), selected.id);
+      } else {
+        // just in case: create by tag
+        galRef = await getOrCreateGalleryByTag(tag, selected?.name);
+      }
 
-      // upload in small batches
+      // upload in small batches; collect detailed failures
       const batches = chunk(files, 5);
       let uploaded = [];
+      let failures = [];
+
       for (const group of batches) {
         const res = await Promise.allSettled(group.map((f) => uploadToCloudinary(f, tag)));
         uploaded.push(...res.filter((r) => r.status === "fulfilled").map((r) => r.value));
+        failures.push(
+          ...res
+            .map((r, i) => ({ r, file: group[i] }))
+            .filter(({ r }) => r.status === "rejected")
+            .map(({ r, file }) => ({
+              name: file.name,
+              reason: r.reason?.message || String(r.reason),
+            }))
+        );
       }
-      if (uploaded.length === 0) throw new Error("All uploads failed.");
 
-      // write subcollection docs (match your Firestore rules exactly)
+      if (uploaded.length === 0) {
+        const list = failures.slice(0, 4).map((f) => `${f.name}: ${f.reason}`).join("\n");
+        throw new Error(list || "All uploads failed.");
+      }
+
+      // write subcollection docs (match Firestore rules exactly)
       const imagesCol = collection(db, `galleries/${galRef.id}/images`);
       for (const img of uploaded) {
         const id = img.public_id.replace(/\//g, "__");
@@ -228,7 +249,15 @@ export default function AdminUpload() {
         });
       }
 
-      alert(`Uploaded ${uploaded.length} image(s) to ${mode === "portfolio" ? "Portfolio" : selected.name}.`);
+      let msg = `Uploaded ${uploaded.length} image(s) to ${
+        mode === "portfolio" ? "Portfolio" : selected.name
+      }.`;
+      if (failures.length) {
+        msg += `\n${failures.length} failed:\n` +
+          failures.slice(0, 4).map((f) => `• ${f.name}: ${f.reason}`).join("\n");
+      }
+      alert(msg);
+
       setFiles([]);
       setRejected([]);
     } catch (e) {
@@ -247,16 +276,23 @@ export default function AdminUpload() {
 
   return (
     <section className="p-4 md:p-5">
-      {/* Admin status */}
-      <div
-        className={cls(
-          "mb-3 text-xs rounded-lg px-3 py-2",
-          notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
+      {/* Admin/env status */}
+      <div className="mb-3 grid grid-cols-1 gap-2">
+        <div
+          className={cls(
+            "text-xs rounded-lg px-3 py-2",
+            notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
+          )}
+        >
+          {notAdmin
+            ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by Firestore rules."
+            : `Signed in as ${me?.email}.`}
+        </div>
+        {missingEnv && (
+          <div className="text-xs rounded-lg px-3 py-2 bg-rose-50 text-rose-800">
+            Missing VITE_CLOUDINARY_CLOUD_NAME / VITE_CLOUDINARY_UPLOAD_PRESET
+          </div>
         )}
-      >
-        {notAdmin
-          ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by Firestore rules."
-          : `Signed in as ${me?.email}.`}
       </div>
 
       {/* Destination selector */}
@@ -313,6 +349,7 @@ export default function AdminUpload() {
                 ? `${selected.name}  •  ${selected.tag}`
                 : "Select a gallery"}
             </button>
+
             {open && mode === "gallery" && (
               <div className="absolute z-10 mt-2 w-full rounded-2xl border border-rose/30 bg-white shadow-lg">
                 <div className="p-2">
@@ -366,7 +403,7 @@ export default function AdminUpload() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,image/heic,image/heif"
             multiple
             onChange={onPick}
             className="sr-only"
