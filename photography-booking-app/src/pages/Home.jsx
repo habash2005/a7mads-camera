@@ -10,7 +10,7 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import heroImg from "../_DSC0154.jpg"; // place the image at: src/_DSC0154.jpg
+import heroImg from "../_DSC0154.jpg"; // put the image at: src/_DSC0154.jpg
 
 function cls(...xs) {
   return xs.filter(Boolean).join(" ");
@@ -56,7 +56,6 @@ export default function Home() {
           {/* Image / Hero Card */}
           <div className="relative overflow-hidden rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-4 md:p-6">
             <div className="relative w-full overflow-hidden rounded-xl">
-              {/* Lock layout; image fills and focuses on the top */}
               <div className="relative aspect-[4/3] w-full">
                 <img
                   src={heroImg}
@@ -93,7 +92,7 @@ function PortfolioOnScroll() {
   const [err, setErr] = useState("");
   const sentryRef = useRef(null);
 
-  // Reveal + fetch once when scrolled near the section
+  // Trigger once when the section nears the viewport
   useEffect(() => {
     const el = sentryRef.current;
     if (!el) return;
@@ -101,9 +100,7 @@ function PortfolioOnScroll() {
     const io = new IntersectionObserver(
       (entries) => {
         const e = entries[0];
-        if (e.isIntersecting && !ready) {
-          setReady(true);
-        }
+        if (e.isIntersecting && !ready) setReady(true);
       },
       { rootMargin: "0px 0px -15% 0px", threshold: 0.15 }
     );
@@ -112,15 +109,14 @@ function PortfolioOnScroll() {
     return () => io.disconnect();
   }, [ready]);
 
-  // Fetch portfolio images only once when "ready"
+  // Fetch portfolio images only when "ready"
   useEffect(() => {
     if (!ready) return;
-
     (async () => {
       setLoading(true);
       setErr("");
       try {
-        // Try ordered query first (may require an index)
+        // Prefer ordered query (may need an index)
         let snap;
         try {
           const qy = query(
@@ -130,8 +126,8 @@ function PortfolioOnScroll() {
             limit(12)
           );
           snap = await getDocs(qy);
-        } catch (e) {
-          // Fallback without orderBy if index is missing
+        } catch {
+          // Fallback without orderBy if index missing
           const qy = query(
             collectionGroup(db, "images"),
             where("tag", "==", "portfolio"),
@@ -141,14 +137,17 @@ function PortfolioOnScroll() {
         }
 
         const rows = snap.docs.map((d) => d.data());
-        // Sort client-side by createdAt if needed
         rows.sort(
           (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
         );
         setImgs(rows);
       } catch (e) {
-        console.error(e);
-        setErr("Couldn’t load portfolio right now.");
+        console.error("[Home portfolio] load failed:", e);
+        setErr(
+          String(e.code || e.message).toLowerCase().includes("permission")
+            ? "We couldn't load the portfolio (permission denied). If you're the owner, check App Check or Firestore rules."
+            : "We couldn't load the portfolio right now. Please try again."
+        );
       } finally {
         setLoading(false);
       }
@@ -174,16 +173,12 @@ function PortfolioOnScroll() {
 
         {/* Grid */}
         <div className="mt-6">
-          {err && (
-            <div className="text-sm text-rose mb-4">{err}</div>
-          )}
+          {err && <div className="text-sm text-rose mb-4">{err}</div>}
 
           {loading ? (
             <SkeletonGrid />
           ) : imgs.length === 0 ? (
-            <div className="text-sm text-charcoal/60">
-              No portfolio images yet.
-            </div>
+            <div className="text-sm text-charcoal/60">No portfolio images yet.</div>
           ) : (
             <div
               className={cls(
@@ -193,7 +188,7 @@ function PortfolioOnScroll() {
               )}
             >
               {imgs.map((img, i) => {
-                const src = img.secure_url; // saved at upload
+                const src = img.secure_url;
                 const key = img.public_id || `${src}-${i}`;
                 return (
                   <figure
