@@ -1,217 +1,304 @@
-// src/pages/ClientPortal.jsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
-import { collection, getDocs, limit, query, where } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  limit,
+  query,
+  where,
+} from "firebase/firestore";
 
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
+// Zip + Storage for downloads
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
+import { getStorage, ref as sref, getBlob } from "firebase/storage";
 
+const storage = getStorage();
+
+// ---------- helpers ----------
+function cls(...xs) {
+  return xs.filter(Boolean).join(" ");
+}
+function upRef(s = "") {
+  return String(s).trim().toUpperCase();
+}
 function fileNameFrom(img) {
-  const base = img.original_filename || img.public_id?.split("/").pop() || "image";
-  const ext = (img.format || "jpg").toLowerCase();
-  return `${base}.${ext}`;
+  const base =
+    img.original_filename ||
+    (img.public_id && img.public_id.split("/").pop()) ||
+    (img.secure_url &&
+      (decodeURIComponent((img.secure_url.match(/\/o\/([^?]+)/)?.[1] || "")).split("/").pop())) ||
+    "image";
+  const ext =
+    (img.format && String(img.format).toLowerCase()) ||
+    (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
+    "jpg";
+  return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
+}
+function storagePathOf(img) {
+  if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
+  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
+  return m ? decodeURIComponent(m[1]) : (img.public_id || null); // our uploader saves public_id == storage path
 }
 
-async function fetchBookingByRef(refCode) {
-  const qy = query(
-    collection(db, "bookings"),
-    where("reference", "==", refCode),
-    limit(1)
-  );
-  const snap = await getDocs(qy);
-  if (snap.empty) return null;
-  const doc = snap.docs[0];
-  return { id: doc.id, ...doc.data() };
+function parseRefFromUrl() {
+  try {
+    // supports both hash and normal routers
+    const search = window.location.search || "";
+    const hash = window.location.hash || "";
+    const params = new URLSearchParams(search || (hash.includes("?") ? hash.split("?")[1] : ""));
+    return params.get("ref") || "";
+  } catch {
+    return "";
+  }
 }
 
-async function fetchImagesForBooking(id) {
-  const snap = await getDocs(collection(db, `bookings/${id}/images`));
-  const rows = snap.docs.map((d) => d.data());
-  rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-  return rows;
-}
-
+// ---------- component ----------
 export default function ClientPortal() {
-  const [code, setCode] = useState("");
+  const [refInput, setRefInput] = useState("");
+  const [booking, setBooking] = useState(null);
+  const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  const [booking, setBooking] = useState(null); // {id, reference, status, package, date, time, startAt, details}
-  const [images, setImages] = useState([]);
-
-  const [zipping, setZipping] = useState(false);
+  // selection + zipping
   const [selected, setSelected] = useState({});
-
-  const statusChip = useMemo(() => {
-    if (!booking) return null;
-    const s = String(booking.status || "").toLowerCase();
-    const map = {
-      pending: "bg-amber-100 text-amber-900 border-amber-300",
-      confirmed: "bg-emerald-100 text-emerald-900 border-emerald-300",
-      canceled: "bg-rose-100 text-rose-900 border-rose-300",
-    };
-    return map[s] || "bg-slate-100 text-slate-900 border-slate-300";
-  }, [booking]);
+  const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState(0);
 
   const someChecked = images.some((img) => !!selected[img.public_id]);
   const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
 
-  function toggleOne(pid) {
-    setSelected((s) => ({ ...s, [pid]: !s[pid] }));
-  }
-  function toggleAll(checked) {
+  const toggleOne = (pid) => setSelected((s) => ({ ...s, [pid]: !s[pid] }));
+  const toggleAll = (checked) => {
     const next = {};
     images.forEach((img) => (next[img.public_id] = checked));
     setSelected(next);
-  }
+  };
 
-  async function openPortal() {
+  // Auto-login via ?ref=CODE or remembered session
+  useEffect(() => {
+    const urlRef = parseRefFromUrl();
+    const saved = localStorage.getItem("clientRef") || "";
+    const initial = upRef(urlRef || saved);
+    if (initial) {
+      loginWithRef(initial);
+    }
+  }, []);
+
+  async function loginWithRef(rawRef) {
+    const ref = upRef(rawRef || refInput);
+    if (!ref) return;
     setErr("");
-    setBooking(null);
+    setLoading(true);
     setImages([]);
     setSelected({});
-    const ref = (code || "").trim().toUpperCase();
-    if (!ref) { setErr("Enter your reference."); return; }
+    setBooking(null);
 
-    setLoading(true);
     try {
-      const bk = await fetchBookingByRef(ref);
-      if (!bk) { setErr("No booking found for that reference."); setLoading(false); return; }
-      setBooking(bk);
+      // 1) find booking by reference
+      const qy = query(collection(db, "bookings"), where("reference", "==", ref), limit(1));
+      const bsnap = await getDocs(qy);
+      if (bsnap.empty) {
+        setErr("Invalid reference code. Double-check and try again.");
+        setLoading(false);
+        return;
+      }
+      const bdoc = bsnap.docs[0];
+      const bdata = { id: bdoc.id, ...bdoc.data() };
+      setBooking(bdata);
 
-      const imgs = await fetchImagesForBooking(bk.id);
+      // remember session
+      localStorage.setItem("clientRef", ref);
+
+      // 2) load images from bookings/{bookingId}/images
+      const imgsSnap = await getDocs(collection(db, `bookings/${bdoc.id}/images`));
+      const imgs = imgsSnap.docs.map((d) => d.data());
+      // sort newest first
+      imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
+      // pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
     } catch (e) {
       console.error(e);
-      setErr("Could not load your portal. Please try again.");
+      setErr("There was a problem opening your portal. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  async function downloadZip(files, outName) {
-    if (!files.length) return;
+  function signOut() {
+    localStorage.removeItem("clientRef");
+    setRefInput("");
+    setBooking(null);
+    setImages([]);
+    setSelected({});
+    setErr("");
+    setZipping(false);
+    setZipProgress(0);
+  }
+
+  // Client-side zipping via Firebase Storage + JSZip
+  async function zipAndDownload(files, outName) {
+    if (!files.length) {
+      alert("No files selected");
+      return;
+    }
+
+    const TOTAL_LIMIT_MB = 500; // soft cap
+    let approx = 0;
+    for (const f of files) approx += f.size || 5_000_000;
+    if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
+      alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
+      return;
+    }
+
     setZipping(true);
+    setZipProgress(0);
     try {
-      const resp = await fetch("/.netlify/functions/storage-zip", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ files, filename: outName || "photos.zip" }),
-      });
-      if (!resp.ok) {
-        const text = await resp.text();
-        console.error("ZIP error:", resp.status, text);
-        throw new Error("Preparing ZIP failed.");
+      const zip = new JSZip();
+
+      for (let i = 0; i < files.length; i++) {
+        const img = files[i];
+        const path = storagePathOf(img);
+        if (!path) {
+          console.warn("Cannot derive storage path for", img);
+          continue;
+        }
+        const blob = await getBlob(sref(storage, path));
+        zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+
+        setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = outName || "photos.zip";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+
+      const zipBlob = await zip.generateAsync(
+        { type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } },
+        (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2))
+      );
+
+      saveAs(zipBlob, outName || "photos.zip");
     } catch (e) {
       console.error(e);
-      alert(e.message || "Download failed. Please try again.");
+      alert(e.message || "Preparing ZIP failed.");
     } finally {
       setZipping(false);
+      setZipProgress(0);
     }
   }
 
   async function downloadSelectedZip() {
-    const files = images
-      .filter((i) => !!selected[i.public_id])
-      .map((i) => ({ url: i.secure_url, name: fileNameFrom(i) }));
-    await downloadZip(files, "selected-images.zip");
+    const files = images.filter((i) => !!selected[i.public_id]);
+    await zipAndDownload(files, "selected-photos.zip");
   }
-
   async function downloadAllZip() {
-    const files = images.map((i) => ({ url: i.secure_url, name: fileNameFrom(i) }));
-    await downloadZip(files, "all-images.zip");
+    await zipAndDownload(images, "all-photos.zip");
   }
 
-  function reset() {
-    setCode("");
-    setBooking(null);
-    setImages([]);
-    setSelected({});
-    setZipping(false);
-    setErr("");
-  }
+  const clientName = useMemo(() => booking?.details?.name || "Client", [booking]);
 
   return (
     <section className="w-full py-16 md:py-24 bg-ivory">
       <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Client Portal</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
+            Client Portal
+          </h2>
+          {booking && (
+            <button
+              onClick={signOut}
+              className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition"
+            >
+              Sign out
+            </button>
+          )}
+        </div>
 
+        {/* Step 1: Login with reference */}
         {!booking && (
           <div className="mt-6 max-w-md space-y-3">
             <p className="text-charcoal/70">
-              Enter the reference code we sent you to view your appointment and photos.
+              Enter your <span className="font-semibold">reference code</span> to open your portal.
             </p>
             <input
               type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              placeholder="e.g., AB12CD"
-              className="w-full rounded-2xl border border-rose/30 px-3 py-2 bg-white tracking-widest"
-              onKeyDown={(e) => { if (e.key === "Enter" && !loading && code.trim()) openPortal(); }}
+              value={refInput}
+              onChange={(e) => setRefInput(e.target.value)}
+              placeholder="e.g., 8F2KQX"
+              className="w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !loading && refInput.trim()) loginWithRef();
+              }}
             />
             <button
-              onClick={openPortal}
-              disabled={loading || !code.trim()}
+              onClick={() => loginWithRef()}
+              disabled={loading || !refInput.trim()}
               className={cls(
                 "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
-                loading || !code.trim()
+                loading || !refInput.trim()
                   ? "bg-blush text-charcoal/50 cursor-not-allowed"
                   : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
               )}
             >
-              {loading ? "Checking…" : "Open Portal"}
+              {loading ? "Opening…" : "Open Portal"}
             </button>
             {err && <div className="text-sm text-red-700">{err}</div>}
           </div>
         )}
 
+        {/* Step 2: Portal */}
         {booking && (
-          <div className="mt-8 space-y-6">
-            {/* Booking card */}
-            <div className="rounded-2xl border border-rose/30 bg-white/80 shadow-sm p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-serif text-xl text-charcoal">
-                    {booking.package?.name || "Session"}
-                  </h3>
-                  <div className="mt-1 text-sm text-charcoal/70">
-                    {booking.date} • {booking.time}
-                    {booking.details?.location ? ` • ${booking.details.location}` : ""}
-                  </div>
-                  <div className="mt-1 text-xs text-charcoal/60">
-                    Ref: <span className="font-mono text-charcoal">{booking.reference}</span>
-                  </div>
-                </div>
-                <span className={cls("rounded-full border px-3 py-1 text-xs font-semibold", statusChip)}>
-                  {String(booking.status || "pending").toUpperCase()}
-                </span>
-              </div>
-              {typeof booking.package?.price === "number" && (
-                <div className="mt-2 text-sm text-charcoal/80">
-                  ${booking.package.price} • {booking.package.duration}
-                </div>
-              )}
-            </div>
-
-            {/* Photos */}
+          <div className="mt-8">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <div className="text-sm text-charcoal/70">
-                {images.length
-                  ? `${images.length} photo${images.length > 1 ? "s" : ""} available`
-                  : "No photos uploaded yet."}
+              <div>
+                <h3 className="font-serif text-xl text-charcoal">
+                  Welcome, {clientName}
+                </h3>
+                <div className="text-xs text-charcoal/60">
+                  Ref: <code className="font-mono">{booking.reference}</code> •{" "}
+                  {booking.package?.name} •{" "}
+                  {booking.startAt?.toDate?.()
+                    ? booking.startAt.toDate().toLocaleString([], {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                    : `${booking.date} ${booking.time}`}
+                </div>
+
+                {/* Optional: show creative brief */}
+                {(booking.details?.shootFor ||
+                  booking.details?.style ||
+                  booking.details?.locationNotes ||
+                  booking.details?.notes) && (
+                  <div className="mt-2 text-xs text-charcoal/70 space-y-1">
+                    {booking.details?.shootFor && (
+                      <div>
+                        <span className="font-medium">Shoot:</span>{" "}
+                        {booking.details.shootFor}
+                      </div>
+                    )}
+                    {booking.details?.style && (
+                      <div>
+                        <span className="font-medium">Style:</span>{" "}
+                        {booking.details.style}
+                      </div>
+                    )}
+                    {booking.details?.locationNotes && (
+                      <div>
+                        <span className="font-medium">Location notes:</span>{" "}
+                        {booking.details.locationNotes}
+                      </div>
+                    )}
+                    {booking.details?.notes && (
+                      <div>
+                        <span className="font-medium">Notes:</span>{" "}
+                        {booking.details.notes}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3">
@@ -235,7 +322,7 @@ export default function ClientPortal() {
                       : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
                   )}
                 >
-                  {zipping ? "Preparing…" : "Download Selected"}
+                  {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
                 </button>
 
                 <button
@@ -248,21 +335,20 @@ export default function ClientPortal() {
                       : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
                   )}
                 >
-                  {zipping ? "Please wait…" : "Download All"}
-                </button>
-
-                <button onClick={reset} className="text-sm underline text-charcoal/70 hover:text-rose">
-                  Use a different code
+                  {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
                 </button>
               </div>
             </div>
 
-            {images.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {images.length > 0 ? (
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {
                   const previewSrc = img.secure_url;
                   return (
-                    <figure key={img.public_id} className="overflow-hidden rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                    <figure
+                      key={img.public_id}
+                      className="overflow-hidden rounded-xl shadow-sm hover:shadow-lg transition-shadow"
+                    >
                       <img
                         src={previewSrc}
                         alt={img.public_id}
@@ -276,9 +362,7 @@ export default function ClientPortal() {
                             checked={!!selected[img.public_id]}
                             onChange={() => toggleOne(img.public_id)}
                           />
-                          <span className="truncate max-w-[10rem]">
-                            {fileNameFrom(img)}
-                          </span>
+                          <span className="truncate max-w-[10rem]">{fileNameFrom(img)}</span>
                         </label>
                         <a
                           className="underline text-charcoal/70 hover:text-rose"
@@ -294,6 +378,8 @@ export default function ClientPortal() {
                   );
                 })}
               </div>
+            ) : (
+              <div className="mt-6 text-charcoal/60">No images yet for this booking.</div>
             )}
           </div>
         )}
