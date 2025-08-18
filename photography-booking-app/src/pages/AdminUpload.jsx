@@ -157,7 +157,6 @@ export default function AdminUpload() {
     const onWheel = (e) => {
       if (!openClientList) return;
       if (!listRef.current) return;
-      // prevent page scroll and forward to list
       e.preventDefault();
       listRef.current.scrollTop += e.deltaY;
     };
@@ -198,7 +197,10 @@ export default function AdminUpload() {
   const acceptFiles = (list) => {
     const ok = [];
     const bad = [];
+    const seen = new Set(files.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
     for (const f of list) {
+      const key = `${f.name}|${f.size}|${f.lastModified}`;
+      if (seen.has(key)) continue; // de-dupe
       if (!f.type?.startsWith("image/")) {
         bad.push({ name: f.name, size: f.size, reason: "Not an image" });
         continue;
@@ -208,9 +210,10 @@ export default function AdminUpload() {
         continue;
       }
       ok.push(f);
+      seen.add(key);
     }
-    setRejected((prev) => [...prev, ...bad]);
-    setFiles((prev) => [...prev, ...ok]);
+    if (ok.length) setFiles((prev) => [...prev, ...ok]);
+    if (bad.length) setRejected((prev) => [...prev, ...bad]);
   };
   const onPick = (e) => acceptFiles(Array.from(e.target.files || []));
   const onDrop = (e) => {
@@ -219,18 +222,34 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  /* storage preflight */
+  /* storage preflight with hints */
   async function storagePreflight() {
-    const blob = new Blob(["ok"], { type: "text/plain" });
-    const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
-    const task = uploadBytesResumable(testRef, blob, {
-      contentType: "text/plain",
-      cacheControl: "public,max-age=60",
-    });
-    await new Promise((resolve, reject) => {
-      task.on("state_changed", null, reject, resolve);
-    });
-    await getDownloadURL(testRef);
+    try {
+      const blob = new Blob(["ok"], { type: "text/plain" });
+      const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
+      const task = uploadBytesResumable(testRef, blob, {
+        contentType: "text/plain",
+        cacheControl: "public,max-age=60",
+      });
+      await new Promise((resolve, reject) => {
+        task.on("state_changed", null, reject, resolve);
+      });
+      await getDownloadURL(testRef);
+    } catch (e) {
+      const msg = String(e?.message || e);
+      let hint = "";
+      if (msg.toLowerCase().includes("appcheck")) {
+        hint =
+          "App Check token missing/invalid. Ensure initializeAppCheck(...) with your reCAPTCHA v3 SITE KEY is set and the key allows your domain.";
+      } else if (msg.toLowerCase().includes("unauthorized")) {
+        hint =
+          "Storage rules blocked the write. Confirm you’re signed in as the admin and rules allow admin writes.";
+      } else if (msg.toLowerCase().includes("failed to fetch")) {
+        hint =
+          "Network/preflight blocked. Make sure your domain is in Firebase Auth Authorized domains and bucket CORS allows your origin if needed.";
+      }
+      throw new Error(hint ? `${msg}\n\n${hint}` : msg);
+    }
   }
 
   /* portfolio doc (optional) */
@@ -341,7 +360,7 @@ export default function AdminUpload() {
     });
   }
 
-  /* submit */
+  /* submit (build local items FIRST; then setQueue; then batch) */
   async function onUpload() {
     if (notAdmin) return alert("You must be signed in as the admin to upload.");
     if (files.length === 0) return alert("Pick some image files first.");
