@@ -1,9 +1,11 @@
 // src/pages/Home.jsx
 import React from "react";
 import { Link } from "react-router-dom";
-import heroImg from "../_DSC0154.jpg"; // ← one level up from pages/
 
 export default function Home() {
+  // Image served from the public folder: public/images/_DSC0154.jpg
+  const heroImg = "/images/_DSC0154.jpg";
+
   return (
     <section className="w-full py-16 md:py-24 bg-ivory">
       <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-8 items-center">
@@ -47,14 +49,19 @@ export default function Home() {
                 alt="Lama holding a camera on a wooden bridge"
                 loading="eager"
                 decoding="async"
-                fetchpriority="high"
+                fetchPriority="high"
                 draggable="false"
                 className="
                   absolute inset-0 h-full w-full
                   object-cover
-                  [object-position:50%_12%]  md:[object-position:50%_18%]
+                  [object-position:50%_12%] md:[object-position:50%_18%]
                   will-change-transform
                 "
+                onError={(e) => {
+                  // Optional fallback if the image is missing
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "/images/placeholder.jpg";
+                }}
               />
             </div>
           </div>
