@@ -1,3 +1,4 @@
+// src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, Suspense } from "react";
 import { auth, db } from "../lib/firebase";
 import {
@@ -14,9 +15,10 @@ import {
 } from "firebase/firestore";
 
 // ✅ STATIC lazy imports so Vite can bundle them:
-const AdminUpload   = React.lazy(() => import("./AdminUpload"));
-const AdminGallery  = React.lazy(() => import("./AdminGallery"));
-const AdminBookings = React.lazy(() => import("./AdminBookings")); // (optional page)
+const AdminUpload        = React.lazy(() => import("./AdminUpload"));
+const AdminGallery       = React.lazy(() => import("./AdminGallery"));
+const AdminBookings      = React.lazy(() => import("./AdminBookings")); // (optional page)
+const AdminMediaManager  = React.lazy(() => import("./AdminMediaManager")); // ⬅️ NEW
 
 async function safeCount(qy) {
   try {
@@ -131,10 +133,11 @@ export default function AdminDashboard() {
         {/* Quick Actions */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <Card title="Quick Actions" className="lg:col-span-12">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <Action label="New Gallery" onClick={() => jumpTo("Galleries")} />
               <Action label="Upload Photos" onClick={() => jumpTo("Upload")} />
               <Action label="View Upcoming" onClick={() => jumpTo("Upcoming Bookings")} />
+              <Action label="Media Manager" onClick={() => jumpTo("Media Manager")} /> {/* ⬅️ NEW */}
               <Action label="Go to Portfolio" href="/portfolio" />
             </div>
             <p className="text-xs text-charcoal/60 mt-4">
@@ -254,6 +257,15 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
+          </Card>
+
+          {/* Media Manager (NEW) */}
+          <Card title="Media Manager" className="lg:col-span-12">
+            <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
+              <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
+                <AdminMediaManager />
+              </Suspense>
+            </div>
           </Card>
 
           {/* Galleries */}
