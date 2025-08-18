@@ -15,10 +15,10 @@ import {
 } from "firebase/firestore";
 
 // ✅ STATIC lazy imports so Vite can bundle them:
-const AdminUpload        = React.lazy(() => import("./AdminUpload"));
-const AdminGallery       = React.lazy(() => import("./AdminGallery"));
-const AdminBookings      = React.lazy(() => import("./AdminBookings")); // (optional page)
-const AdminMediaManager  = React.lazy(() => import("./AdminMediaManager")); // ⬅️ NEW
+const AdminUpload       = React.lazy(() => import("./AdminUpload"));
+// const AdminGallery    = React.lazy(() => import("./AdminGallery")); // ⬅️ removed from UI for now
+const AdminBookings     = React.lazy(() => import("./AdminBookings")); // (optional page)
+const AdminMediaManager = React.lazy(() => import("./AdminMediaManager"));
 
 async function safeCount(qy) {
   try {
@@ -44,7 +44,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     (async () => {
       setLoadingStats(true);
-      const bookingsCol = collection(db, "bookings");
+      const bookingsCol  = collection(db, "bookings");
       const galleriesCol = collection(db, "galleries");
 
       const totalBookings = await safeCount(query(bookingsCol));
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl md:3xl font-serif font-semibold text-charcoal">Admin</h1>
-            <p className="text-sm text-charcoal/70">Manage uploads, client galleries, and bookings in one place.</p>
+            <p className="text-sm text-charcoal/70">Manage uploads, media, and bookings in one place.</p>
           </div>
           <button
             onClick={() => auth.signOut()}
@@ -133,11 +133,11 @@ export default function AdminDashboard() {
         {/* Quick Actions */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <Card title="Quick Actions" className="lg:col-span-12">
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <Action label="New Gallery" onClick={() => jumpTo("Galleries")} />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {/* Removed "New Gallery" */}
               <Action label="Upload Photos" onClick={() => jumpTo("Upload")} />
               <Action label="View Upcoming" onClick={() => jumpTo("Upcoming Bookings")} />
-              <Action label="Media Manager" onClick={() => jumpTo("Media Manager")} /> {/* ⬅️ NEW */}
+              <Action label="Media Manager" onClick={() => jumpTo("Media Manager")} />
               <Action label="Go to Portfolio" href="/portfolio" />
             </div>
             <p className="text-xs text-charcoal/60 mt-4">
@@ -152,7 +152,7 @@ export default function AdminDashboard() {
           {/* Upload */}
           <Card title="Upload" className="lg:col-span-6 xl:col-span-7">
             <p className="text-sm text-charcoal/70 mb-4">
-              Upload to <span className="font-semibold">Portfolio</span> or a selected <span className="font-semibold">Client Gallery</span>. Tags are applied automatically.
+              Upload to <span className="font-semibold">Portfolio</span> or a selected <span className="font-semibold">Client (by reference)</span>.
             </p>
             <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
@@ -205,7 +205,7 @@ export default function AdminDashboard() {
                                 <div className="text-slate-500">{b.details?.email}</div>
                                 <div className="text-slate-500">{b.details?.phone}</div>
 
-                                {/* NEW: creative brief preview */}
+                                {/* Creative brief preview */}
                                 {b.details?.shootFor && (
                                   <div className="text-xs text-slate-600 mt-1">
                                     <span className="font-medium">Shoot:</span> {b.details.shootFor}
@@ -259,7 +259,7 @@ export default function AdminDashboard() {
             )}
           </Card>
 
-          {/* Media Manager (NEW) */}
+          {/* Media Manager (kept) */}
           <Card title="Media Manager" className="lg:col-span-12">
             <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
@@ -268,24 +268,14 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          {/* Galleries */}
-          <Card title="Galleries" className="lg:col-span-12">
-            <p className="text-sm text-charcoal/70 mb-4">
-              Create a client gallery (slug + access code). Then upload with the generated tag (e.g., <code>gal-aliyah-sam</code>).
-            </p>
-            <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
-              <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
-                <AdminGallery />
-              </Suspense>
-            </div>
-          </Card>
+          {/* (Galleries section removed from UI) */}
 
           {/* Notes */}
           <Card title="Notes" className="lg:col-span-12">
             <ul className="text-sm text-charcoal/80 list-disc ml-5 space-y-2">
               <li>Confirm pending bookings and send welcome emails.</li>
-              <li>Create galleries for upcoming shoots.</li>
               <li>Upload highlight images to Portfolio.</li>
+              <li>Deliver client galleries from booking pages.</li>
             </ul>
           </Card>
         </div>
