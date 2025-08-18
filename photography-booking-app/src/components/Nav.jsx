@@ -21,7 +21,7 @@ export default function Nav() {
         <nav className="hidden md:flex gap-6 text-sm text-charcoal">
           <NavLink to="/portfolio" className="hover:text-gold transition-colors">Portfolio</NavLink>
           <NavLink to="/booking"  className="hover:text-gold transition-colors">Book</NavLink>
-          <NavLink to="/client"   className="hover:text-gold transition-colors">Clients</NavLink>
+          <NavLink to="/portal"   className="hover:text-gold transition-colors">Client Portal</NavLink>{/* ⬅️ point to /portal */}
           <NavLink to="/faq"      className="hover:text-gold transition-colors">FAQ</NavLink>
           <NavLink to="/admin"    className="hover:text-gold transition-colors">Admin</NavLink>
         </nav>
@@ -44,12 +44,10 @@ export default function Nav() {
       </div>
 
       {/* Mobile dropdown */}
-      <div
-        className={`${open ? 'block' : 'hidden'} md:hidden border-t border-rose/40 bg-blush/80 px-4 py-3 space-y-3`}
-      >
+      <div className={`${open ? 'block' : 'hidden'} md:hidden border-t border-rose/40 bg-blush/80 px-4 py-3 space-y-3`}>
         <NavLink to="/portfolio" className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Portfolio</NavLink>
         <NavLink to="/booking"  className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Book</NavLink>
-        <NavLink to="/client"   className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Clients</NavLink>
+        <NavLink to="/portal"   className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Client Portal</NavLink>{/* ⬅️ updated */}
         <NavLink to="/faq"      className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>FAQ</NavLink>
         <NavLink to="/admin"    className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Admin</NavLink>
 

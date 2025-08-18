@@ -1,12 +1,13 @@
+// src/pages/AdminUpload.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
 import {
-  addDoc,
   collection,
   doc,
   getDocs,
   limit,
+  orderBy,
   query,
   serverTimestamp,
   setDoc,
@@ -19,10 +20,11 @@ import {
 } from "firebase/storage";
 
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
-const MAX_SIZE = 25 * 1024 * 1024; // 25MB
-const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || ""; // e.g. limlim-32e6a.appspot.com
-const CONCURRENCY = 4; // parallel uploads per batch
+const MAX_SIZE = 25 * 1024 * 1024;
+const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "";
+const CONCURRENCY = 4;
 
+/* utils */
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 const toSlug = (s) =>
   String(s || "")
@@ -30,66 +32,108 @@ const toSlug = (s) =>
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-const randomHash = () =>
-  Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+const randomId = (len = 8) => Math.random().toString(36).slice(2, 2 + len);
+const extOf = (name = "") => (name.split(".").pop() || "jpg").toLowerCase();
+
+function formatBytes(n = 0) {
+  if (n < 1024) return `${n} B`;
+  const kb = n / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(1)} GB`;
+}
+async function getImageDims(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.width, height: img.height });
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => {
+      resolve({ width: 0, height: 0 });
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+  });
+}
+function chunk(arr, size) {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 export default function AdminUpload() {
   const fileInputRef = useRef(null);
-  const dropdownRef = useRef(null);
 
-  // auth/admin
+  // client dropdown refs (for wheel + scroll-to-active)
+  const clientDropRef = useRef(null);
+  const listRef = useRef(null);
+
   const [me, setMe] = useState(null);
   const notAdmin = !me || me.email !== ADMIN_EMAIL;
 
-  // destination
-  const [mode, setMode] = useState("portfolio"); // 'portfolio' | 'gallery'
-  const [galleries, setGalleries] = useState([]); // [{id,name,slug,tag}]
-  const [loadingGals, setLoadingGals] = useState(true);
+  const [mode, setMode] = useState("client"); // "client" | "portfolio"
+
+  // bookings for client selector
+  const [bookings, setBookings] = useState([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+  const [openClientList, setOpenClientList] = useState(false);
   const [search, setSearch] = useState("");
-  const [open, setOpen] = useState(false);
-  const [selected, setSelected] = useState(null); // {id,name,slug,tag}
+  const [selectedBooking, setSelectedBooking] = useState(null);
 
-  // files (chosen, before upload starts)
+  // keyboard highlight index
+  const [highlighted, setHighlighted] = useState(0);
+
+  // files + progress
   const [files, setFiles] = useState([]);
-  const [rejected, setRejected] = useState([]); // [{name, size, reason}]
-
-  // upload queue (for progress)
-  // item: {id, file, status: 'queued'|'uploading'|'done'|'error', progress, bytesTransferred, totalBytes, url, error}
+  const [rejected, setRejected] = useState([]);
   const [queue, setQueue] = useState([]);
   const [busy, setBusy] = useState(false);
 
-  // ---------- auth ----------
+  /* auth */
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setMe(u || null);
-      if (import.meta.env.DEV) {
-        console.log("[auth]", u?.email || "signed out");
-      }
-    });
+    const unsub = onAuthStateChanged(auth, (u) => setMe(u || null));
     return () => unsub();
   }, []);
 
-  // ---------- galleries load ----------
+  /* load bookings */
   useEffect(() => {
     (async () => {
       try {
-        setLoadingGals(true);
-        const snap = await getDocs(collection(db, "galleries"));
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const norm = rows
-          .map((g) => ({
-            id: g.id,
-            name: g.name || g.tag || g.slug || g.id,
-            slug: g.slug || toSlug(g.name || g.tag || ""),
-            tag: g.tag,
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-        setGalleries(norm);
-      } catch (e) {
-        console.error("Load galleries failed:", e);
-        setGalleries([]);
+        setLoadingBookings(true);
+        let snap;
+        try {
+          snap = await getDocs(
+            query(collection(db, "bookings"), orderBy("startAt", "desc"), limit(200))
+          );
+        } catch {
+          snap = await getDocs(
+            query(collection(db, "bookings"), orderBy("createdAt", "desc"), limit(200))
+          );
+        }
+        const rows = snap.docs.map((d) => {
+          const data = d.data();
+          const dt = data.startAt?.toDate?.() || null;
+          return {
+            id: d.id,
+            reference: data.reference || "",
+            name: data.details?.name || "",
+            email: data.details?.email || "",
+            phone: data.details?.phone || "",
+            date: data.date || "",
+            time: data.time || "",
+            start: dt,
+            status: (data.status || "").toLowerCase(),
+          };
+        });
+        setBookings(rows);
+      } catch {
+        setBookings([]);
       } finally {
-        setLoadingGals(false);
+        setLoadingBookings(false);
       }
     })();
   }, []);
@@ -97,27 +141,60 @@ export default function AdminUpload() {
   // close dropdown if clicking outside
   useEffect(() => {
     function onDocClick(e) {
-      if (!open) return;
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setOpen(false);
+      if (!openClientList) return;
+      if (clientDropRef.current && !clientDropRef.current.contains(e.target)) {
+        setOpenClientList(false);
       }
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
+  }, [openClientList]);
+
+  // wheel-scrolling even when hovering the header/button area
+  useEffect(() => {
+    const el = clientDropRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!openClientList) return;
+      if (!listRef.current) return;
+      // prevent page scroll and forward to list
+      e.preventDefault();
+      listRef.current.scrollTop += e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [openClientList]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return galleries;
+    if (!search.trim()) return bookings;
     const q = search.trim().toLowerCase();
-    return galleries.filter(
-      (g) =>
-        g.name?.toLowerCase().includes(q) ||
-        g.tag?.toLowerCase().includes(q) ||
-        g.slug?.toLowerCase().includes(q)
-    );
-  }, [search, galleries]);
+    return bookings.filter((b) => {
+      return (
+        b.reference.toLowerCase().includes(q) ||
+        b.name.toLowerCase().includes(q) ||
+        b.email.toLowerCase().includes(q) ||
+        b.phone.toLowerCase().includes(q) ||
+        b.date.toLowerCase().includes(q) ||
+        b.time.toLowerCase().includes(q) ||
+        b.status.toLowerCase().includes(q)
+      );
+    });
+  }, [search, bookings]);
 
-  // ---------- file pick/drop ----------
+  // keep highlighted within bounds when list changes
+  useEffect(() => {
+    if (highlighted >= filtered.length) setHighlighted(Math.max(0, filtered.length - 1));
+  }, [filtered, highlighted]);
+
+  // ensure active option is visible
+  useEffect(() => {
+    if (!openClientList || !listRef.current) return;
+    const list = listRef.current;
+    const active = list.querySelector('[data-active="true"]');
+    if (active) active.scrollIntoView({ block: "nearest" });
+  }, [highlighted, openClientList]);
+
+  /* file pick/drop */
   const acceptFiles = (list) => {
     const ok = [];
     const bad = [];
@@ -135,7 +212,6 @@ export default function AdminUpload() {
     setRejected((prev) => [...prev, ...bad]);
     setFiles((prev) => [...prev, ...ok]);
   };
-
   const onPick = (e) => acceptFiles(Array.from(e.target.files || []));
   const onDrop = (e) => {
     e.preventDefault();
@@ -143,96 +219,43 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  // ---------- helpers ----------
-  function chunk(arr, size) {
-    const out = [];
-    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-    return out;
-  }
-  function formatBytes(n = 0) {
-    if (n < 1024) return `${n} B`;
-    const kb = n / 1024;
-    if (kb < 1024) return `${kb.toFixed(1)} KB`;
-    const mb = kb / 1024;
-    if (mb < 1024) return `${mb.toFixed(1)} MB`;
-    const gb = mb / 1024;
-    return `${gb.toFixed(1)} GB`;
-  }
-  function extOf(name = "") {
-    const p = name.split(".").pop();
-    return (p || "jpg").toLowerCase();
-  }
-  async function getImageDims(file) {
-    return new Promise((resolve) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        resolve({ width: img.width, height: img.height });
-        URL.revokeObjectURL(url);
-      };
-      img.onerror = () => {
-        resolve({ width: 0, height: 0 });
-        URL.revokeObjectURL(url);
-      };
-      img.src = url;
-    });
-  }
-
-  // ---------- storage preflight ----------
+  /* storage preflight */
   async function storagePreflight() {
-    try {
-      const blob = new Blob(["ok"], { type: "text/plain" });
-      const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
-      const task = uploadBytesResumable(testRef, blob, {
-        contentType: "text/plain",
-        cacheControl: "public,max-age=60",
-      });
-      await new Promise((resolve, reject) => {
-        task.on("state_changed", null, reject, resolve);
-      });
-      await getDownloadURL(testRef);
-      return true;
-    } catch (e) {
-      let hint = "";
-      const msg = String(e?.message || e);
-      if (msg.includes("appCheck")) {
-        hint =
-          "App Check is enforced. Make sure initializeAppCheck(...) with your reCAPTCHA v3 SITE KEY is in src/lib/firebase.js, and the key allows your domain.";
-      } else if (msg.includes("unauthorized")) {
-        hint =
-          "Storage rules blocked the write. Confirm you're signed in as the admin email and rules allow admin writes.";
-      } else if (msg.includes("Failed to fetch") || msg.includes("preflight")) {
-        hint =
-          "Browser preflight failed. Ensure your domain is in Firebase Auth Authorized domains and set bucket CORS only if needed.";
-      }
-      throw new Error(hint ? `${msg}\n\n${hint}` : msg);
-    }
+    const blob = new Blob(["ok"], { type: "text/plain" });
+    const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
+    const task = uploadBytesResumable(testRef, blob, {
+      contentType: "text/plain",
+      cacheControl: "public,max-age=60",
+    });
+    await new Promise((resolve, reject) => {
+      task.on("state_changed", null, reject, resolve);
+    });
+    await getDownloadURL(testRef);
   }
 
-  // ---------- Firestore helpers ----------
-  async function getOrCreateGalleryByTag(tag, displayNameIfNew) {
-    const qy = query(collection(db, "galleries"), where("tag", "==", tag), limit(1));
+  /* portfolio doc (optional) */
+  async function getOrCreatePortfolioDoc() {
+    const qy = query(collection(db, "galleries"), where("tag", "==", "portfolio"), limit(1));
     const snap = await getDocs(qy);
     if (!snap.empty) return snap.docs[0].ref;
 
-    const name = displayNameIfNew || (tag === "portfolio" ? "Portfolio" : tag);
-    const ref = await addDoc(collection(db, "galleries"), {
-      name,
-      slug: toSlug(name),
-      tag,
-      codeHash: randomHash(),
+    const newRef = doc(collection(db, "galleries"));
+    await setDoc(newRef, {
+      name: "Portfolio",
+      slug: toSlug("Portfolio"),
+      tag: "portfolio",
+      codeHash: randomId(16),
       createdAt: serverTimestamp(),
     });
-    return ref;
+    return newRef;
   }
 
-  // ---------- upload single file with progress ----------
-  function uploadOne({ item, tag, galRef }) {
+  /* upload one */
+  function uploadOne({ item, basePath, imagesCollectionPath, extraDocFields }) {
     return new Promise(async (resolve) => {
       const file = item.file;
-      const base = tag === "portfolio" ? "portfolio" : `clients/${tag}`;
-      const id = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-      const path = `${base}/${id}.${extOf(file.name)}`;
+      const id = `${Date.now()}_${randomId(6)}`;
+      const path = `${basePath}/${id}.${extOf(file.name)}`;
 
       const objRef = sRef(storage, path);
       const task = uploadBytesResumable(objRef, file, {
@@ -240,7 +263,6 @@ export default function AdminUpload() {
         cacheControl: "public,max-age=31536000,immutable",
       });
 
-      // mark as uploading + store task
       setQueue((q) =>
         q.map((qit) =>
           qit.id === item.id ? { ...qit, status: "uploading", task } : qit
@@ -279,20 +301,22 @@ export default function AdminUpload() {
             const url = await getDownloadURL(task.snapshot.ref);
             const { width, height } = await getImageDims(file);
 
-            const imagesCol = collection(db, `galleries/${galRef.id}/images`);
-            const docId = path.replace(/\//g, "__");
-            await setDoc(doc(imagesCol, docId), {
-              public_id: path,
-              format: extOf(file.name),
-              bytes: file.size,
-              width,
-              height,
-              secure_url: url,
-              original_filename: file.name,
-              version: 1,
-              tag,
-              createdAt: serverTimestamp(),
-            });
+            if (imagesCollectionPath) {
+              const imagesCol = collection(db, imagesCollectionPath);
+              const docId = path.replace(/\//g, "__");
+              await setDoc(doc(imagesCol, docId), {
+                public_id: path,
+                format: extOf(file.name),
+                bytes: file.size,
+                width,
+                height,
+                secure_url: url,
+                original_filename: file.name,
+                version: 1,
+                createdAt: serverTimestamp(),
+                ...extraDocFields,
+              });
+            }
 
             setQueue((q) =>
               q.map((qit) =>
@@ -317,23 +341,12 @@ export default function AdminUpload() {
     });
   }
 
-  // ---------- submit (with progress) ----------
+  /* submit */
   async function onUpload() {
-    if (notAdmin) {
-      alert("You must be signed in as the admin to upload.");
-      return;
-    }
-    if (files.length === 0) {
-      alert("Pick some image files first.");
-      return;
-    }
-    const tag = mode === "portfolio" ? "portfolio" : selected?.tag;
-    if (mode === "gallery" && !selected) {
-      alert("Choose a gallery to upload to.");
-      return;
-    }
+    if (notAdmin) return alert("You must be signed in as the admin to upload.");
+    if (files.length === 0) return alert("Pick some image files first.");
+    if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
-    // Preflight: fail fast
     try {
       await storagePreflight();
     } catch (e) {
@@ -342,41 +355,50 @@ export default function AdminUpload() {
       return;
     }
 
+    const items = files.map((f) => ({
+      id: `${Date.now()}_${randomId(7)}`,
+      file: f,
+      status: "queued",
+      progress: 0,
+      bytesTransferred: 0,
+      totalBytes: f.size || 0,
+      url: "",
+      error: "",
+      task: null,
+    }));
+    setQueue(items);
     setBusy(true);
-    setQueue(
-      files.map((f) => ({
-        id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        file: f,
-        status: "queued",
-        progress: 0,
-        bytesTransferred: 0,
-        totalBytes: f.size || 0,
-        url: "",
-        error: "",
-        task: null,
-      }))
-    );
 
     try {
-      let galRef;
-      if (mode === "portfolio") {
-        galRef = await getOrCreateGalleryByTag("portfolio", "Portfolio");
-      } else if (selected?.id) {
-        galRef = doc(db, "galleries", selected.id);
+      let basePath = "";
+      let imagesCollectionPath = "";
+      let extraDocFields = {};
+
+      if (mode === "client") {
+        basePath = `clients/${selectedBooking.reference}`;
+        imagesCollectionPath = `bookings/${selectedBooking.id}/images`;
+        extraDocFields = { ref: selectedBooking.reference };
       } else {
-        galRef = await getOrCreateGalleryByTag(tag, selected?.name);
+        basePath = `portfolio`;
+        const galRef = await getOrCreatePortfolioDoc();
+        imagesCollectionPath = `galleries/${galRef.id}/images`;
+        extraDocFields = { tag: "portfolio" };
       }
 
-      // Upload in small parallel batches to avoid hammering the network
-      const items = (prev => prev)(queue.length ? queue : files.map((f) => ({ id: `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`, file: f })));
       const batches = chunk(items, CONCURRENCY);
-
       let successCount = 0;
       let failCount = 0;
 
       for (const group of batches) {
         const res = await Promise.all(
-          group.map((it) => uploadOne({ item: it, tag, galRef }))
+          group.map((it) =>
+            uploadOne({
+              item: it,
+              basePath,
+              imagesCollectionPath,
+              extraDocFields,
+            })
+          )
         );
         successCount += res.filter((r) => r.ok).length;
         failCount += res.filter((r) => !r.ok).length;
@@ -398,14 +420,12 @@ export default function AdminUpload() {
     }
   }
 
-  // ---------- overall progress ----------
+  /* overall progress */
   const overall = useMemo(() => {
     const totals = queue.reduce(
       (acc, it) => {
         const tb = it.totalBytes || it.file?.size || 0;
-        const bt =
-          it.bytesTransferred ||
-          (it.status === "done" ? tb : 0);
+        const bt = it.bytesTransferred || (it.status === "done" ? tb : 0);
         return { total: acc.total + tb, done: acc.done + bt };
       },
       { total: 0, done: 0 }
@@ -413,15 +433,15 @@ export default function AdminUpload() {
     return totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
   }, [queue]);
 
-  // ---------- totals ----------
   const totalSize = useMemo(
     () => files.reduce((s, f) => s + (f.size || 0), 0),
     [files]
   );
 
+  /* UI */
   return (
     <section className="p-4 md:p-5">
-      {/* Status banners */}
+      {/* status */}
       <div className="mb-3 grid grid-cols-1 gap-2">
         <div
           className={cls(
@@ -438,11 +458,21 @@ export default function AdminUpload() {
         </div>
       </div>
 
-      {/* Destination selector */}
+      {/* destination + client picker */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:items-end">
         <div className="lg:col-span-3">
           <label className="block text-sm font-medium text-charcoal/80 mb-1">Destination</label>
           <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="dest"
+                value="client"
+                checked={mode === "client"}
+                onChange={() => setMode("client")}
+              />
+              Client (by reference)
+            </label>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="radio"
@@ -453,86 +483,142 @@ export default function AdminUpload() {
               />
               Portfolio
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="dest"
-                value="gallery"
-                checked={mode === "gallery"}
-                onChange={() => setMode("gallery")}
-              />
-              Client Gallery
-            </label>
           </div>
           <p className="mt-1 text-xs text-charcoal/50">
-            Upload to your public portfolio or to a specific client gallery.
+            Client uploads appear in their portal (reference code).
           </p>
         </div>
 
-        {/* Searchable gallery dropdown */}
-        <div className="lg:col-span-5" ref={dropdownRef}>
+        {/* client selector with wheel-scroll + keyboard nav */}
+        <div className="lg:col-span-5" ref={clientDropRef}>
           <label className="block text-sm font-medium text-charcoal/80 mb-1">
-            {mode === "portfolio" ? "Gallery (disabled in Portfolio mode)" : "Choose a gallery"}
+            {mode === "client" ? "Choose client by reference" : "Client (disabled in Portfolio mode)"}
           </label>
+
           <div className="relative">
             <button
               type="button"
-              disabled={mode !== "gallery" || loadingGals}
-              onClick={() => setOpen((o) => !o)}
+              disabled={mode !== "client" || loadingBookings}
+              onClick={() => {
+                setOpenClientList((o) => !o);
+                setHighlighted(0);
+              }}
               className={cls(
                 "w-full rounded-2xl border border-rose/30 bg-white px-4 py-2.5 text-left",
-                mode !== "gallery" || loadingGals ? "text-charcoal/40" : "text-charcoal"
+                mode !== "client" || loadingBookings ? "text-charcoal/40" : "text-charcoal"
               )}
+              title={mode !== "client" ? "Switch to Client destination to choose" : ""}
             >
-              {loadingGals
-                ? "Loading galleries…"
-                : mode !== "gallery"
+              {loadingBookings
+                ? "Loading clients…"
+                : mode !== "client"
                 ? "Portfolio selected"
-                : selected
-                ? `${selected.name}  •  ${selected.tag}`
-                : "Select a gallery"}
+                : selectedBooking
+                ? `${selectedBooking.reference} • ${selectedBooking.name || "Client"}`
+                : "Select a client"}
             </button>
 
-            {open && mode === "gallery" && (
+            {openClientList && mode === "client" && (
               <div className="absolute z-10 mt-2 w-full rounded-2xl border border-rose/30 bg-white shadow-lg">
                 <div className="p-2">
                   <input
                     autoFocus
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by name or tag…"
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setHighlighted(0);
+                    }}
+                    onKeyDown={(e) => {
+                      if (!filtered.length) return;
+                      const last = filtered.length - 1;
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setHighlighted((i) => (i >= last ? last : i + 1));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setHighlighted((i) => (i <= 0 ? 0 : i - 1));
+                      } else if (e.key === "PageDown") {
+                        e.preventDefault();
+                        setHighlighted((i) => Math.min(i + 5, last));
+                      } else if (e.key === "PageUp") {
+                        e.preventDefault();
+                        setHighlighted((i) => Math.max(i - 5, 0));
+                      } else if (e.key === "Home") {
+                        e.preventDefault();
+                        setHighlighted(0);
+                      } else if (e.key === "End") {
+                        e.preventDefault();
+                        setHighlighted(last);
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        const pick = filtered[highlighted];
+                        if (pick) {
+                          setSelectedBooking(pick);
+                          setOpenClientList(false);
+                        }
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setOpenClientList(false);
+                      }
+                    }}
+                    placeholder="Search by ref, name, email…"
                     className="w-full rounded-xl border border-rose/30 bg-white px-3 py-2 text-sm"
                   />
                 </div>
-                <div className="max-h-64 overflow-auto p-1">
+
+                {/* SCROLL WHEEL AREA */}
+                <div
+                  ref={listRef}
+                  className="max-h-80 overflow-y-auto overscroll-contain p-1"
+                >
                   {filtered.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-charcoal/60">No matches.</div>
                   ) : (
-                    filtered.map((g) => (
-                      <button
-                        key={g.id}
-                        type="button"
-                        className={cls(
-                          "w-full text-left px-3 py-2 text-sm hover:bg-ivory/70",
-                          selected?.id === g.id && "bg-ivory/70"
-                        )}
-                        onClick={() => {
-                          setSelected(g);
-                          setOpen(false);
-                        }}
-                      >
-                        <div className="font-medium">{g.name}</div>
-                        <div className="text-xs text-charcoal/60">{g.tag}</div>
-                      </button>
-                    ))
+                    filtered.map((b, i) => {
+                      const when = b.start
+                        ? b.start.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+                        : `${b.date} ${b.time}`;
+                      const isActive = i === highlighted;
+                      const statusColor =
+                        b.status === "canceled"
+                          ? "text-rose"
+                          : b.status === "confirmed"
+                          ? "text-emerald-600"
+                          : "text-slate-500";
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          data-active={isActive ? "true" : "false"}
+                          className={cls(
+                            "w-full text-left px-3 py-2 text-sm rounded-md",
+                            isActive ? "bg-ivory/90" : "hover:bg-ivory/70"
+                          )}
+                          onMouseEnter={() => setHighlighted(i)}
+                          onClick={() => {
+                            setSelectedBooking(b);
+                            setOpenClientList(false);
+                          }}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="font-medium">{b.reference}</div>
+                            <div className={cls("text-xs", statusColor)}>●</div>
+                          </div>
+                          <div className="text-xs text-charcoal/70 truncate">
+                            {b.name || "Client"} — {when}
+                          </div>
+                        </button>
+                      );
+                    })
                   )}
                 </div>
               </div>
             )}
           </div>
-          {mode === "gallery" && (
-            <p className="mt-1 text-xs text-charcoal/50">
-              Can’t find it? Create a gallery in the “Galleries” section first, then come back.
+
+          {mode === "client" && selectedBooking && (
+            <p className="mt-1 text-xs text-emerald-700">
+              Selected: {selectedBooking.name || "Client"} ({selectedBooking.reference})
             </p>
           )}
         </div>
@@ -631,22 +717,22 @@ export default function AdminUpload() {
               busy ||
               files.length === 0 ||
               notAdmin ||
-              (mode === "gallery" && !selected)
+              (mode === "client" && !selectedBooking)
             }
             className={cls(
               "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition",
               busy ||
                 files.length === 0 ||
                 notAdmin ||
-                (mode === "gallery" && !selected)
+                (mode === "client" && !selectedBooking)
                 ? "bg-blush text-charcoal/50 cursor-not-allowed"
                 : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
             )}
             title={
               notAdmin
                 ? "Sign in as the admin first"
-                : mode === "gallery" && !selected
-                ? "Choose a gallery"
+                : mode === "client" && !selectedBooking
+                ? "Choose a client"
                 : "Upload"
             }
           >
@@ -655,7 +741,7 @@ export default function AdminUpload() {
         </div>
       </div>
 
-      {/* Upload progress UI */}
+      {/* progress */}
       {queue.length > 0 && (
         <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
           <div className="mb-2 flex items-center justify-between">
@@ -698,7 +784,7 @@ export default function AdminUpload() {
                       {it.status === "queued" && "Queued"}
                     </div>
                   </div>
-                  {it.url && (
+                  {it.url ? (
                     <a
                       className="shrink-0 text-xs underline text-charcoal/70 hover:text-rose"
                       href={it.url}
@@ -707,6 +793,10 @@ export default function AdminUpload() {
                     >
                       Open
                     </a>
+                  ) : (
+                    <span className="shrink-0 text-[11px] text-charcoal/50">
+                      {it.status === "uploading" ? "…" : it.status === "error" ? "Retry later" : ""}
+                    </span>
                   )}
                 </div>
               </li>

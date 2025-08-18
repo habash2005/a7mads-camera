@@ -1,7 +1,6 @@
-// src/main.jsx
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import { createHashRouter, RouterProvider } from 'react-router-dom' // ⬅️ Hash router
+import { createHashRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
 
 import App from './App'
@@ -10,6 +9,7 @@ import Portfolio from './pages/Portfolio'
 import Booking from './pages/Booking'
 import FAQ from './pages/FAQ'
 import ClientGallery from './pages/ClientGallery'
+import ClientPortal from './pages/ClientPortal'   // ⬅️ add this
 
 // Admin / protected
 import AdminLogin from './pages/AdminLogin'
@@ -25,10 +25,13 @@ const router = createHashRouter([
       { path: 'portfolio', element: <Portfolio /> },
       { path: 'booking', element: <Booking /> },
       { path: 'faq', element: <FAQ /> },
-      { path: 'client', element: <ClientGallery /> },
 
+      // Clients
+      { path: 'portal', element: <ClientPortal /> },   // ⬅️ new client portal
+      { path: 'client', element: <ClientGallery /> },  // keep legacy gallery route (optional)
+
+      // Auth / Admin
       { path: 'admin-login', element: <AdminLogin /> },
-
       {
         path: 'admin',
         element: (
