@@ -194,7 +194,7 @@ export default function AdminUpload() {
     if (active) active.scrollIntoView({ block: "nearest" });
   }, [highlighted, openClientList]);
 
-  /* file pick/drop — seed the queue so progress bars show immediately */
+  /* file pick/drop — now seeds the queue so progress bars show immediately */
   const seedQueueForFiles = (newFiles) => {
     setQueue((prev) => {
       const prevKeys = new Set(prev.map((q) => fileKeyOf(q.file)));
@@ -224,7 +224,7 @@ export default function AdminUpload() {
     const existing = new Set(files.map(fileKeyOf));
     for (const f of list) {
       const key = fileKeyOf(f);
-      if (existing.has(key)) continue; // de-dupe
+      if (existing.has(key)) continue; // de-dupe by name/size/date
       if (!f.type?.startsWith("image/")) {
         bad.push({ name: f.name, size: f.size, reason: "Not an image" });
         continue;
@@ -238,7 +238,7 @@ export default function AdminUpload() {
     }
     if (ok.length) {
       setFiles((prev) => [...prev, ...ok]);
-      seedQueueForFiles(ok);
+      seedQueueForFiles(ok); // <-- seed queue so the UI shows progress rows now
     }
     if (bad.length) setRejected((prev) => [...prev, ...bad]);
   };
@@ -250,13 +250,11 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  /* --- preflight: write into the same folder you'll upload to --- */
-  async function storagePreflight(currentMode, refCode) {
+  /* storage preflight with hints */
+  async function storagePreflight() {
     try {
       const blob = new Blob(["ok"], { type: "text/plain" });
-      const dir =
-        currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
-      const testRef = sRef(storage, `${dir}/__preflight_${Date.now()}.txt`);
+      const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
       const task = uploadBytesResumable(testRef, blob, {
         contentType: "text/plain",
         cacheControl: "public,max-age=60",
@@ -267,17 +265,16 @@ export default function AdminUpload() {
       await getDownloadURL(testRef);
     } catch (e) {
       const msg = String(e?.message || e);
-      const m = msg.toLowerCase();
       let hint = "";
-      if (m.includes("appcheck")) {
+      if (msg.toLowerCase().includes("appcheck")) {
         hint =
-          "App Check token missing/invalid. Confirm initializeAppCheck(...) runs and your reCAPTCHA v3 site key is valid for limlim.netlify.app.";
-      } else if (m.includes("unauthorized") || m.includes("forbidden")) {
+          "App Check token missing/invalid. Ensure initializeAppCheck(...) with your reCAPTCHA v3 SITE KEY is set and the key allows your domain.";
+      } else if (msg.toLowerCase().includes("unauthorized")) {
         hint =
-          "Storage rules blocked the write. Make sure your rules allow admin writes to this path.";
-      } else if (m.includes("failed to fetch")) {
+          "Storage rules blocked the write. Confirm you’re signed in as the admin and rules allow admin writes.";
+      } else if (msg.toLowerCase().includes("failed to fetch")) {
         hint =
-          "Network/preflight blocked. Ensure limlim.netlify.app is in Firebase Auth Authorized domains.";
+          "Network/preflight blocked. Make sure your domain is in Firebase Auth Authorized domains and bucket CORS allows your origin if needed.";
       }
       throw new Error(hint ? `${msg}\n\n${hint}` : msg);
     }
@@ -285,11 +282,7 @@ export default function AdminUpload() {
 
   /* portfolio doc (optional) */
   async function getOrCreatePortfolioDoc() {
-    const qy = query(
-      collection(db, "galleries"),
-      where("tag", "==", "portfolio"),
-      limit(1)
-    );
+    const qy = query(collection(db, "galleries"), where("tag", "==", "portfolio"), limit(1));
     const snap = await getDocs(qy);
     if (!snap.empty) return snap.docs[0].ref;
 
@@ -326,9 +319,7 @@ export default function AdminUpload() {
       task.on(
         "state_changed",
         (snap) => {
-          const pct = Math.round(
-            (snap.bytesTransferred / snap.totalBytes) * 100
-          );
+          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
           setQueue((q) =>
             q.map((qit) =>
               qit.id === item.id
@@ -346,11 +337,7 @@ export default function AdminUpload() {
           setQueue((q) =>
             q.map((qit) =>
               qit.id === item.id
-                ? {
-                    ...qit,
-                    status: "error",
-                    error: String(err?.message || err),
-                  }
+                ? { ...qit, status: "error", error: String(err?.message || err) }
                 : qit
             )
           );
@@ -390,11 +377,7 @@ export default function AdminUpload() {
             setQueue((q) =>
               q.map((qit) =>
                 qit.id === item.id
-                  ? {
-                      ...qit,
-                      status: "error",
-                      error: String(err?.message || err),
-                    }
+                  ? { ...qit, status: "error", error: String(err?.message || err) }
                   : qit
               )
             );
@@ -405,16 +388,14 @@ export default function AdminUpload() {
     });
   }
 
-  /* submit — reuses the pre-seeded queue items */
+  /* submit — now reuses the pre-seeded queue items */
   async function onUpload() {
     if (notAdmin) return alert("You must be signed in as the admin to upload.");
     if (queue.length === 0) return alert("Pick some image files first.");
-    if (mode === "client" && !selectedBooking)
-      return alert("Choose a client reference first.");
+    if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
-    // ⬇️ preflight in the SAME directory you'll upload to
     try {
-      await storagePreflight(mode, selectedBooking?.reference);
+      await storagePreflight();
     } catch (e) {
       console.error("[Storage preflight]", e);
       alert(e.message || "Storage preflight failed.");
@@ -439,6 +420,7 @@ export default function AdminUpload() {
         extraDocFields = { tag: "portfolio" };
       }
 
+      // Take only items that are "queued" or previously "error" (allow retry)
       const itemsToUpload = queue.filter(
         (it) => it.status === "queued" || it.status === "error"
       );
@@ -447,12 +429,10 @@ export default function AdminUpload() {
         return;
       }
 
-      // reset errors to queued for retry
+      // Clear previous error states to queued
       setQueue((q) =>
         q.map((it) =>
-          it.status === "error"
-            ? { ...it, status: "queued", progress: 0, error: "" }
-            : it
+          it.status === "error" ? { ...it, status: "queued", progress: 0, error: "" } : it
         )
       );
 
@@ -809,7 +789,7 @@ export default function AdminUpload() {
         </div>
       </div>
 
-      {/* progress — visible as soon as files are selected (status = queued) */}
+      {/* progress — now visible as soon as files are selected (status = queued) */}
       {queue.length > 0 && (
         <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
           <div className="mb-2 flex items-center justify-between">
@@ -863,11 +843,7 @@ export default function AdminUpload() {
                     </a>
                   ) : (
                     <span className="shrink-0 text-[11px] text-charcoal/50">
-                      {it.status === "uploading"
-                        ? "…"
-                        : it.status === "error"
-                        ? "Retry later"
-                        : ""}
+                      {it.status === "uploading" ? "…" : it.status === "error" ? "Retry later" : ""}
                     </span>
                   )}
                 </div>
