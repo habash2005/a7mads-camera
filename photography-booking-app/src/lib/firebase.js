@@ -18,7 +18,7 @@ const firebaseConfig = {
     "AIzaSyCWfqdRcuoy8opgUwyWAUbc6iVmtw1wSfE",
   authDomain:
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ||
-    `${PROJECT_ID}.firebaseapp.com`,
+    `${PROJECT_ID}..firebasestorage.app`,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || PROJECT_ID,
 
   // 👇 keep exactly this; you asked to use the firebasestorage.app style
