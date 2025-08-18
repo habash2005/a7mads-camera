@@ -1,61 +1,40 @@
 // src/pages/ClientGallery.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
-// 🔽 NEW: zip + storage imports
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { getStorage, ref as sref, getBlob } from "firebase/storage";
 
-const storage = getStorage(); // uses the bucket from your firebase config
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
-async function sha256(text) {
-  const buf = new TextEncoder().encode(text);
-  const hash = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,"0")).join("");
-}
-
-// Try to keep filename; fall back to last path segment
 function fileNameFrom(img) {
   const base =
     img.original_filename ||
     (img.public_id && img.public_id.split("/").pop()) ||
-    (img.secure_url && (decodeURIComponent((img.secure_url.match(/\/o\/([^?]+)/)?.[1] || "")).split("/").pop())) ||
     "image";
-  // try extension from metadata, else from URL, else jpg
   const ext =
-    (img.format && String(img.format).toLowerCase()) ||
-    (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
-    "jpg";
+   (img.format && String(img.format).toLowerCase()) ||
+   (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
+   "jpg";
   return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
 }
-
-// Get Storage object path from our doc
-function storagePathOf(img) {
-  // Prefer an explicit field if you saved it on upload
-  if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
-  // Derive from a Firebase download URL (works with *.firebasestorage.app or googleapis)
-  // Looks for ".../o/<ENCODED_PATH>?..."
-  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
-}
-
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
-  const [gallery, setGallery] = useState(null);
-  const [images, setImages] = useState([]);
   const [err, setErr] = useState("");
 
-  const [selected, setSelected] = useState({});
-  const [zipping, setZipping] = useState(false);
-  const [zipProgress, setZipProgress] = useState(0);
+  // booking + images (new schema)
+  const [booking, setBooking] = useState(null); // { id, reference, details, ... }
+  const [images, setImages] = useState([]);
 
+  // selection + zip state
+  const [selected, setSelected] = useState({});
   const someChecked = images.some((img) => !!selected[img.public_id]);
   const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
+  const [zipping, setZipping] = useState(false);
+  const [zipProgress, setZipProgress] = useState(0);
 
   const toggleOne = (pid) => setSelected((s) => ({ ...s, [pid]: !s[pid] }));
   const toggleAll = (checked) => {
@@ -64,31 +43,45 @@ export default function ClientGallery() {
     setSelected(next);
   };
 
-  const checkCode = async () => {
+  async function checkCode() {
     setErr("");
     setLoading(true);
-    setGallery(null);
+    setBooking(null);
     setImages([]);
     setSelected({});
 
     try {
-      const snap = await getDocs(collection(db, "galleries"));
-      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const refCode = code.trim().toUpperCase(); // your references are uppercase
+      if (!refCode) {
+        setErr("Enter your access code.");
+        setLoading(false);
+        return;
+      }
 
-      const hash = await sha256(code.trim());
-      const match = rows.find((g) => g.codeHash === hash);
-      if (!match) {
+      // 🔎 Find the booking by reference
+      const qy = query(
+        collection(db, "bookings"),
+        where("reference", "==", refCode),
+        limit(1)
+      );
+      const snap = await getDocs(qy);
+      if (snap.empty) {
         setErr("Invalid access code. Double-check and try again.");
         setLoading(false);
         return;
       }
-      setGallery(match);
+      const doc = snap.docs[0];
+      const data = doc.data();
+      const bookingObj = { id: doc.id, ...data };
+      setBooking(bookingObj);
 
-      const imgsSnap = await getDocs(collection(db, `galleries/${match.id}/images`));
+      // 📸 Load the images from bookings/{id}/images
+      const imgsSnap = await getDocs(collection(db, `bookings/${doc.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
+      // default: pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -98,29 +91,28 @@ export default function ClientGallery() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const reset = () => {
+  function reset() {
     setCode("");
-    setGallery(null);
+    setBooking(null);
     setImages([]);
     setSelected({});
     setZipping(false);
     setZipProgress(0);
     setErr("");
-  };
+  }
 
-  // 🔽 NEW: pure client-side zipping using Firebase Storage + JSZip
+  // ⚡ Zip using the signed secure_url you stored at upload time (no Storage SDK reads needed)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
       return;
     }
 
-    // Soft safety: very large batches can crash the browser
-    const TOTAL_LIMIT_MB = 500; // adjust if you like
+    const TOTAL_LIMIT_MB = 500;
     let approx = 0;
-    for (const f of files) approx += (f.size || 5_000_000); // rough guess if size unknown
+    for (const f of files) approx += (f.bytes || 5_000_000);
     if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
@@ -131,21 +123,20 @@ export default function ClientGallery() {
     try {
       const zip = new JSZip();
 
-      // Fetch each blob directly from Storage (no CORS issues)
       for (let i = 0; i < files.length; i++) {
         const img = files[i];
-        const path = storagePathOf(img);
-        if (!path) {
-          console.warn("Cannot derive storage path for", img);
-          continue;
-        }
-        const blob = await getBlob(sref(storage, path)); // Firebase SDK call
-        zip.file(fileNameFrom(img), blob, { compression: "STORE" }); // JPEG/PNG already compressed
+        const url = img.secure_url; // saved from upload
+        if (!url) continue;
 
-        setZipProgress(Math.round(((i + 1) / files.length) * 80)); // 0–80% during fetch loop
+        // fetch as blob via signed URL (works with *.firebasestorage.app or googleapis)
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+        const blob = await res.blob();
+
+        zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+        setZipProgress(Math.round(((i + 1) / files.length) * 80)); // 0–80% while fetching
       }
 
-      // Generate zip blob
       const zipBlob = await zip.generateAsync(
         { type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } },
         (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2)) // 80–100% while packaging
@@ -170,15 +161,21 @@ export default function ClientGallery() {
     await zipAndDownload(images, "all-images.zip");
   }
 
+  const headerTitle = useMemo(() => {
+    if (!booking) return "Client Gallery";
+    const name = booking?.details?.name || "Client";
+    return `${name} — ${booking.reference}`;
+  }, [booking]);
+
   return (
     <section className="w-full py-16 md:py-24 bg-ivory">
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
-          Client Gallery
+          {headerTitle}
         </h2>
 
         {/* Step 1: Access form */}
-        {!gallery && (
+        {!booking && (
           <div className="mt-6 max-w-md space-y-3">
             <p className="text-charcoal/70">Enter your access code to view your photos.</p>
             <input
@@ -207,14 +204,16 @@ export default function ClientGallery() {
           </div>
         )}
 
-        {/* Step 2: Gallery grid + download controls */}
-        {gallery && (
+        {/* Step 2: Grid + actions */}
+        {booking && (
           <div className="mt-8">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="font-serif text-xl text-charcoal">{gallery.name}</h3>
+                <h3 className="font-serif text-xl text-charcoal">
+                  {booking?.details?.name || "Client"} ({booking.reference})
+                </h3>
                 <div className="text-xs text-charcoal/60">
-                  Tag: <code>{gallery.tag}</code>
+                  {booking.date} {booking.time} • {booking.package?.name}
                 </div>
               </div>
 
@@ -264,7 +263,7 @@ export default function ClientGallery() {
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {
-                  const previewSrc = img.secure_url; // keep your existing preview URL
+                  const previewSrc = img.secure_url;
                   return (
                     <figure
                       key={img.public_id}
