@@ -86,7 +86,7 @@ export default function AdminUpload() {
   const [selectedBooking, setSelectedBooking] = useState(null);
 
   // keyboard highlight index
-  const [highlighted, setHighlighted] = useState(0);
+  the [highlighted, setHighlighted] = useState(0);
 
   // files + progress
   const [files, setFiles] = useState([]);
@@ -238,7 +238,7 @@ export default function AdminUpload() {
     }
     if (ok.length) {
       setFiles((prev) => [...prev, ...ok]);
-      seedQueueForFiles(ok); // <-- seed queue so the UI shows progress rows now
+      seedQueueForFiles(ok); // seed queue so the UI shows progress rows now
     }
     if (bad.length) setRejected((prev) => [...prev, ...bad]);
   };
@@ -250,15 +250,21 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  /* storage preflight with hints */
-  async function storagePreflight() {
+  /* --- replace storagePreflight() --- */
+  async function storagePreflight(currentMode, refCode) {
     try {
       const blob = new Blob(["ok"], { type: "text/plain" });
-      const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
+
+      // Use the SAME directory your rules allow for real uploads:
+      const dir =
+        currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+
+      const testRef = sRef(storage, `${dir}/__preflight_${Date.now()}.txt`);
       const task = uploadBytesResumable(testRef, blob, {
         contentType: "text/plain",
         cacheControl: "public,max-age=60",
       });
+
       await new Promise((resolve, reject) => {
         task.on("state_changed", null, reject, resolve);
       });
@@ -266,15 +272,16 @@ export default function AdminUpload() {
     } catch (e) {
       const msg = String(e?.message || e);
       let hint = "";
-      if (msg.toLowerCase().includes("appcheck")) {
+      const m = msg.toLowerCase();
+      if (m.includes("appcheck")) {
         hint =
-          "App Check token missing/invalid. Ensure initializeAppCheck(...) with your reCAPTCHA v3 SITE KEY is set and the key allows your domain.";
-      } else if (msg.toLowerCase().includes("unauthorized")) {
+          "App Check token missing/invalid. Confirm initializeAppCheck(...) runs and your reCAPTCHA v3 site key is valid for limlim.netlify.app.";
+      } else if (m.includes("unauthorized") || m.includes("forbidden")) {
         hint =
-          "Storage rules blocked the write. Confirm you’re signed in as the admin and rules allow admin writes.";
-      } else if (msg.toLowerCase().includes("failed to fetch")) {
+          "Storage rules blocked the write. Make sure your rules allow writes to this path for the admin user.";
+      } else if (m.includes("failed to fetch")) {
         hint =
-          "Network/preflight blocked. Make sure your domain is in Firebase Auth Authorized domains and bucket CORS allows your origin if needed.";
+          "Network/preflight blocked. Ensure limlim.netlify.app is in Firebase Auth 'Authorized domains'.";
       }
       throw new Error(hint ? `${msg}\n\n${hint}` : msg);
     }
@@ -395,7 +402,7 @@ export default function AdminUpload() {
     if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
     try {
-      await storagePreflight();
+      await storagePreflight(mode, selectedBooking?.reference);
     } catch (e) {
       console.error("[Storage preflight]", e);
       alert(e.message || "Storage preflight failed.");
