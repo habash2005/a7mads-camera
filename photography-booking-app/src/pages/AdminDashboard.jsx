@@ -11,12 +11,13 @@ import {
   limit,
   doc,
   updateDoc,
+  deleteDoc,            // ⬅️ NEW
   serverTimestamp,
 } from "firebase/firestore";
 
 // ✅ STATIC lazy imports so Vite can bundle them:
 const AdminUpload       = React.lazy(() => import("./AdminUpload"));
-// const AdminGallery    = React.lazy(() => import("./AdminGallery")); // ⬅️ removed from UI for now
+// const AdminGallery    = React.lazy(() => import("./AdminGallery")); // hidden for now
 const AdminBookings     = React.lazy(() => import("./AdminBookings")); // (optional page)
 const AdminMediaManager = React.lazy(() => import("./AdminMediaManager"));
 
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
     }
   }
 
-  // 🔻 Cancel a booking
+  // 🔻 Cancel a booking (admin)
   async function cancelBooking(id) {
     const ok = window.confirm("Cancel this appointment? This cannot be undone.");
     if (!ok) return;
@@ -87,13 +88,32 @@ export default function AdminDashboard() {
         status: "canceled",
         canceledAt: serverTimestamp(),
       });
-      // Refresh upcoming list
       setUpcoming((p) => ({ ...p, loading: true }));
       await refreshUpcoming(setUpcoming);
     } catch (e) {
       console.error("Cancel failed:", e);
       alert("Could not cancel. Check Firestore rules/connection.");
       setUpcoming((p) => ({ ...p, loading: false }));
+    }
+  }
+
+  // ❌ Permanently delete a canceled booking (admin)
+  async function deleteBooking(id, status) {
+    if ((status || "").toLowerCase() !== "canceled") {
+      alert("You can only delete bookings that are already canceled.");
+      return;
+    }
+    const ok = window.confirm("Permanently delete this canceled booking?");
+    if (!ok) return;
+    try {
+      await deleteDoc(doc(db, "bookings", id));
+      setUpcoming((p) => ({
+        ...p,
+        rows: p.rows.filter((r) => r.id !== id),
+      }));
+    } catch (e) {
+      console.error("Delete failed:", e);
+      alert("Could not delete. Check Firestore rules/connection.");
     }
   }
 
@@ -134,7 +154,6 @@ export default function AdminDashboard() {
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           <Card title="Quick Actions" className="lg:col-span-12">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {/* Removed "New Gallery" */}
               <Action label="Upload Photos" onClick={() => jumpTo("Upload")} />
               <Action label="View Upcoming" onClick={() => jumpTo("Upcoming Bookings")} />
               <Action label="Media Manager" onClick={() => jumpTo("Media Manager")} />
@@ -149,10 +168,10 @@ export default function AdminDashboard() {
 
         {/* Main Grid */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Upload */}
-          <Card title="Upload" className="lg:col-span-6 xl:col-span-7">
+          {/* Upload — full width */}
+          <Card title="Upload" className="lg:col-span-12">
             <p className="text-sm text-charcoal/70 mb-4">
-              Upload to <span className="font-semibold">Portfolio</span> or a selected <span className="font-semibold">Client (by reference)</span>.
+              Upload to <span className="font-semibold">Portfolio</span> or attach to a <span className="font-semibold">Client (by reference)</span>.
             </p>
             <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
@@ -161,8 +180,8 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          {/* Upcoming Bookings */}
-          <Card title="Upcoming Bookings" className="lg:col-span-6 xl:col-span-5">
+          {/* Upcoming Bookings — moved UNDER uploads, full width */}
+          <Card title="Upcoming Bookings" className="lg:col-span-12">
             {upcoming.loading ? (
               <TableSkeleton rows={4} />
             ) : upcoming.error ? (
@@ -180,7 +199,7 @@ export default function AdminDashboard() {
                           <Th>Client</Th>
                           <Th>Package</Th>
                           <Th>Ref</Th>
-                          <Th className="w-36">Actions</Th>
+                          <Th className="w-40">Actions</Th>
                         </tr>
                       </thead>
                       <tbody>
@@ -190,7 +209,9 @@ export default function AdminDashboard() {
                             ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
                             : `${b.date} ${b.time}`;
                           const isPast = dt ? dt.getTime() < Date.now() : false;
-                          const isCanceled = (b.status || "").toLowerCase() === "canceled";
+                          const status = (b.status || "").toLowerCase();
+                          const isCanceled = status === "canceled";
+
                           return (
                             <tr key={b.id} className="border-t border-slate-100">
                               <Td>
@@ -236,7 +257,16 @@ export default function AdminDashboard() {
                               <Td className="font-mono">{b.reference}</Td>
                               <Td>
                                 {isCanceled ? (
-                                  <span className="text-rose font-semibold">Canceled</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-rose font-semibold">Canceled</span>
+                                    <button
+                                      className="rounded-full px-2 py-1 text-xs font-semibold border border-rose/40 text-charcoal hover:bg-rose hover:text-ivory transition-all"
+                                      title="Delete canceled booking"
+                                      onClick={() => deleteBooking(b.id, b.status)}
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
                                 ) : (
                                   <button
                                     className="rounded-full px-3 py-2 text-xs font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all"
@@ -259,7 +289,7 @@ export default function AdminDashboard() {
             )}
           </Card>
 
-          {/* Media Manager (kept) */}
+          {/* Media Manager — full width */}
           <Card title="Media Manager" className="lg:col-span-12">
             <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
@@ -268,7 +298,7 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          {/* (Galleries section removed from UI) */}
+          {/* (Galleries section still hidden from UI) */}
 
           {/* Notes */}
           <Card title="Notes" className="lg:col-span-12">
