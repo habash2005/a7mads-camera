@@ -1,4 +1,3 @@
-// src/lib/api.js
 import {
   collection,
   getDocs,
@@ -50,33 +49,41 @@ function parseDurationMinutes(pkg) {
   return s.includes("hour") ? n * 60 : n;
 }
 
-/** --- SMS via IFTTT (fire-and-forget) --- */
-async function fireSmsNotification(booking) {
+/** Call Netlify function to send emails (non-blocking) */
+async function fireConfirmationEmail(bookingPayload) {
   try {
-    // Call your Netlify function which holds the secret IFTTT URL
-    await fetch("/.netlify/functions/sms-booking", {
+    await fetch("/.netlify/functions/send-confirmation", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ booking }),
+      body: JSON.stringify({ booking: bookingPayload }),
     });
   } catch {
-    // Don't block the UI on SMS failures
+    // don't block UI on email failures; check Netlify logs if needed
   }
 }
 
 /** --- Public API --- */
+
+/**
+ * Check if a slot is free with a safety buffer.
+ * NOTE: This checks for conflicting *starts* within buffer window.
+ * Pass the selected package so we can validate end time vs hours.
+ */
 export async function checkAvailability({ date, time, pkg }) {
   try {
     if (!date || !time) return { available: false, reason: "Missing date/time" };
 
+    // 30-min grid only
     if (!isThirtyMinuteIncrement(time)) {
       return { available: false, reason: "Please choose a :00 or :30 time." };
     }
 
+    // start within business hours
     if (!isWithinBusinessHours(time)) {
       return { available: false, reason: "Outside hours (09:30–21:30)" };
     }
 
+    // end within business hours (derived from package duration)
     const start = toLocalDate(date, time);
     const durationMin = parseDurationMinutes(pkg);
     const end = addMinutes(start, durationMin);
@@ -85,6 +92,7 @@ export async function checkAvailability({ date, time, pkg }) {
       return { available: false, reason: "Outside hours (09:30–21:30)" };
     }
 
+    // buffer around requested start
     const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
     const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
 
@@ -106,14 +114,16 @@ export async function checkAvailability({ date, time, pkg }) {
 }
 
 /**
- * Submit a booking that MATCHES your Firestore rules exactly:
- * Top-level keys ONLY: reference, status, package, date, time, startAt, details, createdAt
+ * Submit a booking that matches Firestore rules (top-level keys are fixed)
+ * and includes optional creative-brief fields inside `details`.
  */
 export async function submitBooking({ pkg, date, time, details }) {
   try {
+    // Availability + hours validation
     const avail = await checkAvailability({ date, time, pkg });
     if (!avail.available) return { ok: false, error: avail.reason || "Not available" };
 
+    // Validate required shapes
     if (!pkg || typeof pkg.id !== "string" || typeof pkg.name !== "string" ||
         typeof pkg.price !== "number" || typeof pkg.duration !== "string") {
       return { ok: false, error: "Invalid package format" };
@@ -129,6 +139,7 @@ export async function submitBooking({ pkg, date, time, details }) {
     const newDocRef = doc(bookingsCol);
 
     await runTransaction(db, async (tx) => {
+      // re-check conflict inside transaction
       const windowStart = new Date(start.getTime() - BUFFER_BEFORE_MIN * 60 * 1000);
       const windowEnd   = new Date(start.getTime() + BUFFER_AFTER_MIN  * 60 * 1000);
       const qy = query(
@@ -140,6 +151,19 @@ export async function submitBooking({ pkg, date, time, details }) {
       const snap = await getDocs(qy);
       if (!snap.empty) throw new Error("Conflicts with another session");
 
+      // Build details with optional creative-brief fields
+      const fullDetails = {
+        name: details.name,
+        email: details.email,
+        phone: details.phone,
+        location: details.location,
+      };
+      // Attach optional fields if present (rules allow extra keys inside `details`)
+      if (details.shootFor) fullDetails.shootFor = String(details.shootFor);
+      if (details.style) fullDetails.style = String(details.style);
+      if (details.locationNotes) fullDetails.locationNotes = String(details.locationNotes);
+      if (details.notes) fullDetails.notes = String(details.notes);
+
       tx.set(newDocRef, {
         reference,
         status: "pending",
@@ -149,21 +173,16 @@ export async function submitBooking({ pkg, date, time, details }) {
           price: pkg.price,
           duration: pkg.duration,
         },
-        date,
-        time,
+        date,                     // "YYYY-MM-DD"
+        time,                     // "HH:mm"
         startAt: Timestamp.fromDate(start),
-        details: {
-          name: details.name,
-          email: details.email,
-          phone: details.phone,
-          location: details.location,
-        },
+        details: fullDetails,
         createdAt: serverTimestamp(),
       });
     });
 
-    // SMS notify (non-blocking)
-    fireSmsNotification({
+    // Fire-and-forget email
+    fireConfirmationEmail({
       id: newDocRef.id,
       reference,
       status: "pending",

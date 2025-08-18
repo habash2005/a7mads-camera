@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
 import {
-  collection, getDocs, orderBy, query, updateDoc, doc, where
+  collection, getDocs, orderBy, query, updateDoc, doc
 } from "firebase/firestore";
 
+// Support both spellings but prefer "canceled"
 const statusClasses = {
   pending: "bg-yellow-100 text-yellow-800",
   confirmed: "bg-green-100 text-green-800",
+  canceled: "bg-red-100 text-red-800",
   cancelled: "bg-red-100 text-red-800",
   done: "bg-slate-200 text-slate-800",
 };
@@ -22,7 +24,6 @@ export default function AdminBookings() {
     (async () => {
       try {
         setLoading(true);
-        // pull all bookings; you can add server-side filtering later
         const qy = query(collection(db, "bookings"), orderBy("startAt", "asc"));
         const snap = await getDocs(qy);
         const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -40,15 +41,17 @@ export default function AdminBookings() {
   const filtered = useMemo(() => {
     let rows = bookings.slice();
     if (filter === "upcoming") rows = rows.filter(b => b.startAt?.toMillis() >= now);
-    if (filter === "pending") rows = rows.filter(b => b.status === "pending");
-    if (filter === "confirmed") rows = rows.filter(b => b.status === "confirmed");
+    if (filter === "pending") rows = rows.filter(b => (b.status || "").toLowerCase() === "pending");
+    if (filter === "confirmed") rows = rows.filter(b => (b.status || "").toLowerCase() === "confirmed");
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       rows = rows.filter(b =>
         (b.details?.name || "").toLowerCase().includes(q) ||
         (b.details?.email || "").toLowerCase().includes(q) ||
         (b.package?.name || "").toLowerCase().includes(q) ||
-        (b.reference || "").toLowerCase().includes(q)
+        (b.reference || "").toLowerCase().includes(q) ||
+        (b.details?.shootFor || "").toLowerCase().includes(q) ||
+        (b.details?.style || "").toLowerCase().includes(q)
       );
     }
     return rows;
@@ -111,6 +114,7 @@ export default function AdminBookings() {
               ) : filtered.map(b => {
                 const dt = b.startAt?.toDate?.() || null;
                 const when = dt ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : `${b.date} ${b.time}`;
+                const statusKey = (b.status || "").toLowerCase();
                 return (
                   <tr key={b.id} className="border-t border-slate-100">
                     <td className="px-4 py-3">{when}</td>
@@ -118,6 +122,28 @@ export default function AdminBookings() {
                       <div className="font-medium">{b.details?.name}</div>
                       <div className="text-slate-500">{b.details?.email}</div>
                       <div className="text-slate-500">{b.details?.phone}</div>
+
+                      {/* NEW: creative brief */}
+                      {b.details?.shootFor && (
+                        <div className="text-xs text-slate-600 mt-1">
+                          <span className="font-medium">Shoot:</span> {b.details.shootFor}
+                        </div>
+                      )}
+                      {b.details?.style && (
+                        <div className="text-xs text-slate-600">
+                          <span className="font-medium">Style:</span> {b.details.style}
+                        </div>
+                      )}
+                      {b.details?.locationNotes && (
+                        <div className="text-xs text-slate-600">
+                          <span className="font-medium">Loc:</span> {b.details.locationNotes}
+                        </div>
+                      )}
+                      {b.details?.notes && (
+                        <div className="text-xs text-slate-600">
+                          <span className="font-medium">Notes:</span> {b.details.notes}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium">{b.package?.name}</div>
@@ -126,14 +152,14 @@ export default function AdminBookings() {
                     </td>
                     <td className="px-4 py-3 font-mono">{b.reference}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs ${statusClasses[b.status] || "bg-slate-100 text-slate-800"}`}>
-                        {b.status}
+                      <span className={`px-2 py-1 rounded-full text-xs ${statusClasses[statusKey] || "bg-slate-100 text-slate-800"}`}>
+                        {statusKey}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button onClick={()=>setStatus(b.id, "confirmed")} className="px-3 py-1 rounded-full bg-green-600 text-white hover:bg-green-700">Confirm</button>
-                        <button onClick={()=>setStatus(b.id, "cancelled")} className="px-3 py-1 rounded-full bg-red-600 text-white hover:bg-red-700">Cancel</button>
+                        <button onClick={()=>setStatus(b.id, "canceled")} className="px-3 py-1 rounded-full bg-red-600 text-white hover:bg-red-700">Cancel</button>
                         <button onClick={()=>setStatus(b.id, "done")} className="px-3 py-1 rounded-full bg-slate-800 text-white hover:bg-slate-900">Done</button>
                       </div>
                     </td>

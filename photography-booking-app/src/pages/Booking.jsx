@@ -1,4 +1,3 @@
-// src/pages/Booking.jsx
 import React, { useState } from "react";
 import Stepper from "../components/Stepper";
 import PackageCard from "../components/PackageCard";
@@ -40,7 +39,19 @@ export default function Booking() {
   const [checking, setChecking] = useState(false);
   const [availability, setAvailability] = useState(null);
   const [err, setErr] = useState("");
-  const [details, setDetails] = useState({ name: "", email: "", phone: "", location: "Studio" });
+
+  // NEW: expanded details/brief fields
+  const [details, setDetails] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    location: "Studio",
+    shootFor: "",        // e.g., graduation, engagement, product, etc.
+    style: "",           // e.g., moody, bright, candid, editorial
+    locationNotes: "",   // meeting point, parking, indoor/outdoor specifics
+    notes: "",           // anything else
+  });
+
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -54,7 +65,6 @@ export default function Booking() {
     if (!date || !time) return;
 
     setChecking(true);
-    // ✅ pass the selected package so end-time can be validated properly
     const res = await checkAvailability({ date, time, pkg: selected });
     setAvailability(res.available);
     if (!res.available && res.reason) setErr(res.reason);
@@ -64,7 +74,6 @@ export default function Booking() {
   const confirm = async () => {
     if (submitting) return; // guard double-clicks
     setSubmitting(true);
-    // submitBooking writes exactly what your Firestore rules require
     const res = await submitBooking({ pkg: selected, date, time, details });
     setResult(res);
     setSubmitting(false);
@@ -76,7 +85,16 @@ export default function Booking() {
     setDate("");
     setTime("");
     setAvailability(null);
-    setDetails({ name: "", email: "", phone: "", location: "Studio" });
+    setDetails({
+      name: "",
+      email: "",
+      phone: "",
+      location: "Studio",
+      shootFor: "",
+      style: "",
+      locationNotes: "",
+      notes: "",
+    });
     setSubmitting(false);
     setResult(null);
     setErr("");
@@ -141,7 +159,6 @@ export default function Booking() {
 
                 <div className="col-span-1">
                   <label className="text-sm font-medium text-charcoal">Time</label>
-                  {/* Custom select enforces 30-min increments everywhere */}
                   <select
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
@@ -239,6 +256,46 @@ export default function Booking() {
                     <option>Outdoors</option>
                   </select>
                 </div>
+
+                {/* NEW: creative brief fields */}
+                <div>
+                  <label className="text-sm font-medium text-charcoal">What is this shoot for?</label>
+                  <input
+                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    value={details.shootFor}
+                    onChange={(e) => setDetails({ ...details, shootFor: e.target.value })}
+                    placeholder="Graduation portraits, engagement, birthday event, product launch…"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-charcoal">Preferred style</label>
+                  <input
+                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    value={details.style}
+                    onChange={(e) => setDetails({ ...details, style: e.target.value })}
+                    placeholder="Moody, bright, candid, editorial, film-like…"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-charcoal">Location notes</label>
+                  <textarea
+                    rows={3}
+                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    value={details.locationNotes}
+                    onChange={(e) => setDetails({ ...details, locationNotes: e.target.value })}
+                    placeholder="Meet by the fountain; parking details; indoor/outdoor preference; accessibility, etc."
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-charcoal">Anything else we should know?</label>
+                  <textarea
+                    rows={3}
+                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    value={details.notes}
+                    onChange={(e) => setDetails({ ...details, notes: e.target.value })}
+                    placeholder="Wardrobe ideas, must-have shots, inspiration links, sensitivities, etc."
+                  />
+                </div>
               </div>
 
               <div className="mt-6 flex justify-between">
@@ -276,11 +333,15 @@ export default function Booking() {
                   </ul>
                 </div>
                 <div className="p-4 rounded-xl border border-rose/30 bg-blush/20">
-                  <h4 className="font-semibold text-charcoal">Contact</h4>
+                  <h4 className="font-semibold text-charcoal">Contact &amp; brief</h4>
                   <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
                     <li>Name: {details.name || "—"}</li>
                     <li>Email: {details.email || "—"}</li>
                     <li>Phone: {details.phone || "—"}</li>
+                    {details.shootFor && <li>Shoot: {details.shootFor}</li>}
+                    {details.style && <li>Style: {details.style}</li>}
+                    {details.locationNotes && <li>Location notes: {details.locationNotes}</li>}
+                    {details.notes && <li>Notes: {details.notes}</li>}
                   </ul>
                 </div>
               </div>

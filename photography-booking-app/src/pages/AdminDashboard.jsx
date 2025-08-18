@@ -1,4 +1,3 @@
-// src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, Suspense } from "react";
 import { auth, db } from "../lib/firebase";
 import {
@@ -169,7 +168,6 @@ export default function AdminDashboard() {
               <div className="text-sm text-charcoal/60">No upcoming bookings.</div>
             ) : (
               <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
-                {/* scroll wrappers so the card doesn't get cut off */}
                 <div className="overflow-x-auto">
                   <div className="max-h-[28rem] overflow-y-auto">
                     <table className="w-full text-sm min-w-[760px]">
@@ -203,6 +201,28 @@ export default function AdminDashboard() {
                                 <div className="font-medium">{b.details?.name}</div>
                                 <div className="text-slate-500">{b.details?.email}</div>
                                 <div className="text-slate-500">{b.details?.phone}</div>
+
+                                {/* NEW: creative brief preview */}
+                                {b.details?.shootFor && (
+                                  <div className="text-xs text-slate-600 mt-1">
+                                    <span className="font-medium">Shoot:</span> {b.details.shootFor}
+                                  </div>
+                                )}
+                                {b.details?.style && (
+                                  <div className="text-xs text-slate-600">
+                                    <span className="font-medium">Style:</span> {b.details.style}
+                                  </div>
+                                )}
+                                {b.details?.locationNotes && (
+                                  <div className="text-xs text-slate-600">
+                                    <span className="font-medium">Loc:</span> {b.details.locationNotes}
+                                  </div>
+                                )}
+                                {b.details?.notes && (
+                                  <div className="text-xs text-slate-600">
+                                    <span className="font-medium">Notes:</span> {b.details.notes}
+                                  </div>
+                                )}
                               </Td>
                               <Td>
                                 <div className="font-medium">{b.package?.name}</div>
