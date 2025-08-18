@@ -3,18 +3,16 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { db } from "../lib/firebase";
 import {
-  collectionGroup,
+  collection,
   getDocs,
   limit,
   orderBy,
   query,
   where,
 } from "firebase/firestore";
-import heroImg from "../_DSC0154.jpg"; // put the image at: src/_DSC0154.jpg
+import heroImg from "../_DSC0154.jpg"; // ensure file exists at src/_DSC0154.jpg
 
-function cls(...xs) {
-  return xs.filter(Boolean).join(" ");
-}
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function Home() {
   return (
@@ -28,8 +26,8 @@ export default function Home() {
               Book stunning, story-driven photography.
             </h1>
             <p className="mt-4 text-charcoal/70 text-base md:text-lg">
-              Portraits, events, and weddings—crafted with care and delivered
-              fast. Pick a package, choose a time, and lock it in.
+              Portraits, events, and weddings—crafted with care and delivered fast.
+              Pick a package, choose a time, and lock it in.
             </p>
 
             <div className="mt-6 flex gap-3">
@@ -109,43 +107,52 @@ function PortfolioOnScroll() {
     return () => io.disconnect();
   }, [ready]);
 
-  // Fetch portfolio images only when "ready"
+  // Fetch portfolio images (no collectionGroup)
   useEffect(() => {
     if (!ready) return;
+
     (async () => {
       setLoading(true);
       setErr("");
+
       try {
-        // Prefer ordered query (may need an index)
-        let snap;
+        // 1) Find the portfolio gallery doc
+        const galQ = query(
+          collection(db, "galleries"),
+          where("tag", "==", "portfolio"),
+          limit(1)
+        );
+        const galSnap = await getDocs(galQ);
+        if (galSnap.empty) {
+          setErr("Portfolio is not configured yet.");
+          setImgs([]);
+          return;
+        }
+        const galId = galSnap.docs[0].id;
+
+        // 2) Read images from that gallery's subcollection
+        let imgsSnap;
         try {
           const qy = query(
-            collectionGroup(db, "images"),
-            where("tag", "==", "portfolio"),
+            collection(db, `galleries/${galId}/images`),
             orderBy("createdAt", "desc"),
             limit(12)
           );
-          snap = await getDocs(qy);
+          imgsSnap = await getDocs(qy);
         } catch {
-          // Fallback without orderBy if index missing
-          const qy = query(
-            collectionGroup(db, "images"),
-            where("tag", "==", "portfolio"),
-            limit(12)
-          );
-          snap = await getDocs(qy);
+          // Fallback if index/order not available
+          const qy = query(collection(db, `galleries/${galId}/images`), limit(12));
+          imgsSnap = await getDocs(qy);
         }
 
-        const rows = snap.docs.map((d) => d.data());
-        rows.sort(
-          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-        );
+        const rows = imgsSnap.docs.map((d) => d.data());
+        rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setImgs(rows);
       } catch (e) {
         console.error("[Home portfolio] load failed:", e);
         setErr(
           String(e.code || e.message).toLowerCase().includes("permission")
-            ? "We couldn't load the portfolio (permission denied). If you're the owner, check App Check or Firestore rules."
+            ? "We couldn't load the portfolio (permission denied). If you're the owner, check App Check domain and Firestore rules."
             : "We couldn't load the portfolio right now. Please try again."
         );
       } finally {
