@@ -34,6 +34,7 @@ const toSlug = (s) =>
     .replace(/^-+|-+$/g, "");
 const randomId = (len = 8) => Math.random().toString(36).slice(2, 2 + len);
 const extOf = (name = "") => (name.split(".").pop() || "jpg").toLowerCase();
+const fileKeyOf = (f) => `${f.name}|${f.size}|${f.lastModified}`;
 
 function formatBytes(n = 0) {
   if (n < 1024) return `${n} B`;
@@ -90,7 +91,7 @@ export default function AdminUpload() {
   // files + progress
   const [files, setFiles] = useState([]);
   const [rejected, setRejected] = useState([]);
-  const [queue, setQueue] = useState([]);
+  const [queue, setQueue] = useState([]); // seeded on file pick now
   const [busy, setBusy] = useState(false);
 
   /* auth */
@@ -170,12 +171,12 @@ export default function AdminUpload() {
     return bookings.filter((b) => {
       return (
         b.reference.toLowerCase().includes(q) ||
-        b.name.toLowerCase().includes(q) ||
-        b.email.toLowerCase().includes(q) ||
-        b.phone.toLowerCase().includes(q) ||
-        b.date.toLowerCase().includes(q) ||
-        b.time.toLowerCase().includes(q) ||
-        b.status.toLowerCase().includes(q)
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.email || "").toLowerCase().includes(q) ||
+        (b.phone || "").toLowerCase().includes(q) ||
+        (b.date || "").toLowerCase().includes(q) ||
+        (b.time || "").toLowerCase().includes(q) ||
+        (b.status || "").toLowerCase().includes(q)
       );
     });
   }, [search, bookings]);
@@ -193,14 +194,37 @@ export default function AdminUpload() {
     if (active) active.scrollIntoView({ block: "nearest" });
   }, [highlighted, openClientList]);
 
-  /* file pick/drop */
+  /* file pick/drop — now seeds the queue so progress bars show immediately */
+  const seedQueueForFiles = (newFiles) => {
+    setQueue((prev) => {
+      const prevKeys = new Set(prev.map((q) => fileKeyOf(q.file)));
+      const additions = [];
+      for (const f of newFiles) {
+        const k = fileKeyOf(f);
+        if (prevKeys.has(k)) continue;
+        additions.push({
+          id: `${Date.now()}_${randomId(7)}`,
+          file: f,
+          status: "queued",
+          progress: 0,
+          bytesTransferred: 0,
+          totalBytes: f.size || 0,
+          url: "",
+          error: "",
+          task: null,
+        });
+      }
+      return additions.length ? [...prev, ...additions] : prev;
+    });
+  };
+
   const acceptFiles = (list) => {
     const ok = [];
     const bad = [];
-    const seen = new Set(files.map((f) => `${f.name}|${f.size}|${f.lastModified}`));
+    const existing = new Set(files.map(fileKeyOf));
     for (const f of list) {
-      const key = `${f.name}|${f.size}|${f.lastModified}`;
-      if (seen.has(key)) continue; // de-dupe
+      const key = fileKeyOf(f);
+      if (existing.has(key)) continue; // de-dupe by name/size/date
       if (!f.type?.startsWith("image/")) {
         bad.push({ name: f.name, size: f.size, reason: "Not an image" });
         continue;
@@ -210,11 +234,15 @@ export default function AdminUpload() {
         continue;
       }
       ok.push(f);
-      seen.add(key);
+      existing.add(key);
     }
-    if (ok.length) setFiles((prev) => [...prev, ...ok]);
+    if (ok.length) {
+      setFiles((prev) => [...prev, ...ok]);
+      seedQueueForFiles(ok); // <-- seed queue so the UI shows progress rows now
+    }
     if (bad.length) setRejected((prev) => [...prev, ...bad]);
   };
+
   const onPick = (e) => acceptFiles(Array.from(e.target.files || []));
   const onDrop = (e) => {
     e.preventDefault();
@@ -360,10 +388,10 @@ export default function AdminUpload() {
     });
   }
 
-  /* submit (build local items FIRST; then setQueue; then batch) */
+  /* submit — now reuses the pre-seeded queue items */
   async function onUpload() {
     if (notAdmin) return alert("You must be signed in as the admin to upload.");
-    if (files.length === 0) return alert("Pick some image files first.");
+    if (queue.length === 0) return alert("Pick some image files first.");
     if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
     try {
@@ -374,18 +402,6 @@ export default function AdminUpload() {
       return;
     }
 
-    const items = files.map((f) => ({
-      id: `${Date.now()}_${randomId(7)}`,
-      file: f,
-      status: "queued",
-      progress: 0,
-      bytesTransferred: 0,
-      totalBytes: f.size || 0,
-      url: "",
-      error: "",
-      task: null,
-    }));
-    setQueue(items);
     setBusy(true);
 
     try {
@@ -404,7 +420,23 @@ export default function AdminUpload() {
         extraDocFields = { tag: "portfolio" };
       }
 
-      const batches = chunk(items, CONCURRENCY);
+      // Take only items that are "queued" or previously "error" (allow retry)
+      const itemsToUpload = queue.filter(
+        (it) => it.status === "queued" || it.status === "error"
+      );
+      if (itemsToUpload.length === 0) {
+        alert("Nothing to upload (all files are done).");
+        return;
+      }
+
+      // Clear previous error states to queued
+      setQueue((q) =>
+        q.map((it) =>
+          it.status === "error" ? { ...it, status: "queued", progress: 0, error: "" } : it
+        )
+      );
+
+      const batches = chunk(itemsToUpload, CONCURRENCY);
       let successCount = 0;
       let failCount = 0;
 
@@ -428,9 +460,6 @@ export default function AdminUpload() {
           failCount ? `, ${failCount} failed` : ""
         }.`
       );
-
-      setFiles([]);
-      setRejected([]);
     } catch (e) {
       console.error("[AdminUpload] Error:", e);
       alert(e.message || "Something went wrong.");
@@ -724,7 +753,7 @@ export default function AdminUpload() {
               setRejected([]);
               setQueue([]);
             }}
-            disabled={(files.length === 0 && rejected.length === 0) || busy}
+            disabled={(files.length === 0 && rejected.length === 0 && queue.length === 0) || busy}
             className="rounded-full px-4 py-2 text-sm font-semibold text-charcoal/70 hover:text-rose underline disabled:text-charcoal/30"
           >
             Clear
@@ -734,14 +763,14 @@ export default function AdminUpload() {
             onClick={onUpload}
             disabled={
               busy ||
-              files.length === 0 ||
+              queue.length === 0 ||
               notAdmin ||
               (mode === "client" && !selectedBooking)
             }
             className={cls(
               "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition",
               busy ||
-                files.length === 0 ||
+                queue.length === 0 ||
                 notAdmin ||
                 (mode === "client" && !selectedBooking)
                 ? "bg-blush text-charcoal/50 cursor-not-allowed"
@@ -760,7 +789,7 @@ export default function AdminUpload() {
         </div>
       </div>
 
-      {/* progress */}
+      {/* progress — now visible as soon as files are selected (status = queued) */}
       {queue.length > 0 && (
         <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
           <div className="mb-2 flex items-center justify-between">
