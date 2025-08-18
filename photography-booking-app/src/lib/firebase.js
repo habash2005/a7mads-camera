@@ -20,10 +20,12 @@ const firebaseConfig = {
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ||
     `${PROJECT_ID}.firebaseapp.com`,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || PROJECT_ID,
-  // ✅ keep exactly this style of bucket (no conversion)
+
+  // 👇 keep exactly this; you asked to use the firebasestorage.app style
   storageBucket:
     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
     "limlim-32e6a.firebasestorage.app",
+
   messagingSenderId:
     import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "525168702365",
   appId:
@@ -43,7 +45,6 @@ if (typeof window !== "undefined") {
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
 
-  // Use env if present, else your provided key
   const SITE_KEY =
     import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY ||
     "6LfnIakrAAAAAKu3hQwM4EqNaEOiZhNCK0Qipm5o";
@@ -65,5 +66,6 @@ export const db = initializeFirestore(app, {
 
 /* ---------------- Auth / Storage / Analytics ---------------- */
 export const auth = getAuth(app);
-export const storage = getStorage(app); // uses your firebasestorage.app bucket
+export const storage = getStorage(app); // will use your firebasestorage.app bucket
+
 isSupported().then((ok) => ok && getAnalytics(app));
