@@ -12,18 +12,18 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "limlim-32e6a";
 
-// IMPORTANT: this must be your real bucket host, e.g. "limlim-32e6a.firebasestorage.app"
-const BUCKET_HOST =
-  import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "limlim-32e6a.firebasestorage.app";
-const BUCKET_GS_URL = `gs://${BUCKET_HOST}`;
+// ✅ make sure this matches your real bucket (no gs:// here)
+const STORAGE_BUCKET =
+  import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
+  "limlim-32e6a.firebasestorage.app";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
+    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN ||
+    `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-  // Keep this as the host string (no protocol)
-  storageBucket: BUCKET_HOST,
+  storageBucket: STORAGE_BUCKET, // used for default URLs
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
@@ -31,7 +31,7 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
-/* App Check */
+// App Check (reCAPTCHA v3)
 if (typeof window !== "undefined") {
   if (import.meta.env.DEV) {
     // eslint-disable-next-line no-undef
@@ -46,7 +46,7 @@ if (typeof window !== "undefined") {
   });
 }
 
-/* Firestore */
+// Firestore
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
   useFetchStreams: true,
@@ -55,16 +55,10 @@ export const db = initializeFirestore(app, {
   }),
 });
 
-/* Auth / Storage / Analytics */
+// ✅ Auth / Storage / Analytics
 export const auth = getAuth(app);
 
-// 🔒 Force the SDK to use your firebasestorage.app bucket.
-export const storage = getStorage(app, BUCKET_GS_URL);
+// 🔥 FORCE the bucket at runtime too (protects against empty env / SDK fallback)
+export const storage = getStorage(app, `gs://${STORAGE_BUCKET}`);
 
 isSupported().then((ok) => ok && getAnalytics(app));
-
-// (optional) quick sanity in dev:
-if (import.meta.env.DEV) {
-  // eslint-disable-next-line no-console
-  console.log("[Storage bucket]", BUCKET_HOST);
-}

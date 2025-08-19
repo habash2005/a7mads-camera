@@ -244,33 +244,38 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  /* storage preflight — probe the EXACT folder you will upload to */
+  /* ---------- Storage preflight: probe the SAME directory as the real upload ---------- */
   async function storagePreflight(currentMode, refCode) {
     try {
       const blob = new Blob(["ok"], { type: "text/plain" });
-      const dir = currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+
+      const dir =
+        currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+
       const testRef = sRef(storage, `${dir}/__preflight_${Date.now()}.txt`);
       const task = uploadBytesResumable(testRef, blob, {
         contentType: "text/plain",
         cacheControl: "public,max-age=60",
       });
+
       await new Promise((resolve, reject) => {
         task.on("state_changed", null, reject, resolve);
       });
+
       await getDownloadURL(testRef);
     } catch (e) {
       const msg = String(e?.message || e);
-      let hint = "";
       const m = msg.toLowerCase();
+      let hint = "";
       if (m.includes("appcheck")) {
         hint =
-          "App Check token missing/invalid. Verify App Check init and that your reCAPTCHA v3 site key allows limlim.netlify.app.";
+          "App Check token missing/invalid. Confirm App Check is initialized and your site key allows limlim.netlify.app.";
       } else if (m.includes("unauthorized") || m.includes("forbidden")) {
         hint =
-          "Storage rules blocked the write. Confirm you're signed in as admin and rules allow writes to this path.";
+          "Storage rules blocked the write. Ensure admin auth + rules allow writes to this path.";
       } else if (m.includes("failed to fetch")) {
         hint =
-          "Network/CORS/preflight blocked. Ensure CORS is set on the *firebasestorage.app* bucket and Netlify is an authorized origin.";
+          "CORS/preflight blocked. Verify CORS is set on limlim-32e6a.firebasestorage.app and the request URL hits that bucket (not appspot).";
       }
       throw new Error(hint ? `${msg}\n\n${hint}` : msg);
     }
