@@ -2,19 +2,23 @@
 import React, { useEffect, useRef, useState } from "react";
 
 /**
- * Defers mounting the <img> until it's near the viewport.
- * Keeps layout stable with aspect-ratio (when width/height known).
+ * Lazy-mounting <img> with optional wrapper aspect override.
+ * - If `wrapperAspect` is provided (e.g. "1/1", "4/5"), it forces a uniform tile
+ *   regardless of the image's intrinsic dimensions.
+ * - Otherwise uses width/height to keep natural aspect ratio.
  */
 export default function SmartImg({
   src,
   alt = "",
   width,
   height,
-  priority = false, // true for above-the-fold/first row
-  className = "",   // wrapper (div)
-  imgClassName = "",// the <img>
-  imgStyle,         // optional style for <img>
-  placeholderClass = "bg-slate-200/70 animate-pulse",
+  wrapperAspect,      // <- "1/1" for square, "4/5" for portrait, etc.
+  priority = false,   // true for above-the-fold
+  className = "",     // wrapper (div)
+  imgClassName = "",  // the <img>
+  imgStyle,
+  placeholderClass = "bg-slate-200/60 animate-pulse",
+  sizes,              // optional <img sizes="">
   ...rest
 }) {
   const [show, setShow] = useState(!!priority);
@@ -35,7 +39,8 @@ export default function SmartImg({
     return () => io.disconnect();
   }, [show]);
 
-  const ratio = width && height ? `${width}/${height}` : undefined;
+  const ratio =
+    wrapperAspect || (width && height ? `${width}/${height}` : undefined);
 
   return (
     <div
@@ -44,7 +49,8 @@ export default function SmartImg({
       style={{
         aspectRatio: ratio,
         contentVisibility: "auto",
-        containIntrinsicSize: !ratio && height ? `${height}px` : undefined
+        containIntrinsicSize:
+          !ratio && height ? `${height}px` : undefined,
       }}
     >
       {show ? (
@@ -57,6 +63,7 @@ export default function SmartImg({
           draggable="false"
           className={imgClassName}
           style={imgStyle}
+          sizes={sizes}
           {...rest}
         />
       ) : (

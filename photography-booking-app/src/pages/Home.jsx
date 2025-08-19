@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import heroImg from "../_DSC0154.jpg";
-import SmartImg from "../components/SmartImg";
+import GalleryGrid from "../components/GalleryGrid";
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
@@ -56,7 +56,7 @@ export default function Home() {
                   decoding="async"
                   fetchPriority="high"
                   draggable="false"
-                  className="absolute inset-0 h-full w-full object-cover [object-position:50%_12%] md:[object-position:50%_18%] will-change-transform"
+                  className="absolute inset-0 h-full w-full object-cover [object-position:50%_12%] md:[object-position:50%_18%]"
                 />
               </div>
             </div>
@@ -65,7 +65,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Lazy Portfolio Section (reveals on scroll) */}
+      {/* Lazy Portfolio Section */}
       <PortfolioOnScroll />
     </section>
   );
@@ -79,70 +79,55 @@ function PortfolioOnScroll() {
   const [err, setErr] = useState("");
   const sentryRef = useRef(null);
 
-  // Trigger once when the section nears the viewport
   useEffect(() => {
     const el = sentryRef.current;
     if (!el) return;
-
     const io = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) setReady(true);
-      },
+      (entries) => entries[0]?.isIntersecting && setReady(true),
       { rootMargin: "0px 0px -15% 0px", threshold: 0.15 }
     );
-
     io.observe(el);
     return () => io.disconnect();
   }, []);
 
-  // Fetch portfolio images from the portfolio gallery
   useEffect(() => {
     if (!ready) return;
-
     (async () => {
       setLoading(true);
       setErr("");
-
       try {
-        // 1) Find the portfolio gallery doc
-        const galQ = query(
-          collection(db, "galleries"),
-          where("tag", "==", "portfolio"),
-          limit(1)
-        );
+        // 1) portfolio gallery
+        const galQ = query(collection(db, "galleries"), where("tag", "==", "portfolio"), limit(1));
         const galSnap = await getDocs(galQ);
-        if (galSnap.empty) {
-          setErr("Portfolio is not configured yet.");
-          setImgs([]);
-          return;
-        }
+        if (galSnap.empty) { setErr("Portfolio is not configured yet."); setImgs([]); return; }
         const galId = galSnap.docs[0].id;
 
-        // 2) Read images from that gallery's subcollection
+        // 2) latest images
         let imgsSnap;
         try {
-          const qy = query(
-            collection(db, `galleries/${galId}/images`),
-            orderBy("createdAt", "desc"),
-            limit(12)
+          imgsSnap = await getDocs(
+            query(collection(db, `galleries/${galId}/images`), orderBy("createdAt", "desc"), limit(12))
           );
-          imgsSnap = await getDocs(qy);
         } catch {
-          // Fallback if index/order not available
-          const qy = query(collection(db, `galleries/${galId}/images`), limit(12));
-          imgsSnap = await getDocs(qy);
+          imgsSnap = await getDocs(query(collection(db, `galleries/${galId}/images`), limit(12)));
         }
-
         const rows = imgsSnap.docs.map((d) => d.data());
         rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        setImgs(rows);
+        // Map to GalleryGrid shape
+        setImgs(rows.map(r => ({
+          id: r.public_id,
+          src: r.secure_url,
+          alt: r.original_filename || r.public_id,
+          width: r.width,
+          height: r.height,
+          filename: r.original_filename
+        })));
       } catch (e) {
         console.error("[Home portfolio] load failed:", e);
         const msg = String(e.code || e.message).toLowerCase();
-        setErr(
-          msg.includes("permission")
-            ? "We couldn't load the portfolio (permission denied). If you're the owner, check App Check domain and Firestore rules."
-            : "We couldn't load the portfolio right now. Please try again."
+        setErr(msg.includes("permission")
+          ? "We couldn't load the portfolio (permission denied)."
+          : "We couldn't load the portfolio right now. Please try again."
         );
       } finally {
         setLoading(false);
@@ -153,70 +138,28 @@ function PortfolioOnScroll() {
   return (
     <div ref={sentryRef} className="py-12 md:py-20">
       <div className="max-w-7xl mx-auto px-4">
-        <header
-          className={cls(
-            "transition-all duration-700",
-            ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
-          )}
-        >
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
-            Latest Portfolio
-          </h2>
-          <p className="text-charcoal/70 mt-1">
-            A few favorites—more inside the full portfolio.
-          </p>
+        <header className={cls("transition-all duration-700", ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3")}>
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Latest Portfolio</h2>
+          <p className="text-charcoal/70 mt-1">A few favorites—more inside the full portfolio.</p>
         </header>
 
-        {/* Grid */}
         <div className="mt-6">
           {err && <div className="text-sm text-rose mb-4">{err}</div>}
-
           {loading ? (
             <SkeletonGrid />
           ) : imgs.length === 0 ? (
             <div className="text-sm text-charcoal/60">No portfolio images yet.</div>
           ) : (
-            <div
-              className={cls(
-                "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4",
-                "transition-opacity duration-700",
-                ready ? "opacity-100" : "opacity-0"
-              )}
-            >
-              {imgs.map((img, i) => {
-                const src = img.secure_url;
-                const key = img.public_id || `${src}-${i}`;
-                return (
-                  <figure
-                    key={key}
-                    className={cls(
-                      "group overflow-hidden rounded-xl shadow-sm bg-white",
-                      "transition-transform duration-300 hover:scale-[1.01]"
-                    )}
-                  >
-                    <SmartImg
-                      src={src}
-                      alt={img.original_filename || img.public_id || "Portfolio image"}
-                      width={img.width}
-                      height={img.height}
-                      priority={i < 4}
-                      className="w-full aspect-square"
-                      imgClassName="w-full h-full object-cover"
-                    />
-                  </figure>
-                );
-              })}
-            </div>
+            <GalleryGrid
+              items={imgs}
+              wrapperAspect="1/1"             // <- force uniform squares
+              firstNPriority={4}
+              sizes="(min-width:1024px) 25vw, (min-width:640px) 33vw, 50vw"
+            />
           )}
         </div>
 
-        <div
-          className={cls(
-            "mt-8 flex",
-            ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
-            "transition-all duration-700"
-          )}
-        >
+        <div className={cls("mt-8 flex", ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3", "transition-all duration-700")}>
           <Link
             to="/portfolio"
             className="rounded-full px-5 py-3 text-sm font-semibold bg-gold text-charcoal hover:bg-rose hover:text-ivory transition-all shadow-md"
@@ -229,12 +172,11 @@ function PortfolioOnScroll() {
   );
 }
 
-/* --------------- Small skeleton while loading --------------- */
 function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="aspect-square rounded-xl bg-slate-200/70 animate-pulse" />
+        <div key={i} className="aspect-square rounded-xl bg-slate-200/60 animate-pulse" />
       ))}
     </div>
   );
