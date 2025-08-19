@@ -8,6 +8,7 @@ function cls(...xs) {
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
+  const menuId = "mobile-nav-menu";
 
   const itemClass = ({ isActive }) =>
     cls(
@@ -19,7 +20,11 @@ export default function Nav() {
     );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-default bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/60">
+    <header className={cls(
+      "sticky top-0 z-40 border-b border-default",
+      "bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/60",
+      open && "shadow-md"
+    )}>
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         {/* Brand */}
         <Link
@@ -60,12 +65,18 @@ export default function Nav() {
           <button className="btn btn-primary shadow-sm">Book Now →</button>
         </Link>
 
-        {/* Mobile toggle */}
+        {/* Mobile toggle — visible, nice, minimal */}
         <button
           aria-label="Toggle menu"
+          aria-controls={menuId}
+          aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded-md bg-white/80 shadow-sm ring-1 ring-[var(--border)]"
+          className={cls(
+            "md:hidden inline-flex items-center gap-2 h-9 rounded-full px-2.5",
+            "bg-white/90 shadow-sm ring-1 ring-[var(--border)]"
+          )}
         >
+          {/* Hamburger -> X */}
           <div className="relative w-5 h-5">
             <span
               className={cls(
@@ -75,8 +86,8 @@ export default function Nav() {
             />
             <span
               className={cls(
-                "absolute h-0.5 w-5 bg-[var(--text)] transition-opacity duration-300",
-                open ? "opacity-0" : "top-2.5"
+                "absolute h-0.5 w-5 bg-[var(--text)] transition-opacity duration-200",
+                open ? "opacity-0 top-2.5" : "opacity-100 top-2.5"
               )}
             />
             <span
@@ -86,14 +97,38 @@ export default function Nav() {
               )}
             />
           </div>
+          {/* “Menu” label + chevron */}
+          <span className="text-sm font-semibold text-charcoal">Menu</span>
+          <svg
+            className={cls(
+              "h-4 w-4 text-charcoal/70 transition-transform duration-300",
+              open && "rotate-180"
+            )}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M5.23 7.21a.75.75 0 011.06.02L10 11.152l3.71-3.92a.75.75 0 111.08 1.04l-4.24 4.48a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" />
+          </svg>
         </button>
       </div>
 
+      {/* Backdrop scrim (tap to close) */}
+      {open && (
+        <button
+          aria-hidden
+          onClick={() => setOpen(false)}
+          className="md:hidden fixed inset-0 z-30 bg-black/10"
+          tabIndex={-1}
+        />
+      )}
+
       {/* Mobile menu */}
       <div
+        id={menuId}
         className={cls(
-          "md:hidden overflow-hidden transition-all duration-300",
-          open ? "max-h-96 border-t border-default bg-white/90 backdrop-blur" : "max-h-0"
+          "md:hidden relative z-40 overflow-hidden transition-[max-height,opacity] duration-300",
+          open ? "max-h-96 opacity-100 border-t border-default bg-white/95 backdrop-blur" : "max-h-0 opacity-0"
         )}
       >
         <div className="px-4 py-3 space-y-2">
@@ -118,6 +153,7 @@ export default function Nav() {
               {item.label}
             </NavLink>
           ))}
+
           <Link to="/booking" onClick={() => setOpen(false)}>
             <button className="btn btn-primary w-full mt-2">Book Now →</button>
           </Link>
