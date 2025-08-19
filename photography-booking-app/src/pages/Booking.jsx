@@ -1,141 +1,361 @@
-import React, { useState } from "react";
-import Stepper from "../components/Stepper";
-import PackageCard from "../components/PackageCard";
+// src/pages/Booking.jsx
+import React, { useMemo, useState } from "react";
 import { checkAvailability, submitBooking } from "../lib/api";
 
-const PACKAGES = [
-  { id: "portrait", name: "Portrait", price: 250, duration: "60–90 min", desc: "Clean, crisp portraits in studio or on location.", includes: ["Up to 2 outfits", "15 edited photos", "Online gallery"] },
-  { id: "event",    name: "Event",    price: 700, duration: "3 hours",   desc: "Coverage for birthdays, engagements, and more.", includes: ["Candid + posed", "Next-day sneak peek", "Highlight reel add-on"] },
-  { id: "wedding",  name: "Wedding",  price: 2200, duration: "8 hours",  desc: "Story-driven wedding coverage for your day.",    includes: ["Timeline planning", "Second shooter (optional)", "Album-ready edits"] },
+/* -------------------------------- Services -------------------------------- */
+const SERVICES = [
+  {
+    id: "events",
+    name: "Events",
+    duration: "3 hours",
+    desc: "For birthdays, celebrations, and gatherings you want remembered.",
+    notes: ["Candid + posed coverage", "Timeline coordination", "Gallery delivery"],
+    icon: "🎉",
+  },
+  {
+    id: "branding",
+    name: "Branding",
+    duration: "90 min",
+    desc: "For business owners and creatives who want photos that showcase their personality and work.",
+    notes: ["Headshots + lifestyle", "On-location or studio", "Usage-ready files"],
+    icon: "🏷️",
+  },
+  {
+    id: "portraits",
+    name: "Portraits",
+    duration: "60–90 min",
+    desc: "For personal, casual, or styled photos that reflect you.",
+    notes: ["Up to 2 outfits", "Natural & guided posing", "Online gallery"],
+    icon: "📸",
+  },
+  {
+    id: "graduation",
+    name: "Graduation",
+    duration: "60–90 min",
+    desc: "For seniors and graduates ready to capture their milestone with pride.",
+    notes: ["Campus locations", "Cap & gown options", "Family add-ons"],
+    icon: "🎓",
+  },
+  {
+    id: "couples",
+    name: "Couples",
+    duration: "60–90 min",
+    desc: "For partners wanting to celebrate love, connection, and shared moments.",
+    notes: ["Prompt-led candids", "Romantic & relaxed", "Multiple locations optional"],
+    icon: "💞",
+  },
 ];
 
-/* ---------- Time helpers (30-minute slots only) ---------- */
-const OPEN_MIN  = 9 * 60 + 30;   // 09:30
-const CLOSE_MIN = 21 * 60 + 30;  // 21:30
-
+/* ----------------------------- Time utilities ----------------------------- */
+const OPEN_MIN = 9 * 60 + 30;   // 09:30
+const CLOSE_MIN = 21 * 60 + 30; // 21:30
 function buildTimes() {
   const out = [];
   for (let m = OPEN_MIN; m <= CLOSE_MIN; m += 30) {
     const hh = String(Math.floor(m / 60)).padStart(2, "0");
     const mm = String(m % 60).padStart(2, "0");
-    out.push(`${hh}:${mm}`); // "HH:mm"
+    out.push(`${hh}:${mm}`);
   }
   return out;
 }
+const TIME_OPTS = buildTimes();
 function to12h(hhmm) {
   const [h, m] = hhmm.split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = ((h + 11) % 12) + 1;
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
 }
-const TIME_OPTS = buildTimes();
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
-/* ---------- Page ---------- */
+/* ----------------------------- Small UI helpers --------------------------- */
+function ChipBtn({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-rose/30 px-3 py-1 text-xs font-medium text-charcoal/80 hover:bg-rose hover:text-ivory transition"
+    >
+      {children}
+    </button>
+  );
+}
+function SectionTitle({ children, sub }) {
+  return (
+    <div className="mb-2">
+      <h4 className="font-semibold text-charcoal">{children}</h4>
+      {sub && <p className="text-xs text-charcoal/60 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+/* --------------------------------- Page ----------------------------------- */
 export default function Booking() {
   const [step, setStep] = useState(0);
-  const [selected, setSelected] = useState(PACKAGES[0]);
+
+  // Selected service (price hidden in UI; 0 passed to API to satisfy validator)
+  const [selected, setSelected] = useState({ ...SERVICES[0], price: 0 });
+
+  // Date & time + availability
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [checking, setChecking] = useState(false);
   const [availability, setAvailability] = useState(null);
   const [err, setErr] = useState("");
 
-  // NEW: expanded details/brief fields
+  // Core + Tally-style extras
   const [details, setDetails] = useState({
+    // core (API expects these)
     name: "",
     email: "",
     phone: "",
     location: "Studio",
-    shootFor: "",        // e.g., graduation, engagement, product, etc.
-    style: "",           // e.g., moody, bright, candid, editorial
-    locationNotes: "",   // meeting point, parking, indoor/outdoor specifics
-    notes: "",           // anything else
+
+    // creative brief (already supported by API)
+    shootFor: "",
+    style: "",
+    locationNotes: "",
+    notes: "",
+
+    // Tally-style extras (we will merge into notes/locationNotes on submit)
+    contactPref: "",            // Email / Text / Call
+    bestContactTime: "",        // e.g., Weekdays after 5pm
+    instagram: "",
+    howHeard: "",               // Instagram / TikTok / Google / Friend / Other
+    peopleCount: "",            // guests / subjects
+    organization: "",           // company or school
+    venueName: "",
+    venueAddress: "",
+    city: "",
+    state: "",
+    zip: "",
+    indoorOutdoor: "",          // Indoor / Outdoor / Both
+    rainPlan: "",
+    accessibility: "",
+    shotList: "",               // must-have shots
+    moodboard: "",              // link
+    deadline: "",               // desired delivery date
+    deliverables: "",           // e.g., Web-size, Print-size, Album, etc.
+    usage: "",                  // (branding) Website / Social / Print / Ads
+    serviceOccasion: "",        // (events/couples) Birthday, Anniversary, etc.
   });
 
+  // Submit
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
-  const canNext0 = !!selected;
+  const canNext0 = !!selected?.id;
   const canNext1 = !!date && !!time && availability === true;
-  const canNext2 = details.name && details.email && details.phone;
+  const canNext2 =
+    details.name.trim() &&
+    details.email.trim() &&
+    details.phone.trim() &&
+    details.location.trim();
 
-  const doCheck = async () => {
+  // Suggestions (kept simple)
+  const styleSuggestions = ["Warm & vibrant", "Clean & minimal", "Moody/editorial", "Candid & documentary"];
+  const shootForSuggestions = useMemo(() => {
+    switch (selected.id) {
+      case "branding":   return ["Website refresh", "Social content", "Team headshots", "Product launch"];
+      case "events":     return ["Birthday", "Engagement party", "Corporate mixer", "Baby shower"];
+      case "graduation": return ["Senior portraits", "Cap & gown", "Family add-on", "Campus walk"];
+      case "couples":    return ["Anniversary", "Proposal", "Save-the-date", "Casual session"];
+      default:           return ["Personal portraits", "Creative concept", "Portfolio update", "Gift session"];
+    }
+  }, [selected.id]);
+
+  /* ------------------------- Availability check -------------------------- */
+  async function doCheck() {
     setErr("");
     setAvailability(null);
     if (!date || !time) return;
-
     setChecking(true);
-    const res = await checkAvailability({ date, time, pkg: selected });
+    const res = await checkAvailability({
+      date,
+      time,
+      pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
+    });
     setAvailability(res.available);
     if (!res.available && res.reason) setErr(res.reason);
     setChecking(false);
-  };
+  }
 
-  const confirm = async () => {
-    if (submitting) return; // guard double-clicks
+  /* ----------------------------- Submit flow ----------------------------- */
+  function mergedNotesPayload(d) {
+    // Merge “extras” into a readable block so your current API still stores everything
+    const lines = [];
+
+    // Contact & social
+    if (d.contactPref)     lines.push(`Preferred contact: ${d.contactPref}`);
+    if (d.bestContactTime) lines.push(`Best time to reach: ${d.bestContactTime}`);
+    if (d.instagram)       lines.push(`Instagram: ${d.instagram}`);
+    if (d.howHeard)        lines.push(`How they heard: ${d.howHeard}`);
+
+    // Service-specific context
+    if (d.serviceOccasion) lines.push(`Occasion: ${d.serviceOccasion}`);
+    if (d.organization)    lines.push(`Organization/School: ${d.organization}`);
+    if (d.peopleCount)     lines.push(`People/Guests: ${d.peopleCount}`);
+
+    // Location specifics (will also mirror to locationNotes)
+    const locBits = [];
+    if (d.venueName)    locBits.push(`Venue: ${d.venueName}`);
+    if (d.venueAddress) locBits.push(`Address: ${d.venueAddress}`);
+    const cityStateZip = [d.city, d.state, d.zip].filter(Boolean).join(", ");
+    if (cityStateZip)   locBits.push(`City/State/Zip: ${cityStateZip}`);
+    if (d.indoorOutdoor)locBits.push(`Indoor/Outdoor: ${d.indoorOutdoor}`);
+    if (d.rainPlan)     locBits.push(`Rain backup: ${d.rainPlan}`);
+    if (d.accessibility)locBits.push(`Accessibility: ${d.accessibility}`);
+    if (locBits.length) lines.push(locBits.join(" | "));
+
+    // Creative inputs
+    if (d.shotList)  lines.push(`Shot list: ${d.shotList}`);
+    if (d.moodboard) lines.push(`Mood board: ${d.moodboard}`);
+    if (d.deadline)  lines.push(`Deadline/Needed by: ${d.deadline}`);
+    if (d.deliverables) lines.push(`Deliverables: ${d.deliverables}`);
+    if (d.usage)       lines.push(`Usage (branding): ${d.usage}`);
+
+    // Preserve any free-form notes last
+    if (d.notes) lines.push(`Notes: ${d.notes}`);
+
+    return lines.join("\n");
+  }
+
+  async function confirm() {
+    if (submitting) return;
     setSubmitting(true);
-    const res = await submitBooking({ pkg: selected, date, time, details });
-    setResult(res);
-    setSubmitting(false);
-  };
+    try {
+      // Build a sendable details object your API accepts
+      const { name, email, phone, location, shootFor, style } = details;
 
-  const reset = () => {
+      // Mirror location extras into locationNotes
+      const locNoteLines = [];
+      if (details.venueName)    locNoteLines.push(`Venue: ${details.venueName}`);
+      if (details.venueAddress) locNoteLines.push(`Address: ${details.venueAddress}`);
+      if (details.city || details.state || details.zip) {
+        locNoteLines.push(`City/State/Zip: ${[details.city, details.state, details.zip].filter(Boolean).join(", ")}`);
+      }
+      if (details.indoorOutdoor) locNoteLines.push(`Indoor/Outdoor: ${details.indoorOutdoor}`);
+      if (details.rainPlan)      locNoteLines.push(`Rain backup: ${details.rainPlan}`);
+      if (details.accessibility) locNoteLines.push(`Accessibility: ${details.accessibility}`);
+
+      const sendDetails = {
+        name, email, phone, location,
+        shootFor: shootFor || selected.name,
+        style: style || "",
+        locationNotes: [details.locationNotes || "", ...locNoteLines].filter(Boolean).join("\n"),
+        notes: mergedNotesPayload(details),
+      };
+
+      const res = await submitBooking({
+        pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
+        date,
+        time,
+        details: sendDetails,
+      });
+
+      if (!res?.ok) throw new Error(res?.error || "Failed to submit booking");
+
+      // Keep portal flow intact
+      if (res.reference) localStorage.setItem("clientRef", res.reference);
+      setResult(res); // { ok, id, reference }
+    } catch (e) {
+      console.error(e);
+      alert(e.message || "We couldn’t submit your request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function reset() {
     setStep(0);
-    setSelected(PACKAGES[0]);
+    setSelected({ ...SERVICES[0], price: 0 });
     setDate("");
     setTime("");
     setAvailability(null);
     setDetails({
-      name: "",
-      email: "",
-      phone: "",
-      location: "Studio",
-      shootFor: "",
-      style: "",
-      locationNotes: "",
-      notes: "",
+      name: "", email: "", phone: "", location: "Studio",
+      shootFor: "", style: "", locationNotes: "", notes: "",
+      contactPref: "", bestContactTime: "", instagram: "", howHeard: "",
+      peopleCount: "", organization: "", venueName: "", venueAddress: "",
+      city: "", state: "", zip: "", indoorOutdoor: "", rainPlan: "",
+      accessibility: "", shotList: "", moodboard: "", deadline: "",
+      deliverables: "", usage: "", serviceOccasion: "",
     });
     setSubmitting(false);
     setResult(null);
     setErr("");
-  };
+  }
 
+  /* -------------------------------- Render -------------------------------- */
   return (
     <section id="booking" className="w-full py-16 md:py-24 bg-ivory">
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-end justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Book a Session</h2>
-            <p className="text-charcoal/70 mt-1">
-              Complete the steps to request your slot. <span className="text-rose/80"></span>
+            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
+              Book a Session
+            </h2>
+            <p className="text-charcoal/70 mt-1 text-sm">
+              Select a service, choose a time, and share a few details. I’ll follow up to confirm.
             </p>
           </div>
-          <Stepper step={step} />
+          <SimpleStepper step={step} />
         </div>
 
         {/* Card */}
-        <div className="glass p-5 md:p-6 rounded-2xl border border-rose/30 shadow-[0_10px_30px_rgba(0,0,0,0.08)] bg-white/80">
+        <div className="rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-5 md:p-6">
+          {/* Step 0: Service selection */}
           {step === 0 && (
             <div>
-              <h3 className="text-xl font-serif font-semibold text-charcoal">Choose a package</h3>
-              <p className="text-charcoal/70 text-sm mt-1">
-                You’ve selected <span className="font-semibold text-rose">{selected.name}</span>.
+              <h3 className="text-xl font-serif font-semibold text-charcoal">Choose a service</h3>
+              <p className="text-sm text-charcoal/70 mt-1">
+                We’ll tailor the session to your goals. You can add notes later.
               </p>
 
-              <div className="mt-6 grid md:grid-cols-3 gap-6">
-                {PACKAGES.map((p) => (
-                  <PackageCard key={p.id} p={p} selected={p.id === selected.id} onSelect={() => setSelected(p)} />
-                ))}
+              <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {SERVICES.map((s) => {
+                  const active = s.id === selected.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setSelected({ ...s, price: 0 })}
+                      className={cls(
+                        "text-left rounded-2xl border p-4 transition-all",
+                        active ? "border-rose bg-rose/5 shadow" : "border-rose/30 hover:border-rose"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="text-2xl">{s.icon}</div>
+                        <span className={cls(
+                          "text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1",
+                          active ? "bg-rose text-ivory ring-rose" : "bg-amber-50 text-amber-800 ring-amber-200"
+                        )}>
+                          {s.duration}
+                        </span>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-lg font-semibold text-charcoal">{s.name}</div>
+                        <p className="text-sm text-charcoal/70 mt-1">{s.desc}</p>
+                      </div>
+                      {!!s.notes?.length && (
+                        <ul className="mt-3 text-xs text-charcoal/70 list-disc ml-4 space-y-0.5">
+                          {s.notes.map((n, i) => <li key={i}>{n}</li>)}
+                        </ul>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => setStep(1)}
                   disabled={!canNext0}
-                  className={`rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all ${
+                  className={cls(
+                    "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
                     canNext0 ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal" : "bg-blush text-charcoal/50 cursor-not-allowed"
-                  }`}
+                  )}
                 >
                   Next →
                 </button>
@@ -143,11 +363,14 @@ export default function Booking() {
             </div>
           )}
 
+          {/* Step 1: Date & Time */}
           {step === 1 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-charcoal">Pick date &amp; time</h3>
+              <p className="text-sm text-charcoal/70 mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
+
               <div className="mt-4 grid md:grid-cols-3 gap-4">
-                <div className="col-span-1">
+                <div>
                   <label className="text-sm font-medium text-charcoal">Date</label>
                   <input
                     type="date"
@@ -157,7 +380,7 @@ export default function Booking() {
                   />
                 </div>
 
-                <div className="col-span-1">
+                <div>
                   <label className="text-sm font-medium text-charcoal">Time</label>
                   <select
                     value={time}
@@ -166,46 +389,38 @@ export default function Booking() {
                   >
                     <option value="">— Select time —</option>
                     {TIME_OPTS.map((t) => (
-                      <option key={t} value={t}>
-                        {to12h(t)}
-                      </option>
+                      <option key={t} value={t}>{to12h(t)}</option>
                     ))}
                   </select>
-                  {err && availability === false && (
-                    <div className="text-xs text-rose mt-1">{err}</div>
-                  )}
+                  {err && availability === false && <div className="text-xs text-rose mt-1">{err}</div>}
                 </div>
 
-                <div className="col-span-1 flex items-end">
+                <div className="flex items-end">
                   <button
                     onClick={doCheck}
                     disabled={!date || !time || checking}
-                    className={`w-full rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all ${
-                      !date || !time || checking
-                        ? "bg-blush text-charcoal/50 cursor-not-allowed"
-                        : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-                    }`}
+                    className={cls(
+                      "w-full rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
+                      !date || !time || checking ? "bg-blush text-charcoal/50 cursor-not-allowed" : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                    )}
                   >
                     {checking ? "Checking..." : "Check Availability"}
                   </button>
                 </div>
               </div>
 
-              {availability === true && <p className="mt-3 text-sm text-green-700">✅ Slot available. You can proceed.</p>}
-              {availability === false && (
-                <p className="mt-3 text-sm text-red-700">❌ Sorry, that time is taken. {err ? `(${err})` : "Try a different time."}</p>
-              )}
+              {availability === true && <p className="mt-3 text-sm text-emerald-700">✅ Slot available. You can proceed.</p>}
+              {availability === false && <p className="mt-3 text-sm text-rose-700">❌ That time conflicts. Try a different one.</p>}
 
               <div className="mt-6 flex justify-between">
-                <button className="text-sm underline text-charcoal/70 hover:text-rose" onClick={() => setStep(0)}>
-                  ← Back
-                </button>
+                <button className="text-sm underline text-charcoal/70 hover:text-rose" onClick={() => setStep(0)}>← Back</button>
                 <button
                   onClick={() => setStep(2)}
                   disabled={!canNext1}
-                  className={`rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all ${
+                  className={cls(
+                    "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
                     canNext1 ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal" : "bg-blush text-charcoal/50 cursor-not-allowed"
-                  }`}
+                  )}
                 >
                   Next →
                 </button>
@@ -213,23 +428,29 @@ export default function Booking() {
             </div>
           )}
 
+          {/* Step 2: Details (Tally-style) */}
           {step === 2 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-charcoal">Your details</h3>
+              <p className="text-sm text-charcoal/70 mt-1">
+                I’m organized, detail-oriented, and thoughtful in my approach. These details help me prepare so your session runs smoothly.
+              </p>
+
+              {/* Contact basics */}
               <div className="mt-4 grid md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-charcoal">Full name</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
                     value={details.name}
                     onChange={(e) => setDetails({ ...details, name: e.target.value })}
-                    placeholder="e.g., Lama NC"
+                    placeholder="Your name"
                   />
                 </div>
                 <div>
                   <label className="text-sm font-medium text-charcoal">Email</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
                     value={details.email}
                     onChange={(e) => setDetails({ ...details, email: e.target.value })}
                     placeholder="you@example.com"
@@ -238,63 +459,288 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Phone</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
                     value={details.phone}
                     onChange={(e) => setDetails({ ...details, phone: e.target.value })}
                     placeholder="(555) 123-4567"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-charcoal">Location</label>
+                  <label className="text-sm font-medium text-charcoal">Preferred contact</label>
                   <select
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
-                    value={details.location}
-                    onChange={(e) => setDetails({ ...details, location: e.target.value })}
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    value={details.contactPref}
+                    onChange={(e) => setDetails({ ...details, contactPref: e.target.value })}
                   >
-                    <option>Studio</option>
-                    <option>Client Location</option>
-                    <option>Outdoors</option>
+                    <option value="">— Select —</option>
+                    <option>Email</option>
+                    <option>Text</option>
+                    <option>Call</option>
                   </select>
                 </div>
+                <div>
+                  <label className="text-sm font-medium text-charcoal">Best time to reach you</label>
+                  <input
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    value={details.bestContactTime}
+                    onChange={(e) => setDetails({ ...details, bestContactTime: e.target.value })}
+                    placeholder="e.g., Weekdays after 5pm"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-charcoal">Instagram (optional)</label>
+                  <input
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    value={details.instagram}
+                    onChange={(e) => setDetails({ ...details, instagram: e.target.value })}
+                    placeholder="@yourhandle"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-sm font-medium text-charcoal">How did you hear about me?</label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {["Instagram", "TikTok", "Google", "Friend/Family", "Other"].map((opt) => (
+                      <ChipBtn key={opt} onClick={() => setDetails((d) => ({ ...d, howHeard: opt }))}>
+                        {opt}
+                      </ChipBtn>
+                    ))}
+                  </div>
+                  <input
+                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    value={details.howHeard}
+                    onChange={(e) => setDetails({ ...details, howHeard: e.target.value })}
+                    placeholder="Tell me more (optional)"
+                  />
+                </div>
+              </div>
 
-                {/* NEW: creative brief fields */}
-                <div>
-                  <label className="text-sm font-medium text-charcoal">What is this shoot for?</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
-                    value={details.shootFor}
-                    onChange={(e) => setDetails({ ...details, shootFor: e.target.value })}
-                    placeholder="Graduation portraits, engagement, birthday event, product launch…"
-                  />
+              {/* Service context */}
+              <div className="mt-8">
+                <SectionTitle>Session context</SectionTitle>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">What is this shoot for?</label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {shootForSuggestions.map((s) => (
+                        <ChipBtn key={s} onClick={() => setDetails((d) => ({ ...d, shootFor: s }))}>{s}</ChipBtn>
+                      ))}
+                    </div>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.shootFor}
+                      onChange={(e) => setDetails({ ...details, shootFor: e.target.value })}
+                      placeholder="e.g., Website refresh, graduation portraits, anniversary session…"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Preferred style</label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {styleSuggestions.map((s) => (
+                        <ChipBtn key={s} onClick={() => setDetails((d) => ({ ...d, style: s }))}>{s}</ChipBtn>
+                      ))}
+                    </div>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.style}
+                      onChange={(e) => setDetails({ ...details, style: e.target.value })}
+                      placeholder="Warm & vibrant, candid/documentary, editorial, etc."
+                    />
+                  </div>
+
+                  {/* Light service-specifics */}
+                  {selected.id === "branding" && (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium text-charcoal">Brand/Company</label>
+                        <input
+                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          value={details.organization}
+                          onChange={(e) => setDetails({ ...details, organization: e.target.value })}
+                          placeholder="Company name"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-charcoal">Usage</label>
+                        <input
+                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          value={details.usage}
+                          onChange={(e) => setDetails({ ...details, usage: e.target.value })}
+                          placeholder="Website, social, print, ads…"
+                        />
+                      </div>
+                    </>
+                  )}
+                  {(selected.id === "events" || selected.id === "couples") && (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium text-charcoal">Occasion</label>
+                        <input
+                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          value={details.serviceOccasion}
+                          onChange={(e) => setDetails({ ...details, serviceOccasion: e.target.value })}
+                          placeholder="Birthday, anniversary, proposal…"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-charcoal">People/Guests</label>
+                        <input
+                          type="number"
+                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          value={details.peopleCount}
+                          onChange={(e) => setDetails({ ...details, peopleCount: e.target.value })}
+                          placeholder="Approximate count"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Preferred style</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
-                    value={details.style}
-                    onChange={(e) => setDetails({ ...details, style: e.target.value })}
-                    placeholder="Moody, bright, candid, editorial, film-like…"
-                  />
+              </div>
+
+              {/* Location & logistics */}
+              <div className="mt-8">
+                <SectionTitle sub="If unsure, you can leave these blank for now.">Location & logistics</SectionTitle>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Location</label>
+                    <select
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.location}
+                      onChange={(e) => setDetails({ ...details, location: e.target.value })}
+                    >
+                      <option>Studio</option>
+                      <option>Client Location</option>
+                      <option>Outdoors</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Venue name (optional)</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.venueName}
+                      onChange={(e) => setDetails({ ...details, venueName: e.target.value })}
+                      placeholder="Venue, campus, park, etc."
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-charcoal">Address (optional)</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.venueAddress}
+                      onChange={(e) => setDetails({ ...details, venueAddress: e.target.value })}
+                      placeholder="Street address"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">City</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.city}
+                      onChange={(e) => setDetails({ ...details, city: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">State</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.state}
+                      onChange={(e) => setDetails({ ...details, state: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Zip</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.zip}
+                      onChange={(e) => setDetails({ ...details, zip: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Indoor or Outdoor?</label>
+                    <select
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.indoorOutdoor}
+                      onChange={(e) => setDetails({ ...details, indoorOutdoor: e.target.value })}
+                    >
+                      <option value="">— Select —</option>
+                      <option>Indoor</option>
+                      <option>Outdoor</option>
+                      <option>Both</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-charcoal">Rain/weather plan (optional)</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.rainPlan}
+                      onChange={(e) => setDetails({ ...details, rainPlan: e.target.value })}
+                      placeholder="Backup date, alternate indoor space, etc."
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-charcoal">Accessibility needs (optional)</label>
+                    <textarea
+                      rows={2}
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.accessibility}
+                      onChange={(e) => setDetails({ ...details, accessibility: e.target.value })}
+                      placeholder="Parking, mobility access, sensory considerations, etc."
+                    />
+                  </div>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-charcoal">Location notes</label>
-                  <textarea
-                    rows={3}
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
-                    value={details.locationNotes}
-                    onChange={(e) => setDetails({ ...details, locationNotes: e.target.value })}
-                    placeholder="Meet by the fountain; parking details; indoor/outdoor preference; accessibility, etc."
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-charcoal">Anything else we should know?</label>
-                  <textarea
-                    rows={3}
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
-                    value={details.notes}
-                    onChange={(e) => setDetails({ ...details, notes: e.target.value })}
-                    placeholder="Wardrobe ideas, must-have shots, inspiration links, sensitivities, etc."
-                  />
+              </div>
+
+              {/* Creative inputs */}
+              <div className="mt-8">
+                <SectionTitle>Creative preferences</SectionTitle>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-charcoal">Must-have shots (optional)</label>
+                    <textarea
+                      rows={3}
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.shotList}
+                      onChange={(e) => setDetails({ ...details, shotList: e.target.value })}
+                      placeholder="List key people/moments, product angles, groupings, etc."
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Mood board / inspiration link</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.moodboard}
+                      onChange={(e) => setDetails({ ...details, moodboard: e.target.value })}
+                      placeholder="Pinterest/Drive/Notion link"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-charcoal">Deadline / needed by</label>
+                    <input
+                      type="date"
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.deadline}
+                      onChange={(e) => setDetails({ ...details, deadline: e.target.value })}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-charcoal">Deliverables (optional)</label>
+                    <input
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.deliverables}
+                      onChange={(e) => setDetails({ ...details, deliverables: e.target.value })}
+                      placeholder="Web-size, print-size, album, etc."
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium text-charcoal">Anything else to share?</label>
+                    <textarea
+                      rows={3}
+                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      value={details.notes}
+                      onChange={(e) => setDetails({ ...details, notes: e.target.value })}
+                      placeholder="Wardrobe ideas, sensitivities, specific requests, etc."
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -305,9 +751,10 @@ export default function Booking() {
                 <button
                   onClick={() => setStep(3)}
                   disabled={!canNext2}
-                  className={`rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all ${
+                  className={cls(
+                    "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
                     canNext2 ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal" : "bg-blush text-charcoal/50 cursor-not-allowed"
-                  }`}
+                  )}
                 >
                   Next →
                 </button>
@@ -315,23 +762,22 @@ export default function Booking() {
             </div>
           )}
 
+          {/* Step 3: Review & Confirm */}
           {step === 3 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-charcoal">Review &amp; confirm</h3>
+
               <div className="mt-4 grid md:grid-cols-2 gap-6">
                 <div className="p-4 rounded-xl border border-rose/30 bg-blush/20">
                   <h4 className="font-semibold text-charcoal">Summary</h4>
                   <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
-                    <li>
-                      Package: <span className="font-medium text-rose">{selected.name}</span> — ${selected.price}
-                    </li>
-                    <li>
-                      Date &amp; Time: <span className="font-medium">{date || "—"} {time ? to12h(time) : ""}</span>
-                    </li>
-                    <li>Duration: {selected.duration}</li>
+                    <li>Service: <span className="font-medium text-rose">{selected.name}</span></li>
+                    <li>Date &amp; Time: <span className="font-medium">{date || "—"} {time ? to12h(time) : ""}</span></li>
+                    <li>Estimated duration: {selected.duration}</li>
                     <li>Location: {details.location}</li>
                   </ul>
                 </div>
+
                 <div className="p-4 rounded-xl border border-rose/30 bg-blush/20">
                   <h4 className="font-semibold text-charcoal">Contact &amp; brief</h4>
                   <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
@@ -340,8 +786,12 @@ export default function Booking() {
                     <li>Phone: {details.phone || "—"}</li>
                     {details.shootFor && <li>Shoot: {details.shootFor}</li>}
                     {details.style && <li>Style: {details.style}</li>}
-                    {details.locationNotes && <li>Location notes: {details.locationNotes}</li>}
-                    {details.notes && <li>Notes: {details.notes}</li>}
+                    {(details.locationNotes || details.venueName || details.venueAddress || details.city || details.state || details.zip) && (
+                      <li>Location notes will be included.</li>
+                    )}
+                    {(details.notes || details.shotList || details.moodboard || details.deadline || details.deliverables) && (
+                      <li>Creative preferences will be included.</li>
+                    )}
                   </ul>
                 </div>
               </div>
@@ -367,6 +817,12 @@ export default function Booking() {
                   </p>
                   <div className="mt-4 flex gap-3">
                     <button
+                      onClick={() => navigator.clipboard?.writeText(result.reference)}
+                      className="rounded-full px-4 py-2 text-xs font-semibold border border-rose/40 text-charcoal hover:bg-rose hover:text-ivory transition"
+                    >
+                      Copy reference
+                    </button>
+                    <button
                       onClick={reset}
                       className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
                     >
@@ -380,5 +836,37 @@ export default function Booking() {
         </div>
       </div>
     </section>
+  );
+}
+
+/* -------------------------------- Stepper --------------------------------- */
+function SimpleStepper({ step }) {
+  const items = ["Service", "Date & Time", "Details", "Review"];
+  return (
+    <div className="hidden md:flex items-center gap-2 text-xs">
+      {items.map((label, i) => {
+        const done = step > i;
+        const active = step === i;
+        return (
+          <div key={label} className="flex items-center gap-2">
+            <div
+              className={cls(
+                "w-6 h-6 rounded-full grid place-items-center font-semibold",
+                done ? "bg-gold text-charcoal"
+                     : active ? "bg-rose text-ivory"
+                              : "bg-slate-200 text-slate-600"
+              )}
+              title={label}
+            >
+              {i + 1}
+            </div>
+            <span className={cls("uppercase tracking-wide", active ? "text-charcoal font-semibold" : "text-charcoal/60")}>
+              {label}
+            </span>
+            {i < items.length - 1 && <span className="w-8 h-px bg-slate-200 mx-1" />}
+          </div>
+        );
+      })}
+    </div>
   );
 }

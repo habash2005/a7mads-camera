@@ -1,62 +1,153 @@
-import React, { useState } from 'react'
-import { Link, NavLink } from 'react-router-dom'
+// src/components/Nav.jsx
+import React, { useState } from "react";
+import { Link, NavLink } from "react-router-dom";
+
+function cls(...xs) {
+  return xs.filter(Boolean).join(" ");
+}
 
 export default function Nav() {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
+
+  const itemClass = ({ isActive }) =>
+    cls(
+      "relative px-1.5 py-1 text-sm text-gray-700 hover:text-rose transition-colors",
+      isActive && "text-rose after:absolute after:left-0 after:right-0 after:-bottom-1 after:h-0.5 after:bg-rose"
+    );
 
   return (
-    <header className="sticky top-0 z-20 border-b border-rose/40 bg-blush/80 backdrop-blur font-sans">
+    <header className="sticky top-0 z-30 bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60 border-b border-default">
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        {/* Logo / Brand */}
-        <Link to="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
-          <div className="h-9 w-9 rounded-xl bg-rose text-ivory flex items-center justify-center shadow-md">
-            📷
-          </div>
-          <span className="text-base font-serif font-semibold tracking-tight text-charcoal">
+        {/* Brand */}
+        <Link
+          to="/"
+          onClick={() => setOpen(false)}
+          className="flex items-center gap-2"
+          aria-label="Go to home"
+        >
+          <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-md ring-1 ring-[var(--border)] bg-white">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose" />
+          </span>
+          <span className="text-base font-semibold tracking-tight text-charcoal">
             Lama Wafa
           </span>
         </Link>
 
-        {/* Desktop Menu */}
-        <nav className="hidden md:flex gap-6 text-sm text-charcoal">
-          <NavLink to="/portfolio" className="hover:text-gold transition-colors">Portfolio</NavLink>
-          <NavLink to="/booking"  className="hover:text-gold transition-colors">Book</NavLink>
-          <NavLink to="/portal"   className="hover:text-gold transition-colors">Client Portal</NavLink>{/* ⬅️ point to /portal */}
-          <NavLink to="/faq"      className="hover:text-gold transition-colors">FAQ</NavLink>
-          <NavLink to="/admin"    className="hover:text-gold transition-colors">Admin</NavLink>
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-6">
+          <NavLink to="/portfolio" className={itemClass}>
+            Portfolio
+          </NavLink>
+          <NavLink to="/booking" className={itemClass}>
+            Book
+          </NavLink>
+          <NavLink to="/portal" className={itemClass}>
+            Client Portal
+          </NavLink>
+          <NavLink to="/faq" className={itemClass}>
+            FAQ
+          </NavLink>
+          <NavLink to="/admin" className={itemClass}>
+            Admin
+          </NavLink>
         </nav>
 
-        {/* Book Now (desktop only) */}
+        {/* Desktop CTA */}
         <Link to="/booking" className="hidden md:block">
-          <button className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold transition-all shadow-md">
+          <button className="btn btn-primary shadow-sm">
             Book Now →
           </button>
         </Link>
 
-        {/* Mobile hamburger */}
+        {/* Mobile toggle */}
         <button
           aria-label="Toggle menu"
-          onClick={() => setOpen(v => !v)}
-          className="block md:hidden p-2 rounded-lg bg-rose text-ivory"
+          onClick={() => setOpen((v) => !v)}
+          className="md:hidden inline-flex items-center justify-center h-9 w-9 rounded-md ring-1 ring-[var(--border)] bg-white"
         >
-          ☰
+          <span className="sr-only">Open menu</span>
+          <div className="space-y-1.5">
+            <span className="block h-0.5 w-5 bg-[var(--text)]" />
+            <span className="block h-0.5 w-5 bg-[var(--text)]" />
+            <span className="block h-0.5 w-5 bg-[var(--text)]" />
+          </div>
         </button>
       </div>
 
-      {/* Mobile dropdown */}
-      <div className={`${open ? 'block' : 'hidden'} md:hidden border-t border-rose/40 bg-blush/80 px-4 py-3 space-y-3`}>
-        <NavLink to="/portfolio" className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Portfolio</NavLink>
-        <NavLink to="/booking"  className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Book</NavLink>
-        <NavLink to="/portal"   className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Client Portal</NavLink>{/* ⬅️ updated */}
-        <NavLink to="/faq"      className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>FAQ</NavLink>
-        <NavLink to="/admin"    className="block text-sm text-charcoal hover:text-gold transition-colors" onClick={() => setOpen(false)}>Admin</NavLink>
+      {/* Mobile menu */}
+      <div
+        className={cls(
+          "md:hidden border-t border-default bg-white",
+          open ? "block" : "hidden"
+        )}
+      >
+        <div className="px-4 py-3 space-y-2">
+          <NavLink
+            to="/portfolio"
+            className={({ isActive }) =>
+              cls(
+                "block rounded-md px-3 py-2 text-sm hover:bg-gray-50",
+                isActive ? "text-rose bg-[var(--accent-100)]" : "text-gray-800"
+              )
+            }
+            onClick={() => setOpen(false)}
+          >
+            Portfolio
+          </NavLink>
+          <NavLink
+            to="/booking"
+            className={({ isActive }) =>
+              cls(
+                "block rounded-md px-3 py-2 text-sm hover:bg-gray-50",
+                isActive ? "text-rose bg-[var(--accent-100)]" : "text-gray-800"
+              )
+            }
+            onClick={() => setOpen(false)}
+          >
+            Book
+          </NavLink>
+          <NavLink
+            to="/portal"
+            className={({ isActive }) =>
+              cls(
+                "block rounded-md px-3 py-2 text-sm hover:bg-gray-50",
+                isActive ? "text-rose bg-[var(--accent-100)]" : "text-gray-800"
+              )
+            }
+            onClick={() => setOpen(false)}
+          >
+            Client Portal
+          </NavLink>
+          <NavLink
+            to="/faq"
+            className={({ isActive }) =>
+              cls(
+                "block rounded-md px-3 py-2 text-sm hover:bg-gray-50",
+                isActive ? "text-rose bg-[var(--accent-100)]" : "text-gray-800"
+              )
+            }
+            onClick={() => setOpen(false)}
+          >
+            FAQ
+          </NavLink>
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              cls(
+                "block rounded-md px-3 py-2 text-sm hover:bg-gray-50",
+                isActive ? "text-rose bg-[var(--accent-100)]" : "text-gray-800"
+              )
+            }
+            onClick={() => setOpen(false)}
+          >
+            Admin
+          </NavLink>
 
-        <Link to="/booking" onClick={() => setOpen(false)}>
-          <button className="w-full mt-2 rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold transition-all shadow-md">
-            Book Now →
-          </button>
-        </Link>
+          <Link to="/booking" onClick={() => setOpen(false)}>
+            <button className="btn btn-primary w-full mt-2">Book Now →</button>
+          </Link>
+        </div>
       </div>
     </header>
-  )
+  );
 }
