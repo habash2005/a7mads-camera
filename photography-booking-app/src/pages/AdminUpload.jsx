@@ -13,11 +13,7 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import {
-  ref as sRef,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+import { ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const MAX_SIZE = 25 * 1024 * 1024;
@@ -68,8 +64,6 @@ function chunk(arr, size) {
 
 export default function AdminUpload() {
   const fileInputRef = useRef(null);
-
-  // client dropdown refs (for wheel + scroll-to-active)
   const clientDropRef = useRef(null);
   const listRef = useRef(null);
 
@@ -91,7 +85,7 @@ export default function AdminUpload() {
   // files + progress
   const [files, setFiles] = useState([]);
   const [rejected, setRejected] = useState([]);
-  const [queue, setQueue] = useState([]); // seeded on file pick now
+  const [queue, setQueue] = useState([]); // rows shown immediately
   const [busy, setBusy] = useState(false);
 
   /* auth */
@@ -194,7 +188,7 @@ export default function AdminUpload() {
     if (active) active.scrollIntoView({ block: "nearest" });
   }, [highlighted, openClientList]);
 
-  /* file pick/drop — now seeds the queue so progress bars show immediately */
+  /* seed queue so rows show immediately */
   const seedQueueForFiles = (newFiles) => {
     setQueue((prev) => {
       const prevKeys = new Set(prev.map((q) => fileKeyOf(q.file)));
@@ -224,7 +218,7 @@ export default function AdminUpload() {
     const existing = new Set(files.map(fileKeyOf));
     for (const f of list) {
       const key = fileKeyOf(f);
-      if (existing.has(key)) continue; // de-dupe by name/size/date
+      if (existing.has(key)) continue;
       if (!f.type?.startsWith("image/")) {
         bad.push({ name: f.name, size: f.size, reason: "Not an image" });
         continue;
@@ -238,7 +232,7 @@ export default function AdminUpload() {
     }
     if (ok.length) {
       setFiles((prev) => [...prev, ...ok]);
-      seedQueueForFiles(ok); // seed queue so the UI shows progress rows now
+      seedQueueForFiles(ok);
     }
     if (bad.length) setRejected((prev) => [...prev, ...bad]);
   };
@@ -250,12 +244,11 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  /* ---------- Storage preflight: write to allowed dirs ---------- */
+  /* storage preflight — probe the EXACT folder you will upload to */
   async function storagePreflight(currentMode, refCode) {
     try {
       const blob = new Blob(["ok"], { type: "text/plain" });
-      const dir =
-        currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+      const dir = currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
       const testRef = sRef(storage, `${dir}/__preflight_${Date.now()}.txt`);
       const task = uploadBytesResumable(testRef, blob, {
         contentType: "text/plain",
@@ -271,13 +264,13 @@ export default function AdminUpload() {
       const m = msg.toLowerCase();
       if (m.includes("appcheck")) {
         hint =
-          "App Check token missing/invalid. Confirm initializeAppCheck(...) runs and your reCAPTCHA v3 site key is valid for limlim.netlify.app.";
+          "App Check token missing/invalid. Verify App Check init and that your reCAPTCHA v3 site key allows limlim.netlify.app.";
       } else if (m.includes("unauthorized") || m.includes("forbidden")) {
         hint =
-          "Storage rules blocked the write. Make sure your rules allow writes to this path for the admin user.";
+          "Storage rules blocked the write. Confirm you're signed in as admin and rules allow writes to this path.";
       } else if (m.includes("failed to fetch")) {
         hint =
-          "Network/preflight blocked. Ensure limlim.netlify.app is in Firebase Auth 'Authorized domains'.";
+          "Network/CORS/preflight blocked. Ensure CORS is set on the *firebasestorage.app* bucket and Netlify is an authorized origin.";
       }
       throw new Error(hint ? `${msg}\n\n${hint}` : msg);
     }
@@ -313,11 +306,8 @@ export default function AdminUpload() {
         cacheControl: "public,max-age=31536000,immutable",
       });
 
-      // indicate attempt immediately
       setQueue((q) =>
-        q.map((qit) =>
-          qit.id === item.id ? { ...qit, status: "uploading", task, progress: Math.max(qit.progress, 1) } : qit
-        )
+        q.map((qit) => (qit.id === item.id ? { ...qit, status: "uploading", task } : qit))
       );
 
       task.on(
@@ -341,7 +331,7 @@ export default function AdminUpload() {
           setQueue((q) =>
             q.map((qit) =>
               qit.id === item.id
-                ? { ...qit, status: "error", error: String(err?.message || err), progress: qit.progress || 1 }
+                ? { ...qit, status: "error", error: String(err?.message || err) }
                 : qit
             )
           );
@@ -371,9 +361,7 @@ export default function AdminUpload() {
 
             setQueue((q) =>
               q.map((qit) =>
-                qit.id === item.id
-                  ? { ...qit, status: "done", progress: 100, url }
-                  : qit
+                qit.id === item.id ? { ...qit, status: "done", progress: 100, url } : qit
               )
             );
             resolve({ ok: true, url });
@@ -381,7 +369,7 @@ export default function AdminUpload() {
             setQueue((q) =>
               q.map((qit) =>
                 qit.id === item.id
-                  ? { ...qit, status: "error", error: String(err?.message || err), progress: qit.progress || 1 }
+                  ? { ...qit, status: "error", error: String(err?.message || err) }
                   : qit
               )
             );
@@ -392,26 +380,25 @@ export default function AdminUpload() {
     });
   }
 
-  /* submit — now reuses the pre-seeded queue items */
+  /* submit */
   async function onUpload() {
     if (notAdmin) return alert("You must be signed in as the admin to upload.");
     if (queue.length === 0) return alert("Pick some image files first.");
     if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
+    // Preflight: probe the exact folder (and reflect failure in the UI rows)
     try {
-      await storagePreflight(mode, selectedBooking?.reference); // <-- important
+      await storagePreflight(mode, selectedBooking?.reference);
     } catch (e) {
       console.error("[Storage preflight]", e);
-      // Mark all queued items as attempted+failed so the UI shows the failure per-file
-      const failMsg = e.message || "Storage preflight failed.";
       setQueue((q) =>
         q.map((it) =>
-          it.status === "queued"
-            ? { ...it, status: "error", error: `Preflight: ${failMsg}`, progress: it.progress || 1 }
+          it.status === "queued" || it.status === "uploading"
+            ? { ...it, status: "error", error: `Preflight failed: ${e.message}` }
             : it
         )
       );
-      alert(failMsg);
+      alert(e.message || "Storage preflight failed.");
       return;
     }
 
@@ -433,7 +420,6 @@ export default function AdminUpload() {
         extraDocFields = { tag: "portfolio" };
       }
 
-      // only "queued" or previously "error" (allow retry)
       const itemsToUpload = queue.filter(
         (it) => it.status === "queued" || it.status === "error"
       );
@@ -442,7 +428,7 @@ export default function AdminUpload() {
         return;
       }
 
-      // reset previous errors back to "queued"
+      // Clear previous error states to queued
       setQueue((q) =>
         q.map((it) =>
           it.status === "error" ? { ...it, status: "queued", progress: 0, error: "" } : it
@@ -494,10 +480,7 @@ export default function AdminUpload() {
     return totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
   }, [queue]);
 
-  const totalSize = useMemo(
-    () => files.reduce((s, f) => s + (f.size || 0), 0),
-    [files]
-  );
+  const totalSize = useMemo(() => files.reduce((s, f) => s + (f.size || 0), 0), [files]);
 
   /* UI */
   return (
@@ -550,7 +533,7 @@ export default function AdminUpload() {
           </p>
         </div>
 
-        {/* client selector with wheel-scroll + keyboard nav */}
+        {/* client selector */}
         <div className="lg:col-span-5" ref={clientDropRef}>
           <label className="block text-sm font-medium text-charcoal/80 mb-1">
             {mode === "client" ? "Choose client by reference" : "Client (disabled in Portfolio mode)"}
@@ -627,11 +610,7 @@ export default function AdminUpload() {
                   />
                 </div>
 
-                {/* SCROLL WHEEL AREA */}
-                <div
-                  ref={listRef}
-                  className="max-h-80 overflow-y-auto overscroll-contain p-1"
-                >
+                <div ref={listRef} className="max-h-80 overflow-y-auto overscroll-contain p-1">
                   {filtered.length === 0 ? (
                     <div className="px-3 py-2 text-sm text-charcoal/60">No matches.</div>
                   ) : (
@@ -774,18 +753,10 @@ export default function AdminUpload() {
           <button
             type="button"
             onClick={onUpload}
-            disabled={
-              busy ||
-              queue.length === 0 ||
-              notAdmin ||
-              (mode === "client" && !selectedBooking)
-            }
+            disabled={busy || queue.length === 0 || notAdmin || (mode === "client" && !selectedBooking)}
             className={cls(
               "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition",
-              busy ||
-                queue.length === 0 ||
-                notAdmin ||
-                (mode === "client" && !selectedBooking)
+              busy || queue.length === 0 || notAdmin || (mode === "client" && !selectedBooking)
                 ? "bg-blush text-charcoal/50 cursor-not-allowed"
                 : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
             )}
@@ -802,7 +773,7 @@ export default function AdminUpload() {
         </div>
       </div>
 
-      {/* progress — visible as soon as files are selected (status = queued) */}
+      {/* progress */}
       {queue.length > 0 && (
         <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
           <div className="mb-2 flex items-center justify-between">

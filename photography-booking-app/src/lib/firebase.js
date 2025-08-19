@@ -12,17 +12,18 @@ import { getAnalytics, isSupported } from "firebase/analytics";
 
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "limlim-32e6a";
 
+// IMPORTANT: this must be your real bucket host, e.g. "limlim-32e6a.firebasestorage.app"
+const BUCKET_HOST =
+  import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "limlim-32e6a.firebasestorage.app";
+const BUCKET_GS_URL = `gs://${BUCKET_HOST}`;
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`, // ✅ correct
+    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-
-  // ✅ default to your real bucket if the env var is missing
-  storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
-    `${PROJECT_ID}.firebasestorage.app`,
-
+  // Keep this as the host string (no protocol)
+  storageBucket: BUCKET_HOST,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
@@ -56,6 +57,14 @@ export const db = initializeFirestore(app, {
 
 /* Auth / Storage / Analytics */
 export const auth = getAuth(app);
-export const storage = getStorage(app); // ✅ points to limlim-32e6a.firebasestorage.app
+
+// 🔒 Force the SDK to use your firebasestorage.app bucket.
+export const storage = getStorage(app, BUCKET_GS_URL);
 
 isSupported().then((ok) => ok && getAnalytics(app));
+
+// (optional) quick sanity in dev:
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line no-console
+  console.log("[Storage bucket]", BUCKET_HOST);
+}
