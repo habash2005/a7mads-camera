@@ -1,3 +1,4 @@
+// src/pages/AdminMediaManager.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
@@ -18,13 +19,16 @@ const CONCURRENCY = 5;
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
+/** Resolve the Storage object path we saved when uploading. */
 function storagePathOf(img) {
-  // Prefer our explicit field saved on upload
+  // Prefer explicit fields we wrote on upload
   if (img.public_id || img.path || img.storagePath || img.fullPath) {
     return img.public_id || img.path || img.storagePath || img.fullPath;
   }
-  // Derive from Firebase download URL if needed
-  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
+  // Derive from various download URL shapes
+  const url = String(img.secure_url || "");
+  // Works for both *.firebasestorage.app and firebasestorage.googleapis.com
+  const m = url.match(/\/o\/([^?]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
@@ -40,6 +44,7 @@ export default function AdminMediaManager() {
   const [pSel, setPSel] = useState({});
   const [pLoading, setPLoading] = useState(false);
   const [pMsg, setPMsg] = useState("");
+  const [pDeleting, setPDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
 
   // ---- Client state ----
   const [refCode, setRefCode] = useState("");
@@ -48,6 +53,7 @@ export default function AdminMediaManager() {
   const [cSel, setCSel] = useState({});
   const [cLoading, setCLoading] = useState(false);
   const [cMsg, setCMsg] = useState("");
+  const [cDeleting, setCDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
 
   /* auth */
   useEffect(() => {
@@ -61,6 +67,7 @@ export default function AdminMediaManager() {
     setPLoading(true);
     setPImgs([]);
     setPSel({});
+    setPDeleting({});
     try {
       // find portfolio gallery
       const galSnap = await getDocs(
@@ -113,6 +120,7 @@ export default function AdminMediaManager() {
     setClient(null);
     setCImgs([]);
     setCSel({});
+    setCDeleting({});
     try {
       // find booking by reference
       const bSnap = await getDocs(
@@ -170,7 +178,46 @@ export default function AdminMediaManager() {
     }
   }
 
-  /* delete selected (Firestore doc + Storage object) */
+  /** delete one image (Storage tolerant + Firestore doc) */
+  async function deleteOne({ img, kind, galleryId, bookingId }) {
+    const path = storagePathOf(img);
+
+    // reflect item as "pending" in UI
+    const setMap = kind === "p" ? setPDeleting : setCDeleting;
+    setMap((m) => ({ ...m, [img.id]: "pending" }));
+
+    try {
+      if (path) {
+        try {
+          await deleteObject(sRef(storage, path));
+        } catch (e) {
+          // Accept 'not found' as success; any other error bubble up
+          if (e?.code !== "storage/object-not-found") {
+            throw e;
+          }
+          console.warn("Storage: already gone", path);
+        }
+      } else {
+        console.warn("No storage path for", img);
+      }
+
+      const dref =
+        kind === "p"
+          ? doc(db, "galleries", galleryId, "images", img.id)
+          : doc(db, "bookings", bookingId, "images", img.id);
+
+      await deleteDoc(dref);
+
+      setMap((m) => ({ ...m, [img.id]: "ok" }));
+      return { ok: true };
+    } catch (e) {
+      console.error("Delete failed:", e);
+      setMap((m) => ({ ...m, [img.id]: "err" }));
+      return { ok: false, error: e };
+    }
+  }
+
+  /* delete selected (with concurrency) */
   async function deleteSelected({ type }) {
     if (notAdmin) return alert("Sign in as admin first.");
     const imgs = type === "p" ? pImgs : cImgs;
@@ -186,15 +233,7 @@ export default function AdminMediaManager() {
     );
     if (!ok) return;
 
-    // figure collection path segments for doc deletion
-    const docPath = (imgId) => {
-      if (type === "p") {
-        return doc(db, "galleries", portfolioId, "images", imgId);
-      }
-      return doc(db, "bookings", client.id, "images", imgId);
-    };
-
-    // chunk + delete with concurrency cap
+    // Chunk with concurrency cap
     const chunks = [];
     for (let i = 0; i < list.length; i += CONCURRENCY) chunks.push(list.slice(i, i + CONCURRENCY));
 
@@ -202,32 +241,23 @@ export default function AdminMediaManager() {
     let failed = 0;
 
     for (const group of chunks) {
-      await Promise.all(
-        group.map(async (img) => {
-          try {
-            const path = storagePathOf(img);
-            if (path) {
-              try {
-                await deleteObject(sRef(storage, path));
-              } catch (e) {
-                // If the file is missing, still delete the doc
-                console.warn("Storage delete warning:", e);
-              }
-            } else {
-              console.warn("No storage path for", img);
-            }
-
-            await deleteDoc(docPath(img.id));
-            deleted += 1;
-          } catch (e) {
-            console.error("Delete failed:", e);
-            failed += 1;
-          }
-        })
+      const results = await Promise.all(
+        group.map((img) =>
+          deleteOne({
+            img,
+            kind: type === "p" ? "p" : "c",
+            galleryId: portfolioId,
+            bookingId: client?.id,
+          })
+        )
       );
+      deleted += results.filter((r) => r.ok).length;
+      failed += results.filter((r) => !r.ok).length;
     }
 
-    alert(`Deleted ${deleted} — ${failed ? `${failed} failed` : "done!"}`);
+    alert(
+      `Deleted ${deleted}${failed ? ` — ${failed} failed${notAdmin ? " (not admin?)" : ""}` : " — done!"}`
+    );
 
     // refresh the list
     if (type === "p") await loadPortfolio();
@@ -259,8 +289,12 @@ export default function AdminMediaManager() {
           </button>
         </div>
 
-        <div className={cls("text-xs rounded-lg px-3 py-2",
-          notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700")}>
+        <div
+          className={cls(
+            "text-xs rounded-lg px-3 py-2",
+            notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
+          )}
+        >
           {notAdmin ? "Not signed in as admin — deletes will fail." : `Signed in as ${me?.email}`}
         </div>
       </div>
@@ -270,7 +304,13 @@ export default function AdminMediaManager() {
         <div className="rounded-2xl border border-rose/30 bg-white p-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-charcoal/70">
-              {portfolioId ? <>Gallery ID: <code>{portfolioId}</code></> : "Load portfolio images"}
+              {portfolioId ? (
+                <>
+                  Gallery ID: <code>{portfolioId}</code>
+                </>
+              ) : (
+                "Load portfolio images"
+              )}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -310,24 +350,46 @@ export default function AdminMediaManager() {
           {pMsg && <div className="mt-3 text-sm text-rose-700">{pMsg}</div>}
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {pImgs.map((img) => (
-              <figure key={img.id} className="relative group overflow-hidden rounded-xl border border-rose/20">
-                <img
-                  src={img.secure_url}
-                  alt={img.original_filename || img.public_id}
-                  className="w-full aspect-square object-cover"
-                  loading="lazy"
-                />
-                <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
-                  <input
-                    type="checkbox"
-                    checked={!!pSel[img.id]}
-                    onChange={() => setPSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+            {pImgs.map((img) => {
+              const status = pDeleting[img.id];
+              return (
+                <figure
+                  key={img.id}
+                  className="relative group overflow-hidden rounded-xl border border-rose/20"
+                  title={img.public_id}
+                >
+                  <img
+                    src={img.secure_url}
+                    alt={img.original_filename || img.public_id}
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
                   />
-                  {img.original_filename || "image"}
-                </label>
-              </figure>
-            ))}
+                  <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
+                    <input
+                      type="checkbox"
+                      checked={!!pSel[img.id]}
+                      onChange={() => setPSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+                      disabled={status === "pending"}
+                    />
+                    {img.original_filename || "image"}
+                  </label>
+                  {status && (
+                    <div
+                      className={cls(
+                        "absolute bottom-2 right-2 text-[11px] rounded-md px-2 py-1 shadow",
+                        status === "pending"
+                          ? "bg-amber-100 text-amber-800"
+                          : status === "ok"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      )}
+                    >
+                      {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
+                    </div>
+                  )}
+                </figure>
+              );
+            })}
           </div>
 
           {!pLoading && pImgs.length === 0 && (
@@ -394,24 +456,46 @@ export default function AdminMediaManager() {
           {cMsg && <div className="mt-3 text-sm text-rose-700">{cMsg}</div>}
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {cImgs.map((img) => (
-              <figure key={img.id} className="relative group overflow-hidden rounded-xl border border-rose/20">
-                <img
-                  src={img.secure_url}
-                  alt={img.original_filename || img.public_id}
-                  className="w-full aspect-square object-cover"
-                  loading="lazy"
-                />
-                <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
-                  <input
-                    type="checkbox"
-                    checked={!!cSel[img.id]}
-                    onChange={() => setCSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+            {cImgs.map((img) => {
+              const status = cDeleting[img.id];
+              return (
+                <figure
+                  key={img.id}
+                  className="relative group overflow-hidden rounded-xl border border-rose/20"
+                  title={img.public_id}
+                >
+                  <img
+                    src={img.secure_url}
+                    alt={img.original_filename || img.public_id}
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
                   />
-                  {img.original_filename || "image"}
-                </label>
-              </figure>
-            ))}
+                  <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
+                    <input
+                      type="checkbox"
+                      checked={!!cSel[img.id]}
+                      onChange={() => setCSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+                      disabled={status === "pending"}
+                    />
+                    {img.original_filename || "image"}
+                  </label>
+                  {status && (
+                    <div
+                      className={cls(
+                        "absolute bottom-2 right-2 text-[11px] rounded-md px-2 py-1 shadow",
+                        status === "pending"
+                          ? "bg-amber-100 text-amber-800"
+                          : status === "ok"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      )}
+                    >
+                      {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
+                    </div>
+                  )}
+                </figure>
+              );
+            })}
           </div>
 
           {!cLoading && client && cImgs.length === 0 && (
