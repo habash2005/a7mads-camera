@@ -13,7 +13,7 @@ export default function Nav() {
             📷
           </div>
           <span className="text-base font-serif font-semibold tracking-tight text-charcoal">
-            Lama Photo NC
+            Lama Wafa
           </span>
         </Link>
 
