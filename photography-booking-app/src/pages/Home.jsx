@@ -1,7 +1,6 @@
 // src/pages/Home.jsx
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-<<<<<<< HEAD
 import { db } from "../lib/firebase";
 import {
   collection,
@@ -11,9 +10,11 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import heroImg from "../_DSC0154.jpg"; // ensure file exists at src/_DSC0154.jpg
+import heroImg from "../_DSC0154.jpg"; // image at: src/_DSC0154.jpg
 
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
+function cls(...xs) {
+  return xs.filter(Boolean).join(" ");
+}
 
 export default function Home() {
   return (
@@ -27,42 +28,31 @@ export default function Home() {
               Book stunning, story-driven photography.
             </h1>
             <p className="mt-4 text-charcoal/70 text-base md:text-lg">
-              Portraits, events, and weddings—crafted with care and delivered fast.
-              Pick a package, choose a time, and lock it in.
+              Portraits, events, and weddings—crafted with care and delivered
+              fast. Pick a package, choose a time, and lock it in.
             </p>
-=======
-import heroImg from "../_DSC0154.jpg"; // ← one level up from pages/
 
-export default function Home() {
-  return (
-    <section className="w-full py-16 md:py-24 bg-ivory">
-      <div className="max-w-7xl mx-auto px-4 grid md:grid-cols-2 gap-8 items-center">
-        {/* Copy */}
-        <div>
-          <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-charcoal">
-            Book stunning, story-driven photography.
-          </h1>
-          <p className="mt-4 text-charcoal/70 text-base md:text-lg">
-            Portraits, events, and weddings—crafted with care and delivered fast. Pick a package, choose a time, and lock it in.
-          </p>
->>>>>>> parent of 7783566 (test)
+            <div className="mt-6 flex gap-3">
+              <Link
+                to="/booking"
+                className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
+              >
+                Start Booking
+              </Link>
+              <Link
+                to="/portfolio"
+                className="px-5 py-3 rounded-full border border-rose/40 text-sm font-semibold text-charcoal hover:bg-blush/50 transition-all"
+              >
+                View Portfolio
+              </Link>
+            </div>
 
-          <div className="mt-6 flex gap-3">
-            <Link
-              to="/booking"
-              className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
-            >
-              Start Booking
-            </Link>
-            <Link
-              to="/portfolio"
-              className="px-5 py-3 rounded-full border border-rose/40 text-sm font-semibold text-charcoal hover:bg-blush/50 transition-all"
-            >
-              View Portfolio
-            </Link>
+            <div className="mt-6 flex items-center gap-2 text-sm text-charcoal/70">
+              <span>★★★★★</span>
+              <span>100+ happy clients</span>
+            </div>
           </div>
 
-<<<<<<< HEAD
           {/* Image / Hero Card */}
           <div className="relative overflow-hidden rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-4 md:p-6">
             <div className="relative w-full overflow-hidden rounded-xl">
@@ -72,7 +62,7 @@ export default function Home() {
                   alt="Lama holding a camera on a wooden bridge"
                   loading="eager"
                   decoding="async"
-                  fetchpriority="high"
+                  fetchPriority="high"
                   draggable="false"
                   className="
                     absolute inset-0 h-full w-full
@@ -84,42 +74,15 @@ export default function Home() {
               </div>
             </div>
             <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-rose/20" />
-=======
-          <div className="mt-6 flex items-center gap-2 text-sm text-charcoal/70">
-            <span>★★★★★</span>
-            <span>100+ happy clients</span>
->>>>>>> parent of 7783566 (test)
           </div>
-        </div>
-
-        {/* Image / Hero Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-4 md:p-6">
-          <div className="relative w-full overflow-hidden rounded-xl">
-            {/* Lock layout; image fills and focuses on the top (face + camera) */}
-            <div className="relative aspect-[4/3] w-full">
-              <img
-                src={heroImg}
-                alt="Lama holding a camera on a wooden bridge"
-                loading="eager"
-                decoding="async"
-                fetchpriority="high"
-                draggable="false"
-                className="
-                  absolute inset-0 h-full w-full
-                  object-cover
-                  [object-position:50%_12%]  md:[object-position:50%_18%]
-                  will-change-transform
-                "
-              />
-            </div>
-          </div>
-          <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-rose/20" />
         </div>
       </div>
+
+      {/* Lazy Portfolio Section (reveals on scroll) */}
+      <PortfolioOnScroll />
     </section>
   );
 }
-<<<<<<< HEAD
 
 /* ----------------- Portfolio On-Scroll ----------------- */
 function PortfolioOnScroll() {
@@ -136,17 +99,16 @@ function PortfolioOnScroll() {
 
     const io = new IntersectionObserver(
       (entries) => {
-        const e = entries[0];
-        if (e.isIntersecting && !ready) setReady(true);
+        if (entries[0]?.isIntersecting) setReady(true);
       },
       { rootMargin: "0px 0px -15% 0px", threshold: 0.15 }
     );
 
     io.observe(el);
     return () => io.disconnect();
-  }, [ready]);
+  }, []);
 
-  // Fetch portfolio images (no collectionGroup)
+  // Fetch portfolio images from the portfolio gallery
   useEffect(() => {
     if (!ready) return;
 
@@ -185,12 +147,15 @@ function PortfolioOnScroll() {
         }
 
         const rows = imgsSnap.docs.map((d) => d.data());
-        rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        rows.sort(
+          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
+        );
         setImgs(rows);
       } catch (e) {
         console.error("[Home portfolio] load failed:", e);
+        const msg = String(e.code || e.message).toLowerCase();
         setErr(
-          String(e.code || e.message).toLowerCase().includes("permission")
+          msg.includes("permission")
             ? "We couldn't load the portfolio (permission denied). If you're the owner, check App Check domain and Firestore rules."
             : "We couldn't load the portfolio right now. Please try again."
         );
@@ -246,7 +211,11 @@ function PortfolioOnScroll() {
                   >
                     <img
                       src={src}
-                      alt={img.original_filename || img.public_id || "Portfolio image"}
+                      alt={
+                        img.original_filename ||
+                        img.public_id ||
+                        "Portfolio image"
+                      }
                       loading="lazy"
                       decoding="async"
                       className="w-full aspect-square object-cover"
@@ -290,5 +259,3 @@ function SkeletonGrid() {
     </div>
   );
 }
-=======
->>>>>>> parent of 7783566 (test)
