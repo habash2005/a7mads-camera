@@ -1,4 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-.glass { background: rgba(255,255,255,0.7); backdrop-filter: blur(8px); }
+
+/* Base element tweaks */
+@layer base {
+  ::selection { @apply bg-[rgba(212,175,55,0.28)] text-[rgb(74,14,26)]; } /* gold on burgundy */
+  a { text-underline-offset: 2px; }
+  a:hover { text-decoration-color: #D4AF37; }
+}
+
+/* Reusable utilities */
+@layer utilities {
+  .glass { @apply bg-white/70 backdrop-blur-md; }
+}

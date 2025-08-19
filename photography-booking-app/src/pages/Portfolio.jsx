@@ -2,15 +2,13 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
-import GalleryGrid from "../components/GalleryGrid";
+import MasonryGrid from "../components/MasonryGrid";
 
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
-const STEP = 48;
+const STEP = 48; // unused now, but keep if you re-add pagination
 
 export default function Portfolio() {
   const [images, setImages] = useState([]); // [{id, src, alt, width, height, filename}]
   const [err, setErr] = useState("");
-  const [vis, setVis] = useState(STEP);
 
   useEffect(() => {
     (async () => {
@@ -33,7 +31,6 @@ export default function Portfolio() {
           height: r.height,
           filename: r.original_filename
         })));
-        setVis(STEP);
       } catch (e) {
         console.error(e);
         setErr("Could not load portfolio images.");
@@ -41,39 +38,38 @@ export default function Portfolio() {
     })();
   }, []);
 
-  const visible = images.slice(0, vis);
-
   return (
-    <section className="w-full py-16 md:py-24 bg-ivory">
-      <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">Portfolio</h2>
-
-        {err && <div className="mt-4 text-red-700 text-sm">{err}</div>}
-
-        <div className="mt-6">
-          {visible.length > 0 ? (
-            <GalleryGrid
-              items={visible}
-              wrapperAspect="1/1"             // <- uniform, sleek squares
-              firstNPriority={8}
-              sizes="(min-width:1280px) 25vw, (min-width:768px) 33vw, 50vw"
-            />
-          ) : !err ? (
-            <div className="text-charcoal/60">No images yet. Upload in <code>/admin</code>.</div>
-          ) : null}
+    <section className="w-full bg-cream">
+      {/* Minimal burgundy band like a clean header */}
+      <div className="bg-gradient-to-b from-burgundy to-maroon">
+        <div className="max-w-7xl mx-auto px-4 py-14 md:py-20">
+          <h1 className="text-3xl md:text-5xl font-serif font-semibold tracking-tight text-white">
+            Portfolio
+          </h1>
+          <p className="mt-2 text-white/70">Recent work, curated.</p>
         </div>
+      </div>
 
-        {images.length > vis && (
-          <div className="mt-6 flex justify-center">
-            <button
-              onClick={() => setVis(n => n + STEP)}
-              className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
-            >
-              Load more ({Math.min(images.length - vis, STEP)}+)
-            </button>
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 md:px-6 py-8 md:py-12">
+        {err && (
+          <div className="mb-6 rounded-md border border-rose/30 bg-rose/5 px-4 py-3 text-rose">
+            {err}
           </div>
         )}
+
+        {/* Full-height, long-scrolling masonry (no "Load more") */}
+        {images.length > 0 ? (
+          <MasonryGrid
+            items={images}
+            className="mx-auto"
+          />
+        ) : !err ? (
+          <div className="text-burgundy/60">No images yet. Upload in <code className="font-mono">/admin</code>.</div>
+        ) : null}
       </div>
+
+      {/* Subtle footer strip in gold for brand accent */}
+      <div className="h-2 bg-gradient-to-r from-gold/40 via-gold/20 to-transparent" />
     </section>
   );
 }
