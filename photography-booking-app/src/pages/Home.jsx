@@ -17,11 +17,10 @@ export default function Home() {
           {/* Copy */}
           <div>
             <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-charcoal">
-              Book stunning, story-driven photography.
+              Hey, I’m Lama, a photographer based in Raleigh, NC.
             </h1>
             <p className="mt-4 text-charcoal/70 text-base md:text-lg">
-              Portraits, events, and weddings—crafted with care and delivered
-              fast. Pick a package, choose a time, and lock it in.
+              I’m also excited to learn your story and capture it in a way that feels real and meaningful.
             </p>
 
             <div className="mt-6 flex gap-3">
@@ -65,7 +64,56 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Lazy Portfolio Section */}
+      {/* My Story */}
+      <div className="py-10 md:py-14 bg-ivory/60">
+        <div className="max-w-3xl mx-auto px-4">
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">My Story</h2>
+          <div className="mt-4 space-y-4 text-charcoal/80 leading-relaxed">
+            <p>
+              My love for photography started with my big brother. He’d take pictures at family gatherings and
+              let me experiment with his camera, always telling me I had an eye for it. What began as a hobby
+              with just the family’s camera grew into a real passion.
+            </p>
+            <p>
+              I love photographing people and events because I want you to enjoy the moment while still having
+              a record of it to look back on. Growing up, I loved flipping through family albums, learning about
+              our stories, and feeling connected through those memories.
+            </p>
+            <p>
+              That’s what I aim to create for my clients: vibrant, warm, and candid images that tell your story
+              and preserve your memories for years to come.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* What to Expect */}
+      <div className="py-10 md:py-14">
+        <div className="max-w-3xl mx-auto px-4">
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">What to Expect</h2>
+          <p className="mt-4 text-charcoal/80 leading-relaxed">
+            I’m organized, detail-oriented, and thoughtful in my approach. My goal is to make every session or
+            event run smoothly so you can feel comfortable and natural, enjoy the experience, and walk away
+            with images you’ll treasure forever.
+          </p>
+          <div className="mt-6 flex gap-3">
+            <Link
+              to="/booking"
+              className="rounded-full px-5 py-3 text-sm font-semibold bg-gold text-charcoal hover:bg-rose hover:text-ivory transition-all shadow-md"
+            >
+              Check Availability
+            </Link>
+            <Link
+              to="/faq"
+              className="px-5 py-3 rounded-full border border-rose/40 text-sm font-semibold text-charcoal hover:bg-blush/50 transition-all"
+            >
+              Read FAQs
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* Lazy Portfolio Section — keep at the bottom */}
       <PortfolioOnScroll />
     </section>
   );
