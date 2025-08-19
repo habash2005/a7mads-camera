@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useEffect, useState, Suspense } from "react";
+import React, { useEffect, useState, Suspense, useMemo } from "react";
 import { auth, db } from "../lib/firebase";
 import {
   collection,
@@ -11,14 +11,13 @@ import {
   limit,
   doc,
   updateDoc,
-  deleteDoc,            // ⬅️ NEW
+  deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
 
 // ✅ STATIC lazy imports so Vite can bundle them:
 const AdminUpload       = React.lazy(() => import("./AdminUpload"));
-// const AdminGallery    = React.lazy(() => import("./AdminGallery")); // hidden for now
-const AdminBookings     = React.lazy(() => import("./AdminBookings")); // (optional page)
+const AdminBookings     = React.lazy(() => import("./AdminBookings")); // optional page
 const AdminMediaManager = React.lazy(() => import("./AdminMediaManager"));
 
 async function safeCount(qy) {
@@ -42,6 +41,14 @@ export default function AdminDashboard() {
   const [upcoming, setUpcoming] = useState({ rows: [], loading: true, error: "" });
   const [loadingStats, setLoadingStats] = useState(true);
 
+  // 🔎 Quick pick list (reference index)
+  const [refIndex, setRefIndex] = useState({ rows: [], loading: true, error: "" });
+  const [refSearch, setRefSearch] = useState("");
+  const [selectedRefForMM, setSelectedRefForMM] = useState("");
+
+  // per-row saving flag for status changes
+  const [savingStatus, setSavingStatus] = useState({}); // id -> true/false
+
   useEffect(() => {
     (async () => {
       setLoadingStats(true);
@@ -58,6 +65,7 @@ export default function AdminDashboard() {
       setLoadingStats(false);
 
       await refreshUpcoming(setUpcoming);
+      await loadRefIndex();
     })();
   }, []);
 
@@ -79,7 +87,72 @@ export default function AdminDashboard() {
     }
   }
 
-  // 🔻 Cancel a booking (admin)
+  // 📇 Build a lightweight reference list (recent bookings)
+  async function loadRefIndex() {
+    setRefIndex((p) => ({ ...p, loading: true, error: "" }));
+    try {
+      const col = collection(db, "bookings");
+      let snap;
+      try {
+        snap = await getDocs(query(col, orderBy("startAt", "desc"), limit(300)));
+      } catch {
+        snap = await getDocs(query(col, orderBy("createdAt", "desc"), limit(300)));
+      }
+      const rows = snap.docs.map((d) => {
+        const data = d.data();
+        const dt = data.startAt?.toDate?.() || null;
+        return {
+          id: d.id,
+          reference: data.reference || "",
+          name: data.details?.name || "",
+          email: data.details?.email || "",
+          status: (data.status || "").toLowerCase(),
+          when: dt
+            ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+            : `${data.date || ""} ${data.time || ""}`.trim(),
+        };
+      });
+      setRefIndex({ rows, loading: false, error: "" });
+    } catch (e) {
+      console.error("loadRefIndex failed:", e);
+      setRefIndex({ rows: [], loading: false, error: "Couldn’t load references." });
+    }
+  }
+
+  // 🔄 Change booking status (pending | confirmed | finished | canceled)
+  async function changeStatus(b, nextStatus) {
+    const id = b.id;
+    const prev = (b.status || "").toLowerCase();
+    const next = String(nextStatus || "").toLowerCase();
+    if (!next || next === prev) return;
+
+    // Optional confirm on destructive change
+    if (next === "canceled" && !window.confirm("Mark this booking as CANCELED?")) return;
+
+    setSavingStatus((m) => ({ ...m, [id]: true }));
+    try {
+      await updateDoc(doc(db, "bookings", id), {
+        status: next,
+        updatedAt: serverTimestamp(),
+        ...(next === "confirmed" ? { confirmedAt: serverTimestamp() } : {}),
+        ...(next === "finished"  ? { finishedAt: serverTimestamp() }  : {}),
+        ...(next === "canceled"  ? { canceledAt: serverTimestamp() }  : {}),
+      });
+
+      // Optimistically update the local row to avoid a full refetch flicker
+      setUpcoming((p) => ({
+        ...p,
+        rows: p.rows.map((r) => (r.id === id ? { ...r, status: next } : r)),
+      }));
+    } catch (e) {
+      console.error("Status update failed:", e);
+      alert("Could not change status. Check Firestore rules/connection.");
+    } finally {
+      setSavingStatus((m) => ({ ...m, [id]: false }));
+    }
+  }
+
+  // 🔻 Cancel (shortcut button keeps working)
   async function cancelBooking(id) {
     const ok = window.confirm("Cancel this appointment? This cannot be undone.");
     if (!ok) return;
@@ -87,17 +160,19 @@ export default function AdminDashboard() {
       await updateDoc(doc(db, "bookings", id), {
         status: "canceled",
         canceledAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
-      setUpcoming((p) => ({ ...p, loading: true }));
-      await refreshUpcoming(setUpcoming);
+      setUpcoming((p) => ({
+        ...p,
+        rows: p.rows.map((r) => (r.id === id ? { ...r, status: "canceled" } : r)),
+      }));
     } catch (e) {
       console.error("Cancel failed:", e);
       alert("Could not cancel. Check Firestore rules/connection.");
-      setUpcoming((p) => ({ ...p, loading: false }));
     }
   }
 
-  // ❌ Permanently delete a canceled booking (admin)
+  // ❌ Permanently delete a canceled booking
   async function deleteBooking(id, status) {
     if ((status || "").toLowerCase() !== "canceled") {
       alert("You can only delete bookings that are already canceled.");
@@ -116,6 +191,16 @@ export default function AdminDashboard() {
       alert("Could not delete. Check Firestore rules/connection.");
     }
   }
+
+  const filteredRefs = useMemo(() => {
+    const q = refSearch.trim().toLowerCase();
+    if (!q) return refIndex.rows;
+    return refIndex.rows.filter((r) =>
+      r.reference.toLowerCase().includes(q) ||
+      r.name.toLowerCase().includes(q) ||
+      r.email.toLowerCase().includes(q)
+    );
+  }, [refSearch, refIndex.rows]);
 
   return (
     <section className="w-full py-10 md:py-14 bg-ivory">
@@ -150,22 +235,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Quick Actions */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <Card title="Quick Actions" className="lg:col-span-12">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Action label="Upload Photos" onClick={() => jumpTo("Upload")} />
-              <Action label="View Upcoming" onClick={() => jumpTo("Upcoming Bookings")} />
-              <Action label="Media Manager" onClick={() => jumpTo("Media Manager")} />
-              <Action label="Go to Portfolio" href="/portfolio" />
-            </div>
-            <p className="text-xs text-charcoal/60 mt-4">
-              Tip: For fastest queries on <code>bookings</code>, add a composite index:
-              <code> status (ASC) </code> + <code> startAt (ASC)</code>.
-            </p>
-          </Card>
-        </div>
-
         {/* Main Grid */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Upload — full width */}
@@ -180,7 +249,7 @@ export default function AdminDashboard() {
             </div>
           </Card>
 
-          {/* Upcoming Bookings — moved UNDER uploads, full width */}
+          {/* Upcoming Bookings — full width */}
           <Card title="Upcoming Bookings" className="lg:col-span-12">
             {upcoming.loading ? (
               <TableSkeleton rows={4} />
@@ -192,13 +261,14 @@ export default function AdminDashboard() {
               <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
                 <div className="overflow-x-auto">
                   <div className="max-h-[28rem] overflow-y-auto">
-                    <table className="w-full text-sm min-w-[760px]">
+                    <table className="w-full text-sm min-w-[880px]">
                       <thead className="bg-rose-50 text-charcoal/80 sticky top-0 z-10">
                         <tr>
                           <Th>When</Th>
                           <Th>Client</Th>
                           <Th>Package</Th>
                           <Th>Ref</Th>
+                          <Th className="w-64">Status</Th>
                           <Th className="w-40">Actions</Th>
                         </tr>
                       </thead>
@@ -208,9 +278,9 @@ export default function AdminDashboard() {
                           const when = dt
                             ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
                             : `${b.date} ${b.time}`;
-                          const isPast = dt ? dt.getTime() < Date.now() : false;
                           const status = (b.status || "").toLowerCase();
                           const isCanceled = status === "canceled";
+                          const saving = !!savingStatus[b.id];
 
                           return (
                             <tr key={b.id} className="border-t border-slate-100">
@@ -226,7 +296,6 @@ export default function AdminDashboard() {
                                 <div className="text-slate-500">{b.details?.email}</div>
                                 <div className="text-slate-500">{b.details?.phone}</div>
 
-                                {/* Creative brief preview */}
                                 {b.details?.shootFor && (
                                   <div className="text-xs text-slate-600 mt-1">
                                     <span className="font-medium">Shoot:</span> {b.details.shootFor}
@@ -255,6 +324,31 @@ export default function AdminDashboard() {
                                 </div>
                               </Td>
                               <Td className="font-mono">{b.reference}</Td>
+
+                              {/* Status column with pill + selector */}
+                              <Td>
+                                <div className="flex items-center gap-3">
+                                  <StatusPill status={status} />
+                                  <select
+                                    value={status || "pending"}
+                                    disabled={saving || isCanceled}
+                                    onChange={(e) => changeStatus(b, e.target.value)}
+                                    className={cls(
+                                      "rounded-full border border-rose/30 bg-white px-3 py-1.5 text-xs",
+                                      saving ? "opacity-60 cursor-wait" : ""
+                                    )}
+                                    title={isCanceled ? "This booking is canceled" : "Change status"}
+                                  >
+                                    <option value="pending">Pending</option>
+                                    <option value="confirmed">Confirmed</option>
+                                    <option value="finished">Finished</option>
+                                    <option value="canceled">Canceled</option>
+                                  </select>
+                                  {saving && <span className="text-xs text-slate-500">Saving…</span>}
+                                </div>
+                              </Td>
+
+                              {/* Actions */}
                               <Td>
                                 {isCanceled ? (
                                   <div className="flex items-center gap-2">
@@ -271,8 +365,7 @@ export default function AdminDashboard() {
                                   <button
                                     className="rounded-full px-3 py-2 text-xs font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all"
                                     onClick={() => cancelBooking(b.id)}
-                                    disabled={isPast}
-                                    title={isPast ? "This time has already passed" : "Cancel appointment"}
+                                    title="Cancel appointment"
                                   >
                                     Cancel
                                   </button>
@@ -289,16 +382,92 @@ export default function AdminDashboard() {
             )}
           </Card>
 
+          {/* 🔎 Client Galleries Quick Pick — UNDER Upcoming Bookings */}
+          <Card title="Client Galleries Quick Pick" className="lg:col-span-12">
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <input
+                value={refSearch}
+                onChange={(e) => setRefSearch(e.target.value)}
+                placeholder="Search by reference, name, or email…"
+                className="rounded-xl border border-rose/30 px-3 py-2 text-sm bg-white w-full md:w-96"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadRefIndex}
+                  disabled={refIndex.loading}
+                  className={cls(
+                    "rounded-full px-4 py-2 text-sm font-semibold",
+                    refIndex.loading ? "bg-blush text-charcoal/50" : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                  )}
+                >
+                  {refIndex.loading ? "Refreshing…" : "Refresh List"}
+                </button>
+                <span className="text-xs text-charcoal/60">
+                  {refIndex.rows.length} loaded
+                </span>
+              </div>
+            </div>
+
+            {refIndex.error && <div className="mt-3 text-sm text-rose-700">{refIndex.error}</div>}
+
+            <div className="mt-3 rounded-2xl border border-rose/30 bg-white overflow-hidden">
+              <div className="max-h-[24rem] overflow-y-auto">
+                <table className="w-full text-sm min-w-[760px]">
+                  <thead className="bg-rose-50 text-charcoal/80 sticky top-0 z-10">
+                    <tr>
+                      <Th className="w-32">Ref</Th>
+                      <Th>Name / Email</Th>
+                      <Th className="w-56">When</Th>
+                      <Th className="w-28">Status</Th>
+                      <Th className="w-40">Open</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRefs.map((r) => (
+                      <tr key={r.id} className="border-t border-slate-100">
+                        <Td className="font-mono">{r.reference}</Td>
+                        <Td>
+                          <div className="font-medium">{r.name || "Client"}</div>
+                          <div className="text-slate-500">{r.email}</div>
+                        </Td>
+                        <Td>{r.when || "—"}</Td>
+                        <Td>
+                          <StatusPill status={r.status} />
+                        </Td>
+                        <Td>
+                          <button
+                            className="rounded-full px-3 py-2 text-xs font-semibold bg-gold text-charcoal hover:bg-rose hover:text-ivory transition-all"
+                            onClick={() => {
+                              setSelectedRefForMM(r.reference);
+                              jumpTo("Media Manager");
+                            }}
+                          >
+                            Open in Media Manager
+                          </button>
+                        </Td>
+                      </tr>
+                    ))}
+                    {!refIndex.loading && filteredRefs.length === 0 && (
+                      <tr>
+                        <Td colSpan={5} className="text-charcoal/60">
+                          No matches.
+                        </Td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </Card>
+
           {/* Media Manager — full width */}
           <Card title="Media Manager" className="lg:col-span-12">
             <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
-                <AdminMediaManager />
+                <AdminMediaManager selectedRef={selectedRefForMM} />
               </Suspense>
             </div>
           </Card>
-
-          {/* (Galleries section still hidden from UI) */}
 
           {/* Notes */}
           <Card title="Notes" className="lg:col-span-12">
@@ -315,6 +484,15 @@ export default function AdminDashboard() {
 }
 
 /* ---------- UI bits ---------- */
+function StatusPill({ status }) {
+  const s = (status || "").toLowerCase();
+  const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
+  if (s === "confirmed") return <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>Confirmed</span>;
+  if (s === "finished")  return <span className={cls(base, "bg-slate-100 text-slate-800 ring-slate-200")}>Finished</span>;
+  if (s === "canceled")  return <span className={cls(base, "bg-rose-50 text-rose-800 ring-rose-200")}>Canceled</span>;
+  return <span className={cls(base, "bg-amber-50 text-amber-800 ring-amber-200")}>Pending</span>;
+}
+
 function StatCard({ label, value, accent }) {
   const ring = accent === "rose" ? "ring-rose/30" : accent === "gold" ? "ring-gold/30" : "ring-slate-200";
   return (
@@ -343,8 +521,8 @@ function Card({ title, className, children }) {
 function Th({ children, className }) {
   return <th className={cls("text-left px-4 py-3", className)}>{children}</th>;
 }
-function Td({ children, className }) {
-  return <td className={cls("px-4 py-3 align-top", className)}>{children}</td>;
+function Td({ children, className, colSpan }) {
+  return <td colSpan={colSpan} className={cls("px-4 py-3 align-top", className)}>{children}</td>;
 }
 function TableSkeleton({ rows = 4 }) {
   return (

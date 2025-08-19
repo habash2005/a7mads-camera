@@ -15,7 +15,7 @@ import { getStorage, ref as sref, getBlob } from "firebase/storage";
 
 const storage = getStorage();
 
-// ---------- helpers ----------
+/* ---------- helpers ---------- */
 function cls(...xs) {
   return xs.filter(Boolean).join(" ");
 }
@@ -40,7 +40,6 @@ function storagePathOf(img) {
   const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
   return m ? decodeURIComponent(m[1]) : (img.public_id || null); // our uploader saves public_id == storage path
 }
-
 function parseRefFromUrl() {
   try {
     // supports both hash and normal routers
@@ -53,7 +52,21 @@ function parseRefFromUrl() {
   }
 }
 
-// ---------- component ----------
+/* ---------- small UI bits ---------- */
+function StatusPill({ status }) {
+  const s = (status || "").toLowerCase();
+  const base =
+    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
+  if (s === "confirmed")
+    return <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>Confirmed</span>;
+  if (s === "finished")
+    return <span className={cls(base, "bg-slate-100 text-slate-800 ring-slate-200")}>Finished</span>;
+  if (s === "canceled")
+    return <span className={cls(base, "bg-rose-50 text-rose-800 ring-rose-200")}>Canceled</span>;
+  return <span className={cls(base, "bg-amber-50 text-amber-800 ring-amber-200")}>Pending</span>;
+}
+
+/* ---------- component ---------- */
 export default function ClientPortal() {
   const [refInput, setRefInput] = useState("");
   const [booking, setBooking] = useState(null);
@@ -198,6 +211,13 @@ export default function ClientPortal() {
   }
 
   const clientName = useMemo(() => booking?.details?.name || "Client", [booking]);
+  const whenText = useMemo(() => {
+    if (!booking) return "";
+    const dt = booking.startAt?.toDate?.();
+    return dt
+      ? dt.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : `${booking.date || ""} ${booking.time || ""}`.trim();
+  }, [booking]);
 
   return (
     <section className="w-full py-16 md:py-24 bg-ivory">
@@ -251,54 +271,21 @@ export default function ClientPortal() {
         {/* Step 2: Portal */}
         {booking && (
           <div className="mt-8">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+            {/* Header w/ status */}
+            <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h3 className="font-serif text-xl text-charcoal">
                   Welcome, {clientName}
                 </h3>
-                <div className="text-xs text-charcoal/60">
+                <div className="mt-1 text-xs text-charcoal/60">
                   Ref: <code className="font-mono">{booking.reference}</code> •{" "}
-                  {booking.package?.name} •{" "}
-                  {booking.startAt?.toDate?.()
-                    ? booking.startAt.toDate().toLocaleString([], {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })
-                    : `${booking.date} ${booking.time}`}
+                  {booking.package?.name || "Package"}{" "}
+                  {booking.package?.duration ? `• ${booking.package.duration}` : ""}{" "}
+                  {whenText ? `• ${whenText}` : ""}
                 </div>
-
-                {/* Optional: show creative brief */}
-                {(booking.details?.shootFor ||
-                  booking.details?.style ||
-                  booking.details?.locationNotes ||
-                  booking.details?.notes) && (
-                  <div className="mt-2 text-xs text-charcoal/70 space-y-1">
-                    {booking.details?.shootFor && (
-                      <div>
-                        <span className="font-medium">Shoot:</span>{" "}
-                        {booking.details.shootFor}
-                      </div>
-                    )}
-                    {booking.details?.style && (
-                      <div>
-                        <span className="font-medium">Style:</span>{" "}
-                        {booking.details.style}
-                      </div>
-                    )}
-                    {booking.details?.locationNotes && (
-                      <div>
-                        <span className="font-medium">Location notes:</span>{" "}
-                        {booking.details.locationNotes}
-                      </div>
-                    )}
-                    {booking.details?.notes && (
-                      <div>
-                        <span className="font-medium">Notes:</span>{" "}
-                        {booking.details.notes}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div className="mt-2">
+                  <StatusPill status={booking.status} />
+                </div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -340,6 +327,7 @@ export default function ClientPortal() {
               </div>
             </div>
 
+            {/* Images */}
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                 {images.map((img) => {

@@ -1,30 +1,32 @@
-// src/pages/AdminMediaManager.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
 import {
-  collection, getDocs, orderBy, query, where, limit, doc, deleteDoc
+  collection,
+  getDocs,
+  orderBy,
+  query,
+  where,
+  limit,
+  doc,
+  deleteDoc,
 } from "firebase/firestore";
 import { ref as sRef, deleteObject } from "firebase/storage";
-import SmartImg from "../components/SmartImg";
 
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const CONCURRENCY = 5;
-const STEP = 48; // windowing batch size
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
-/** Resolve the Storage object path we saved when uploading. */
 function storagePathOf(img) {
   if (img.public_id || img.path || img.storagePath || img.fullPath) {
     return img.public_id || img.path || img.storagePath || img.fullPath;
   }
-  const url = String(img.secure_url || "");
-  const m = url.match(/\/o\/([^?]+)/);
+  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-export default function AdminMediaManager() {
+export default function AdminMediaManager({ selectedRef = "" }) {
   const [me, setMe] = useState(null);
   const notAdmin = !me || me.email !== ADMIN_EMAIL;
 
@@ -37,17 +39,15 @@ export default function AdminMediaManager() {
   const [pLoading, setPLoading] = useState(false);
   const [pMsg, setPMsg] = useState("");
   const [pDeleting, setPDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
-  const [pVis, setPVis] = useState(STEP);
 
   // ---- Client state ----
   const [refCode, setRefCode] = useState("");
-  const [client, setClient] = useState(null); // {id, reference, details...}
+  const [client, setClient] = useState(null);
   const [cImgs, setCImgs] = useState([]);
   const [cSel, setCSel] = useState({});
   const [cLoading, setCLoading] = useState(false);
   const [cMsg, setCMsg] = useState("");
   const [cDeleting, setCDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
-  const [cVis, setCVis] = useState(STEP);
 
   /* auth */
   useEffect(() => {
@@ -62,7 +62,6 @@ export default function AdminMediaManager() {
     setPImgs([]);
     setPSel({});
     setPDeleting({});
-    setPVis(STEP);
     try {
       const galSnap = await getDocs(
         query(collection(db, "galleries"), where("tag", "==", "portfolio"), limit(1))
@@ -103,10 +102,10 @@ export default function AdminMediaManager() {
     }
   }
 
-  /* load client gallery by ref code */
-  async function loadClientByRef() {
-    const code = refCode.trim().toUpperCase();
-    if (!code) return;
+  /* load client gallery by explicit code */
+  async function loadClientByRefWithCode(code) {
+    const ref = String(code || "").trim().toUpperCase();
+    if (!ref) return;
 
     setCMsg("");
     setCLoading(true);
@@ -114,10 +113,9 @@ export default function AdminMediaManager() {
     setCImgs([]);
     setCSel({});
     setCDeleting({});
-    setCVis(STEP);
     try {
       const bSnap = await getDocs(
-        query(collection(db, "bookings"), where("reference", "==", code), limit(1))
+        query(collection(db, "bookings"), where("reference", "==", ref), limit(1))
       );
       if (bSnap.empty) {
         setCMsg("No booking found for that reference.");
@@ -154,6 +152,22 @@ export default function AdminMediaManager() {
     }
   }
 
+  /* legacy button handler (uses input field) */
+  async function loadClientByRef() {
+    await loadClientByRefWithCode(refCode);
+  }
+
+  // 👂 react to external quick-pick (from AdminDashboard)
+  useEffect(() => {
+    const ext = String(selectedRef || "").trim().toUpperCase();
+    if (!ext) return;
+    // Switch to client tab, set field, and load
+    setTab("client");
+    setRefCode(ext);
+    loadClientByRefWithCode(ext);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedRef]);
+
   /* selection helpers */
   const pCount = useMemo(() => Object.values(pSel).filter(Boolean).length, [pSel]);
   const cCount = useMemo(() => Object.values(cSel).filter(Boolean).length, [cSel]);
@@ -173,6 +187,7 @@ export default function AdminMediaManager() {
   /** delete one image (Storage tolerant + Firestore doc) */
   async function deleteOne({ img, kind, galleryId, bookingId }) {
     const path = storagePathOf(img);
+
     const setMap = kind === "p" ? setPDeleting : setCDeleting;
     setMap((m) => ({ ...m, [img.id]: "pending" }));
 
@@ -243,10 +258,12 @@ export default function AdminMediaManager() {
       failed += results.filter((r) => !r.ok).length;
     }
 
-    alert(`Deleted ${deleted}${failed ? ` — ${failed} failed` : " — done!"}`);
+    alert(
+      `Deleted ${deleted}${failed ? ` — ${failed} failed${notAdmin ? " (not admin?)" : ""}` : " — done!"}`
+    );
 
     if (type === "p") await loadPortfolio();
-    else await loadClientByRef();
+    else await loadClientByRefWithCode(client?.reference || refCode);
   }
 
   return (
@@ -329,7 +346,7 @@ export default function AdminMediaManager() {
           {pMsg && <div className="mt-3 text-sm text-rose-700">{pMsg}</div>}
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {pImgs.slice(0, pVis).map((img) => {
+            {pImgs.map((img) => {
               const status = pDeleting[img.id];
               return (
                 <figure
@@ -337,13 +354,11 @@ export default function AdminMediaManager() {
                   className="relative group overflow-hidden rounded-xl border border-rose/20"
                   title={img.public_id}
                 >
-                  <SmartImg
+                  <img
                     src={img.secure_url}
                     alt={img.original_filename || img.public_id}
-                    width={img.width}
-                    height={img.height}
-                    className="w-full aspect-square"
-                    imgClassName="w-full h-full object-cover"
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
                   />
                   <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
                     <input
@@ -372,17 +387,6 @@ export default function AdminMediaManager() {
               );
             })}
           </div>
-
-          {pImgs.length > pVis && (
-            <div className="mt-3 flex justify-center">
-              <button
-                onClick={() => setPVis((n) => n + STEP)}
-                className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-              >
-                Load more ({Math.min(pImgs.length - pVis, STEP)}+)
-              </button>
-            </div>
-          )}
 
           {!pLoading && pImgs.length === 0 && (
             <div className="mt-3 text-sm text-charcoal/60">No images.</div>
@@ -448,7 +452,7 @@ export default function AdminMediaManager() {
           {cMsg && <div className="mt-3 text-sm text-rose-700">{cMsg}</div>}
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {cImgs.slice(0, cVis).map((img) => {
+            {cImgs.map((img) => {
               const status = cDeleting[img.id];
               return (
                 <figure
@@ -456,13 +460,11 @@ export default function AdminMediaManager() {
                   className="relative group overflow-hidden rounded-xl border border-rose/20"
                   title={img.public_id}
                 >
-                  <SmartImg
+                  <img
                     src={img.secure_url}
                     alt={img.original_filename || img.public_id}
-                    width={img.width}
-                    height={img.height}
-                    className="w-full aspect-square"
-                    imgClassName="w-full h-full object-cover"
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
                   />
                   <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
                     <input
@@ -491,17 +493,6 @@ export default function AdminMediaManager() {
               );
             })}
           </div>
-
-          {cImgs.length > cVis && (
-            <div className="mt-3 flex justify-center">
-              <button
-                onClick={() => setCVis((n) => n + STEP)}
-                className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-              >
-                Load more ({Math.min(cImgs.length - cVis, STEP)}+)
-              </button>
-            </div>
-          )}
 
           {!cLoading && client && cImgs.length === 0 && (
             <div className="mt-3 text-sm text-charcoal/60">No images for this client.</div>
