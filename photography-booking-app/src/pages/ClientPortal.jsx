@@ -13,12 +13,13 @@ const storage = getStorage();
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 function upRef(s = "") { return String(s).trim().toUpperCase(); }
 function fileNameFrom(img) {
-  const base =
+  const rawBase =
     img.original_filename ||
     (img.public_id && img.public_id.split("/").pop()) ||
     (img.secure_url &&
       (decodeURIComponent((img.secure_url.match(/\/o\/([^?]+)/)?.[1] || "")).split("/").pop())) ||
     "image";
+  const base = rawBase.replace(/\.(jpe?g|png|webp|heic|heif|gif|tiff?)$/i, "");
   const ext =
     (img.format && String(img.format).toLowerCase()) ||
     (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
@@ -55,38 +56,69 @@ function StatusPill({ status }) {
 }
 
 /* ----------------- SelectableGallery ----------------- */
-function SelectableGallery({ items, selected, onToggle, layout = "square" }) {
+function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
   if (layout === "masonry") {
     return (
-      <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+      <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-5">
         {items.map((img) => (
           <figure
             key={img.public_id}
-            className="mb-4 break-inside-avoid rounded-2xl border border-burgundy/15 bg-white/70 backdrop-blur-sm overflow-hidden shadow-sm hover:shadow-lg transition-shadow relative group"
+            className="group relative mb-5 break-inside-avoid overflow-hidden rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-burgundy/10 transition-shadow hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
             title={img.original_filename || img.public_id}
           >
             <img
               src={img.secure_url}
               alt={img.original_filename || img.public_id}
               loading="lazy"
-              className="w-full h-auto object-cover transition-transform duration-200 group-hover:scale-[1.01]"
+              className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
             />
-            <SelectOverlay
-              checked={!!selected[img.public_id]}
-              onChange={() => onToggle(img.public_id)}
-            />
+
+            {/* soft top gradient for control legibility */}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            {/* Select bubble */}
+            <label className="absolute top-2 left-2 inline-flex items-center">
+              <input
+                type="checkbox"
+                checked={!!selected[img.public_id]}
+                onChange={() => onToggle(img.public_id)}
+                className="sr-only"
+              />
+              <span
+                className={cls(
+                  "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
+                  selected[img.public_id]
+                    ? "bg-wine text-white ring-gold"
+                    : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
+                )}
+                aria-hidden
+              >
+                {selected[img.public_id] ? "✓" : "+"}
+              </span>
+            </label>
+
+            {/* 'Original' link */}
+            <a
+              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+              href={img.secure_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Original
+            </a>
           </figure>
         ))}
       </div>
     );
   }
 
+  // fallback: uniform squares
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {items.map((img) => (
         <figure
           key={img.public_id}
-          className="relative overflow-hidden rounded-2xl border border-burgundy/15 bg-white/70 backdrop-blur-sm shadow-sm hover:shadow-lg transition-shadow group"
+          className="group relative overflow-hidden rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-burgundy/10 transition-shadow hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
           title={img.original_filename || img.public_id}
         >
           <div className="aspect-square w-full">
@@ -94,54 +126,40 @@ function SelectableGallery({ items, selected, onToggle, layout = "square" }) {
               src={img.secure_url}
               alt={img.original_filename || img.public_id}
               loading="lazy"
-              className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.01]"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
             />
           </div>
-          <SelectOverlay
-            checked={!!selected[img.public_id]}
-            onChange={() => onToggle(img.public_id)}
-          />
+
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <label className="absolute top-2 left-2 inline-flex items-center">
+            <input
+              type="checkbox"
+              checked={!!selected[img.public_id]}
+              onChange={() => onToggle(img.public_id)}
+              className="sr-only"
+            />
+            <span
+              className={cls(
+                "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
+                selected[img.public_id]
+                  ? "bg-wine text-white ring-gold"
+                  : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
+              )}
+            >
+              {selected[img.public_id] ? "✓" : "+"}
+            </span>
+          </label>
+          <a
+            className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+            href={img.secure_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Original
+          </a>
         </figure>
       ))}
     </div>
-  );
-}
-
-function SelectOverlay({ checked, onChange }) {
-  return (
-    <>
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-      <label className="absolute top-2 left-2 inline-flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onChange}
-          className="peer sr-only"
-        />
-        <span
-          className={cls(
-            "grid place-items-center w-7 h-7 rounded-full text-[12px] font-bold shadow-soft transition-colors",
-            checked
-              ? "bg-wine text-white ring-2 ring-gold"
-              : "bg-white/90 text-charcoal ring-1 ring-burgundy/20 hover:bg-gold/20"
-          )}
-        >
-          {checked ? "✓" : "+"}
-        </span>
-      </label>
-      <a
-        className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
-        href="#"
-        onClick={(e) => {
-          e.preventDefault();
-          const fig = e.currentTarget.closest("figure");
-          const img = fig?.querySelector("img");
-          if (img?.src) window.open(img.src, "_blank", "noopener,noreferrer");
-        }}
-      >
-        Original
-      </a>
-    </>
   );
 }
 
@@ -171,9 +189,7 @@ export default function ClientPortal() {
     const urlRef = parseRefFromUrl();
     const saved = localStorage.getItem("clientRef") || "";
     const initial = upRef(urlRef || saved);
-    if (initial) {
-      loginWithRef(initial);
-    }
+    if (initial) loginWithRef(initial);
   }, []);
 
   async function loginWithRef(rawRef) {
@@ -226,6 +242,7 @@ export default function ClientPortal() {
     setZipProgress(0);
   }
 
+  // Client-side zipping via Firebase Storage + JSZip
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -285,9 +302,7 @@ export default function ClientPortal() {
     <section className="w-full py-16 md:py-24 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
-            Client Portal
-          </h2>
+          <h2 className="text-2xl md:3xl font-serif font-semibold text-burgundy">Client Portal</h2>
           {booking && (
             <button
               onClick={signOut}
@@ -340,9 +355,7 @@ export default function ClientPortal() {
                   {booking.package?.duration ? `• ${booking.package.duration}` : ""}{" "}
                   {whenText ? `• ${whenText}` : ""}
                 </div>
-                <div className="mt-2">
-                  <StatusPill status={booking.status} />
-                </div>
+                <div className="mt-2"><StatusPill status={booking.status} /></div>
               </div>
 
               <div className="flex items-center gap-3">
@@ -361,9 +374,7 @@ export default function ClientPortal() {
                   disabled={!someChecked || zipping}
                   className={cls(
                     "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    !someChecked || zipping
-                      ? "bg-burgundy/10 text-charcoal/50"
-                      : "bg-wine text-white hover:bg-maroon"
+                    !someChecked || zipping ? "bg-burgundy/10 text-charcoal/50" : "bg-wine text-white hover:bg-maroon"
                   )}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
@@ -374,9 +385,7 @@ export default function ClientPortal() {
                   disabled={!images.length || zipping}
                   className={cls(
                     "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    !images.length || zipping
-                      ? "bg-burgundy/10 text-charcoal/50"
-                      : "bg-gold text-charcoal hover:bg-wine hover:text-white"
+                    !images.length || zipping ? "bg-burgundy/10 text-charcoal/50" : "bg-gold text-charcoal hover:bg-wine hover:text-white"
                   )}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
@@ -386,17 +395,14 @@ export default function ClientPortal() {
 
             {zipping && (
               <div className="mt-3 h-2 w-full bg-burgundy/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gold transition-all"
-                  style={{ width: `${zipProgress}%` }}
-                />
+                <div className="h-full bg-gold transition-all" style={{ width: `${zipProgress}%` }} />
               </div>
             )}
 
             {images.length > 0 ? (
               <div className="mt-6">
                 <SelectableGallery
-                  layout="square"
+                  layout="masonry"   // 👈 Lens-style masonry
                   items={images}
                   selected={selected}
                   onToggle={toggleOne}

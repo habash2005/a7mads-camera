@@ -1,4 +1,3 @@
-// src/pages/ClientGallery.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
@@ -8,11 +7,13 @@ import { saveAs } from "file-saver";
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
+/* ---------- shared helpers ---------- */
 function fileNameFrom(img) {
-  const base =
+  const rawBase =
     img.original_filename ||
     (img.public_id && img.public_id.split("/").pop()) ||
     "image";
+  const base = rawBase.replace(/\.(jpe?g|png|webp|heic|heif|gif|tiff?)$/i, "");
   const ext =
     (img.format && String(img.format).toLowerCase()) ||
     (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
@@ -20,16 +21,117 @@ function fileNameFrom(img) {
   return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
 }
 
+/* ----------------- SelectableGallery (same look) ----------------- */
+function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
+  if (layout === "masonry") {
+    return (
+      <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-5">
+        {items.map((img) => (
+          <figure
+            key={img.public_id}
+            className="group relative mb-5 break-inside-avoid overflow-hidden rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-burgundy/10 transition-shadow hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
+            title={img.original_filename || img.public_id}
+          >
+            <img
+              src={img.secure_url}
+              alt={img.original_filename || img.public_id}
+              loading="lazy"
+              className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+            />
+
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+            <label className="absolute top-2 left-2 inline-flex items-center">
+              <input
+                type="checkbox"
+                checked={!!selected[img.public_id]}
+                onChange={() => onToggle(img.public_id)}
+                className="sr-only"
+              />
+              <span
+                className={cls(
+                  "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
+                  selected[img.public_id]
+                    ? "bg-wine text-white ring-gold"
+                    : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
+                )}
+              >
+                {selected[img.public_id] ? "✓" : "+"}
+              </span>
+            </label>
+
+            <a
+              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+              href={img.secure_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Original
+            </a>
+          </figure>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      {items.map((img) => (
+        <figure
+          key={img.public_id}
+          className="group relative overflow-hidden rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-burgundy/10 transition-shadow hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
+          title={img.original_filename || img.public_id}
+        >
+          <div className="aspect-square w-full">
+            <img
+              src={img.secure_url}
+              alt={img.original_filename || img.public_id}
+              loading="lazy"
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+            />
+          </div>
+
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <label className="absolute top-2 left-2 inline-flex items-center">
+            <input
+              type="checkbox"
+              checked={!!selected[img.public_id]}
+              onChange={() => onToggle(img.public_id)}
+              className="sr-only"
+            />
+            <span
+              className={cls(
+                "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
+                selected[img.public_id]
+                  ? "bg-wine text-white ring-gold"
+                  : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
+              )}
+            >
+              {selected[img.public_id] ? "✓" : "+"}
+            </span>
+          </label>
+          <a
+            className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+            href={img.secure_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Original
+          </a>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
 export default function ClientGallery() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // booking + images (new schema)
-  const [booking, setBooking] = useState(null); // { id, reference, details, ... }
+  const [booking, setBooking] = useState(null);
   const [images, setImages] = useState([]);
 
-  // selection + zip state
   const [selected, setSelected] = useState({});
   const someChecked = images.some((img) => !!selected[img.public_id]);
   const allChecked  = images.length > 0 && images.every((img) => !!selected[img.public_id]);
@@ -58,7 +160,6 @@ export default function ClientGallery() {
         return;
       }
 
-      // 🔎 Find the booking by reference
       const qy = query(collection(db, "bookings"), where("reference", "==", refCode), limit(1));
       const snap = await getDocs(qy);
       if (snap.empty) {
@@ -71,13 +172,11 @@ export default function ClientGallery() {
       const bookingObj = { id: doc.id, ...data };
       setBooking(bookingObj);
 
-      // 📸 Load the images from bookings/{id}/images
       const imgsSnap = await getDocs(collection(db, `bookings/${doc.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
-      // default: pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -99,7 +198,7 @@ export default function ClientGallery() {
     setErr("");
   }
 
-  // ⚡ Zip using the saved signed URLs (no Storage SDK reads)
+  // Zip using saved signed URLs
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -129,12 +228,12 @@ export default function ClientGallery() {
         const blob = await res.blob();
 
         zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-        setZipProgress(Math.round(((i + 1) / files.length) * 80)); // 0–80% while fetching
+        setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
 
       const zipBlob = await zip.generateAsync(
         { type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } },
-        (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2)) // 80–100% while packaging
+        (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2))
       );
 
       saveAs(zipBlob, outName || "gallery.zip");
@@ -227,9 +326,7 @@ export default function ClientGallery() {
                   disabled={!someChecked || zipping}
                   className={cls(
                     "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    !someChecked || zipping
-                      ? "bg-burgundy/10 text-charcoal/50"
-                      : "bg-wine text-white hover:bg-maroon"
+                    !someChecked || zipping ? "bg-burgundy/10 text-charcoal/50" : "bg-wine text-white hover:bg-maroon"
                   )}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
@@ -240,9 +337,7 @@ export default function ClientGallery() {
                   disabled={!images.length || zipping}
                   className={cls(
                     "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    !images.length || zipping
-                      ? "bg-burgundy/10 text-charcoal/50"
-                      : "bg-gold text-charcoal hover:bg-wine hover:text-white"
+                    !images.length || zipping ? "bg-burgundy/10 text-charcoal/50" : "bg-gold text-charcoal hover:bg-wine hover:text-white"
                   )}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
@@ -254,7 +349,6 @@ export default function ClientGallery() {
               </div>
             </div>
 
-            {/* Optional progress bar while zipping */}
             {zipping && (
               <div className="mt-3 h-2 w-full bg-burgundy/10 rounded-full overflow-hidden">
                 <div className="h-full bg-gold transition-all" style={{ width: `${zipProgress}%` }} />
@@ -262,44 +356,13 @@ export default function ClientGallery() {
             )}
 
             {images.length > 0 ? (
-              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {images.map((img) => {
-                  const previewSrc = img.secure_url;
-                  return (
-                    <figure
-                      key={img.public_id}
-                      className="relative overflow-hidden rounded-xl border border-burgundy/15 bg-white/70 backdrop-blur-sm shadow-sm hover:shadow-lg transition-shadow"
-                    >
-                      <img
-                        src={previewSrc}
-                        alt={img.original_filename || img.public_id}
-                        loading="lazy"
-                        className="w-full aspect-square object-cover transition-transform duration-200 hover:scale-[1.01]"
-                      />
-
-                      {/* Bottom bar — matches portfolio card chrome */}
-                      <figcaption className="flex items-center justify-between px-3 py-2 text-xs bg-cream/80">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!selected[img.public_id]}
-                            onChange={() => toggleOne(img.public_id)}
-                          />
-                          <span className="truncate max-w-[10rem]">{fileNameFrom(img)}</span>
-                        </label>
-                        <a
-                          className="underline text-burgundy hover:text-gold transition-colors"
-                          href={img.secure_url}
-                          title="Download original"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Original
-                        </a>
-                      </figcaption>
-                    </figure>
-                  );
-                })}
+              <div className="mt-6">
+                <SelectableGallery
+                  layout="masonry"   // 👈 Lens-style masonry
+                  items={images}
+                  selected={selected}
+                  onToggle={(pid) => setSelected((s) => ({ ...s, [pid]: !s[pid] }))}
+                />
               </div>
             ) : (
               <div className="mt-6 text-charcoal/60">No images yet for this gallery.</div>
