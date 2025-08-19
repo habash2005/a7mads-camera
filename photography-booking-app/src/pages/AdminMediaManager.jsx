@@ -1,33 +1,25 @@
 // src/pages/AdminMediaManager.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
 import {
-  collection,
-  getDocs,
-  orderBy,
-  query,
-  where,
-  limit,
-  doc,
-  deleteDoc,
+  collection, getDocs, orderBy, query, where, limit, doc, deleteDoc
 } from "firebase/firestore";
 import { ref as sRef, deleteObject } from "firebase/storage";
+import SmartImg from "../components/SmartImg";
 
 const ADMIN_EMAIL = "lamawafa13@gmail.com";
 const CONCURRENCY = 5;
+const STEP = 48; // windowing batch size
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 /** Resolve the Storage object path we saved when uploading. */
 function storagePathOf(img) {
-  // Prefer explicit fields we wrote on upload
   if (img.public_id || img.path || img.storagePath || img.fullPath) {
     return img.public_id || img.path || img.storagePath || img.fullPath;
   }
-  // Derive from various download URL shapes
   const url = String(img.secure_url || "");
-  // Works for both *.firebasestorage.app and firebasestorage.googleapis.com
   const m = url.match(/\/o\/([^?]+)/);
   return m ? decodeURIComponent(m[1]) : null;
 }
@@ -45,6 +37,7 @@ export default function AdminMediaManager() {
   const [pLoading, setPLoading] = useState(false);
   const [pMsg, setPMsg] = useState("");
   const [pDeleting, setPDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
+  const [pVis, setPVis] = useState(STEP);
 
   // ---- Client state ----
   const [refCode, setRefCode] = useState("");
@@ -54,6 +47,7 @@ export default function AdminMediaManager() {
   const [cLoading, setCLoading] = useState(false);
   const [cMsg, setCMsg] = useState("");
   const [cDeleting, setCDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
+  const [cVis, setCVis] = useState(STEP);
 
   /* auth */
   useEffect(() => {
@@ -68,8 +62,8 @@ export default function AdminMediaManager() {
     setPImgs([]);
     setPSel({});
     setPDeleting({});
+    setPVis(STEP);
     try {
-      // find portfolio gallery
       const galSnap = await getDocs(
         query(collection(db, "galleries"), where("tag", "==", "portfolio"), limit(1))
       );
@@ -81,7 +75,6 @@ export default function AdminMediaManager() {
       const gid = galSnap.docs[0].id;
       setPortfolioId(gid);
 
-      // get its images
       let imgsSnap;
       try {
         imgsSnap = await getDocs(
@@ -121,8 +114,8 @@ export default function AdminMediaManager() {
     setCImgs([]);
     setCSel({});
     setCDeleting({});
+    setCVis(STEP);
     try {
-      // find booking by reference
       const bSnap = await getDocs(
         query(collection(db, "bookings"), where("reference", "==", code), limit(1))
       );
@@ -133,7 +126,6 @@ export default function AdminMediaManager() {
       const b = { id: bSnap.docs[0].id, ...bSnap.docs[0].data() };
       setClient(b);
 
-      // load its images subcollection
       let imgsSnap;
       try {
         imgsSnap = await getDocs(
@@ -181,8 +173,6 @@ export default function AdminMediaManager() {
   /** delete one image (Storage tolerant + Firestore doc) */
   async function deleteOne({ img, kind, galleryId, bookingId }) {
     const path = storagePathOf(img);
-
-    // reflect item as "pending" in UI
     const setMap = kind === "p" ? setPDeleting : setCDeleting;
     setMap((m) => ({ ...m, [img.id]: "pending" }));
 
@@ -191,7 +181,6 @@ export default function AdminMediaManager() {
         try {
           await deleteObject(sRef(storage, path));
         } catch (e) {
-          // Accept 'not found' as success; any other error bubble up
           if (e?.code !== "storage/object-not-found") {
             throw e;
           }
@@ -233,7 +222,6 @@ export default function AdminMediaManager() {
     );
     if (!ok) return;
 
-    // Chunk with concurrency cap
     const chunks = [];
     for (let i = 0; i < list.length; i += CONCURRENCY) chunks.push(list.slice(i, i + CONCURRENCY));
 
@@ -255,11 +243,8 @@ export default function AdminMediaManager() {
       failed += results.filter((r) => !r.ok).length;
     }
 
-    alert(
-      `Deleted ${deleted}${failed ? ` — ${failed} failed${notAdmin ? " (not admin?)" : ""}` : " — done!"}`
-    );
+    alert(`Deleted ${deleted}${failed ? ` — ${failed} failed` : " — done!"}`);
 
-    // refresh the list
     if (type === "p") await loadPortfolio();
     else await loadClientByRef();
   }
@@ -304,13 +289,7 @@ export default function AdminMediaManager() {
         <div className="rounded-2xl border border-rose/30 bg-white p-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-charcoal/70">
-              {portfolioId ? (
-                <>
-                  Gallery ID: <code>{portfolioId}</code>
-                </>
-              ) : (
-                "Load portfolio images"
-              )}
+              {portfolioId ? <>Gallery ID: <code>{portfolioId}</code></> : "Load portfolio images"}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -350,7 +329,7 @@ export default function AdminMediaManager() {
           {pMsg && <div className="mt-3 text-sm text-rose-700">{pMsg}</div>}
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {pImgs.map((img) => {
+            {pImgs.slice(0, pVis).map((img) => {
               const status = pDeleting[img.id];
               return (
                 <figure
@@ -358,11 +337,13 @@ export default function AdminMediaManager() {
                   className="relative group overflow-hidden rounded-xl border border-rose/20"
                   title={img.public_id}
                 >
-                  <img
+                  <SmartImg
                     src={img.secure_url}
                     alt={img.original_filename || img.public_id}
-                    className="w-full aspect-square object-cover"
-                    loading="lazy"
+                    width={img.width}
+                    height={img.height}
+                    className="w-full aspect-square"
+                    imgClassName="w-full h-full object-cover"
                   />
                   <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
                     <input
@@ -391,6 +372,17 @@ export default function AdminMediaManager() {
               );
             })}
           </div>
+
+          {pImgs.length > pVis && (
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={() => setPVis((n) => n + STEP)}
+                className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+              >
+                Load more ({Math.min(pImgs.length - pVis, STEP)}+)
+              </button>
+            </div>
+          )}
 
           {!pLoading && pImgs.length === 0 && (
             <div className="mt-3 text-sm text-charcoal/60">No images.</div>
@@ -456,7 +448,7 @@ export default function AdminMediaManager() {
           {cMsg && <div className="mt-3 text-sm text-rose-700">{cMsg}</div>}
 
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {cImgs.map((img) => {
+            {cImgs.slice(0, cVis).map((img) => {
               const status = cDeleting[img.id];
               return (
                 <figure
@@ -464,11 +456,13 @@ export default function AdminMediaManager() {
                   className="relative group overflow-hidden rounded-xl border border-rose/20"
                   title={img.public_id}
                 >
-                  <img
+                  <SmartImg
                     src={img.secure_url}
                     alt={img.original_filename || img.public_id}
-                    className="w-full aspect-square object-cover"
-                    loading="lazy"
+                    width={img.width}
+                    height={img.height}
+                    className="w-full aspect-square"
+                    imgClassName="w-full h-full object-cover"
                   />
                   <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
                     <input
@@ -497,6 +491,17 @@ export default function AdminMediaManager() {
               );
             })}
           </div>
+
+          {cImgs.length > cVis && (
+            <div className="mt-3 flex justify-center">
+              <button
+                onClick={() => setCVis((n) => n + STEP)}
+                className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+              >
+                Load more ({Math.min(cImgs.length - cVis, STEP)}+)
+              </button>
+            </div>
+          )}
 
           {!cLoading && client && cImgs.length === 0 && (
             <div className="mt-3 text-sm text-charcoal/60">No images for this client.</div>

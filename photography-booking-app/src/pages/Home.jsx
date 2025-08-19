@@ -2,19 +2,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { db } from "../lib/firebase";
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  where,
-} from "firebase/firestore";
-import heroImg from "../_DSC0154.jpg"; // image at: src/_DSC0154.jpg
+import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
+import heroImg from "../_DSC0154.jpg";
+import SmartImg from "../components/SmartImg";
 
-function cls(...xs) {
-  return xs.filter(Boolean).join(" ");
-}
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function Home() {
   return (
@@ -64,12 +56,7 @@ export default function Home() {
                   decoding="async"
                   fetchPriority="high"
                   draggable="false"
-                  className="
-                    absolute inset-0 h-full w-full
-                    object-cover
-                    [object-position:50%_12%] md:[object-position:50%_18%]
-                    will-change-transform
-                  "
+                  className="absolute inset-0 h-full w-full object-cover [object-position:50%_12%] md:[object-position:50%_18%] will-change-transform"
                 />
               </div>
             </div>
@@ -147,9 +134,7 @@ function PortfolioOnScroll() {
         }
 
         const rows = imgsSnap.docs.map((d) => d.data());
-        rows.sort(
-          (a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)
-        );
+        rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
         setImgs(rows);
       } catch (e) {
         console.error("[Home portfolio] load failed:", e);
@@ -209,16 +194,14 @@ function PortfolioOnScroll() {
                       "transition-transform duration-300 hover:scale-[1.01]"
                     )}
                   >
-                    <img
+                    <SmartImg
                       src={src}
-                      alt={
-                        img.original_filename ||
-                        img.public_id ||
-                        "Portfolio image"
-                      }
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full aspect-square object-cover"
+                      alt={img.original_filename || img.public_id || "Portfolio image"}
+                      width={img.width}
+                      height={img.height}
+                      priority={i < 4}
+                      className="w-full aspect-square"
+                      imgClassName="w-full h-full object-cover"
                     />
                   </figure>
                 );
@@ -251,10 +234,7 @@ function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div
-          key={i}
-          className="aspect-square rounded-xl bg-slate-200/70 animate-pulse"
-        />
+        <div key={i} className="aspect-square rounded-xl bg-slate-200/70 animate-pulse" />
       ))}
     </div>
   );
