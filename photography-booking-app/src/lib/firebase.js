@@ -15,10 +15,14 @@ const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "limlim-32e6a";
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`, // ✅ fix
+    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`, // ✅ correct
   projectId: PROJECT_ID,
-  // Rely on your Netlify env var for the bucket. Set VITE_FIREBASE_STORAGE_BUCKET there.
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+
+  // ✅ default to your real bucket if the env var is missing
+  storageBucket:
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET ||
+    `${PROJECT_ID}.firebasestorage.app`,
+
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
@@ -52,6 +56,6 @@ export const db = initializeFirestore(app, {
 
 /* Auth / Storage / Analytics */
 export const auth = getAuth(app);
-export const storage = getStorage(app); // ✅ export this so AdminUpload.jsx can import it
+export const storage = getStorage(app); // ✅ points to limlim-32e6a.firebasestorage.app
 
 isSupported().then((ok) => ok && getAnalytics(app));
