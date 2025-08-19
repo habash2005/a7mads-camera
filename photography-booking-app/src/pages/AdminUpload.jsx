@@ -238,7 +238,7 @@ export default function AdminUpload() {
     }
     if (ok.length) {
       setFiles((prev) => [...prev, ...ok]);
-      seedQueueForFiles(ok); // <-- seed queue so the UI shows progress rows now
+      seedQueueForFiles(ok); // seed queue so the UI shows progress rows now
     }
     if (bad.length) setRejected((prev) => [...prev, ...bad]);
   };
@@ -250,11 +250,13 @@ export default function AdminUpload() {
   };
   const onBrowse = () => fileInputRef.current?.click();
 
-  /* storage preflight with hints */
-  async function storagePreflight() {
+  /* ---------- Storage preflight: write to allowed dirs ---------- */
+  async function storagePreflight(currentMode, refCode) {
     try {
       const blob = new Blob(["ok"], { type: "text/plain" });
-      const testRef = sRef(storage, `__preflight/__${Date.now()}.txt`);
+      const dir =
+        currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+      const testRef = sRef(storage, `${dir}/__preflight_${Date.now()}.txt`);
       const task = uploadBytesResumable(testRef, blob, {
         contentType: "text/plain",
         cacheControl: "public,max-age=60",
@@ -266,15 +268,16 @@ export default function AdminUpload() {
     } catch (e) {
       const msg = String(e?.message || e);
       let hint = "";
-      if (msg.toLowerCase().includes("appcheck")) {
+      const m = msg.toLowerCase();
+      if (m.includes("appcheck")) {
         hint =
-          "App Check token missing/invalid. Ensure initializeAppCheck(...) with your reCAPTCHA v3 SITE KEY is set and the key allows your domain.";
-      } else if (msg.toLowerCase().includes("unauthorized")) {
+          "App Check token missing/invalid. Confirm initializeAppCheck(...) runs and your reCAPTCHA v3 site key is valid for limlim.netlify.app.";
+      } else if (m.includes("unauthorized") || m.includes("forbidden")) {
         hint =
-          "Storage rules blocked the write. Confirm you’re signed in as the admin and rules allow admin writes.";
-      } else if (msg.toLowerCase().includes("failed to fetch")) {
+          "Storage rules blocked the write. Make sure your rules allow writes to this path for the admin user.";
+      } else if (m.includes("failed to fetch")) {
         hint =
-          "Network/preflight blocked. Make sure your domain is in Firebase Auth Authorized domains and bucket CORS allows your origin if needed.";
+          "Network/preflight blocked. Ensure limlim.netlify.app is in Firebase Auth 'Authorized domains'.";
       }
       throw new Error(hint ? `${msg}\n\n${hint}` : msg);
     }
@@ -310,9 +313,10 @@ export default function AdminUpload() {
         cacheControl: "public,max-age=31536000,immutable",
       });
 
+      // indicate attempt immediately
       setQueue((q) =>
         q.map((qit) =>
-          qit.id === item.id ? { ...qit, status: "uploading", task } : qit
+          qit.id === item.id ? { ...qit, status: "uploading", task, progress: Math.max(qit.progress, 1) } : qit
         )
       );
 
@@ -337,7 +341,7 @@ export default function AdminUpload() {
           setQueue((q) =>
             q.map((qit) =>
               qit.id === item.id
-                ? { ...qit, status: "error", error: String(err?.message || err) }
+                ? { ...qit, status: "error", error: String(err?.message || err), progress: qit.progress || 1 }
                 : qit
             )
           );
@@ -377,7 +381,7 @@ export default function AdminUpload() {
             setQueue((q) =>
               q.map((qit) =>
                 qit.id === item.id
-                  ? { ...qit, status: "error", error: String(err?.message || err) }
+                  ? { ...qit, status: "error", error: String(err?.message || err), progress: qit.progress || 1 }
                   : qit
               )
             );
@@ -395,10 +399,19 @@ export default function AdminUpload() {
     if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
     try {
-      await storagePreflight();
+      await storagePreflight(mode, selectedBooking?.reference); // <-- important
     } catch (e) {
       console.error("[Storage preflight]", e);
-      alert(e.message || "Storage preflight failed.");
+      // Mark all queued items as attempted+failed so the UI shows the failure per-file
+      const failMsg = e.message || "Storage preflight failed.";
+      setQueue((q) =>
+        q.map((it) =>
+          it.status === "queued"
+            ? { ...it, status: "error", error: `Preflight: ${failMsg}`, progress: it.progress || 1 }
+            : it
+        )
+      );
+      alert(failMsg);
       return;
     }
 
@@ -420,7 +433,7 @@ export default function AdminUpload() {
         extraDocFields = { tag: "portfolio" };
       }
 
-      // Take only items that are "queued" or previously "error" (allow retry)
+      // only "queued" or previously "error" (allow retry)
       const itemsToUpload = queue.filter(
         (it) => it.status === "queued" || it.status === "error"
       );
@@ -429,7 +442,7 @@ export default function AdminUpload() {
         return;
       }
 
-      // Clear previous error states to queued
+      // reset previous errors back to "queued"
       setQueue((q) =>
         q.map((it) =>
           it.status === "error" ? { ...it, status: "queued", progress: 0, error: "" } : it
@@ -789,7 +802,7 @@ export default function AdminUpload() {
         </div>
       </div>
 
-      {/* progress — now visible as soon as files are selected (status = queued) */}
+      {/* progress — visible as soon as files are selected (status = queued) */}
       {queue.length > 0 && (
         <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
           <div className="mb-2 flex items-center justify-between">
