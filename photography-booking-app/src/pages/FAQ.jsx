@@ -9,17 +9,20 @@ export default function FAQ() {
   ]
 
   return (
-    <section id="faq" className="w-full py-16 md:py-24 bg-pink-50">
+    <section id="faq" className="w-full py-16 md:py-24 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-bold text-pink-700">FAQ</h2>
-        <div className="mt-6 grid md:grid-cols-2 gap-4">
+        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
+          Frequently Asked Questions
+        </h2>
+
+        <div className="mt-8 grid md:grid-cols-2 gap-6">
           {items.map((item, i) => (
             <div
               key={i}
-              className="p-4 rounded-2xl border border-pink-200 shadow-[0_10px_30px_rgba(0,0,0,0.05)] bg-white hover:shadow-lg transition-shadow"
+              className="p-6 rounded-2xl border border-burgundy/15 bg-white shadow-soft hover:shadow-lg hover:border-gold/40 transition-all"
             >
-              <div className="font-semibold text-pink-700">{item.q}</div>
-              <div className="text-pink-900/80 text-sm mt-1">{item.a}</div>
+              <div className="font-semibold text-maroon">{item.q}</div>
+              <div className="text-charcoal/80 text-sm mt-2 leading-relaxed">{item.a}</div>
             </div>
           ))}
         </div>

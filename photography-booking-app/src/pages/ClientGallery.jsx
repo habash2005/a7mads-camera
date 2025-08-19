@@ -14,9 +14,9 @@ function fileNameFrom(img) {
     (img.public_id && img.public_id.split("/").pop()) ||
     "image";
   const ext =
-   (img.format && String(img.format).toLowerCase()) ||
-   (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
-   "jpg";
+    (img.format && String(img.format).toLowerCase()) ||
+    (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
+    "jpg";
   return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
 }
 
@@ -32,7 +32,7 @@ export default function ClientGallery() {
   // selection + zip state
   const [selected, setSelected] = useState({});
   const someChecked = images.some((img) => !!selected[img.public_id]);
-  const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
+  const allChecked  = images.length > 0 && images.every((img) => !!selected[img.public_id]);
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
 
@@ -51,7 +51,7 @@ export default function ClientGallery() {
     setSelected({});
 
     try {
-      const refCode = code.trim().toUpperCase(); // your references are uppercase
+      const refCode = code.trim().toUpperCase();
       if (!refCode) {
         setErr("Enter your access code.");
         setLoading(false);
@@ -59,11 +59,7 @@ export default function ClientGallery() {
       }
 
       // 🔎 Find the booking by reference
-      const qy = query(
-        collection(db, "bookings"),
-        where("reference", "==", refCode),
-        limit(1)
-      );
+      const qy = query(collection(db, "bookings"), where("reference", "==", refCode), limit(1));
       const snap = await getDocs(qy);
       if (snap.empty) {
         setErr("Invalid access code. Double-check and try again.");
@@ -103,7 +99,7 @@ export default function ClientGallery() {
     setErr("");
   }
 
-  // ⚡ Zip using the signed secure_url you stored at upload time (no Storage SDK reads needed)
+  // ⚡ Zip using the saved signed URLs (no Storage SDK reads)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -125,10 +121,9 @@ export default function ClientGallery() {
 
       for (let i = 0; i < files.length; i++) {
         const img = files[i];
-        const url = img.secure_url; // saved from upload
+        const url = img.secure_url;
         if (!url) continue;
 
-        // fetch as blob via signed URL (works with *.firebasestorage.app or googleapis)
         const res = await fetch(url);
         if (!res.ok) throw new Error(`Download failed: ${res.status}`);
         const blob = await res.blob();
@@ -156,7 +151,6 @@ export default function ClientGallery() {
     const files = images.filter((i) => !!selected[i.public_id]);
     await zipAndDownload(files, "selected-images.zip");
   }
-
   async function downloadAllZip() {
     await zipAndDownload(images, "all-images.zip");
   }
@@ -168,9 +162,9 @@ export default function ClientGallery() {
   }, [booking]);
 
   return (
-    <section className="w-full py-16 md:py-24 bg-ivory">
+    <section className="w-full py-16 md:py-24 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
+        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
           {headerTitle}
         </h2>
 
@@ -183,7 +177,7 @@ export default function ClientGallery() {
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="Access code"
-              className="w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+              className="w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !loading && code.trim()) checkCode();
               }}
@@ -192,15 +186,15 @@ export default function ClientGallery() {
               onClick={checkCode}
               disabled={loading || !code.trim()}
               className={cls(
-                "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
+                "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
                 loading || !code.trim()
-                  ? "bg-blush text-charcoal/50 cursor-not-allowed"
-                  : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                  ? "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
+                  : "bg-wine text-white hover:bg-maroon"
               )}
             >
               {loading ? "Checking…" : "Open Gallery"}
             </button>
-            {err && <div className="text-sm text-red-700">{err}</div>}
+            {err && <div className="text-sm text-wine">{err}</div>}
           </div>
         )}
 
@@ -232,10 +226,10 @@ export default function ClientGallery() {
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold shadow-md",
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
                     !someChecked || zipping
-                      ? "bg-blush text-charcoal/50"
-                      : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                      ? "bg-burgundy/10 text-charcoal/50"
+                      : "bg-wine text-white hover:bg-maroon"
                   )}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
@@ -245,20 +239,27 @@ export default function ClientGallery() {
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold shadow-md",
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
                     !images.length || zipping
-                      ? "bg-blush text-charcoal/50"
-                      : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
+                      ? "bg-burgundy/10 text-charcoal/50"
+                      : "bg-gold text-charcoal hover:bg-wine hover:text-white"
                   )}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
                 </button>
 
-                <button onClick={reset} className="text-sm underline text-charcoal/70 hover:text-rose">
+                <button onClick={reset} className="text-sm underline text-charcoal/70 hover:text-burgundy">
                   Use a different code
                 </button>
               </div>
             </div>
+
+            {/* Optional progress bar while zipping */}
+            {zipping && (
+              <div className="mt-3 h-2 w-full bg-burgundy/10 rounded-full overflow-hidden">
+                <div className="h-full bg-gold transition-all" style={{ width: `${zipProgress}%` }} />
+              </div>
+            )}
 
             {images.length > 0 ? (
               <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -267,15 +268,17 @@ export default function ClientGallery() {
                   return (
                     <figure
                       key={img.public_id}
-                      className="overflow-hidden rounded-xl shadow-sm hover:shadow-lg transition-shadow"
+                      className="relative overflow-hidden rounded-xl border border-burgundy/15 bg-white/70 backdrop-blur-sm shadow-sm hover:shadow-lg transition-shadow"
                     >
                       <img
                         src={previewSrc}
-                        alt={img.public_id}
+                        alt={img.original_filename || img.public_id}
                         loading="lazy"
                         className="w-full aspect-square object-cover transition-transform duration-200 hover:scale-[1.01]"
                       />
-                      <figcaption className="flex items-center justify-between px-3 py-2 text-xs bg-white/70">
+
+                      {/* Bottom bar — matches portfolio card chrome */}
+                      <figcaption className="flex items-center justify-between px-3 py-2 text-xs bg-cream/80">
                         <label className="flex items-center gap-2">
                           <input
                             type="checkbox"
@@ -285,7 +288,7 @@ export default function ClientGallery() {
                           <span className="truncate max-w-[10rem]">{fileNameFrom(img)}</span>
                         </label>
                         <a
-                          className="underline text-charcoal/70 hover:text-rose"
+                          className="underline text-burgundy hover:text-gold transition-colors"
                           href={img.secure_url}
                           title="Download original"
                           target="_blank"

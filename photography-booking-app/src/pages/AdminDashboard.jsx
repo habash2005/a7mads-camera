@@ -42,6 +42,7 @@ export default function AdminDashboard() {
   const [loadingStats, setLoadingStats] = useState(true);
 
   // 🔎 Quick pick list (reference index)
+  thead
   const [refIndex, setRefIndex] = useState({ rows: [], loading: true, error: "" });
   const [refSearch, setRefSearch] = useState("");
   const [selectedRefForMM, setSelectedRefForMM] = useState("");
@@ -203,17 +204,17 @@ export default function AdminDashboard() {
   }, [refSearch, refIndex.rows]);
 
   return (
-    <section className="w-full py-10 md:py-14 bg-ivory">
+    <section className="w-full py-10 md:py-14 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl md:3xl font-serif font-semibold text-charcoal">Admin</h1>
+            <h1 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">Admin</h1>
             <p className="text-sm text-charcoal/70">Manage uploads, media, and bookings in one place.</p>
           </div>
           <button
             onClick={() => auth.signOut()}
-            className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
+            className="rounded-full px-4 py-2 text-sm font-semibold bg-wine text-white hover:bg-maroon transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
           >
             Sign out
           </button>
@@ -228,7 +229,7 @@ export default function AdminDashboard() {
           ) : (
             <>
               <StatCard label="Total Bookings" value={stats.totalBookings} />
-              <StatCard label="Pending" value={stats.pending} accent="rose" />
+              <StatCard label="Pending" value={stats.pending} accent="gold" />
               <StatCard label="Upcoming (Confirmed)" value={stats.confirmedUpcoming} accent="gold" />
               <StatCard label="Galleries" value={stats.galleries} />
             </>
@@ -242,7 +243,7 @@ export default function AdminDashboard() {
             <p className="text-sm text-charcoal/70 mb-4">
               Upload to <span className="font-semibold">Portfolio</span> or attach to a <span className="font-semibold">Client (by reference)</span>.
             </p>
-            <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
+            <div className="rounded-2xl border border-burgundy/20 bg-white/85 backdrop-blur-sm overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
                 <AdminUpload />
               </Suspense>
@@ -254,15 +255,15 @@ export default function AdminDashboard() {
             {upcoming.loading ? (
               <TableSkeleton rows={4} />
             ) : upcoming.error ? (
-              <div className="text-sm text-red-700">{upcoming.error}</div>
+              <div className="text-sm text-wine">{upcoming.error}</div>
             ) : upcoming.rows.length === 0 ? (
               <div className="text-sm text-charcoal/60">No upcoming bookings.</div>
             ) : (
-              <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
+              <div className="rounded-2xl border border-burgundy/20 bg-white overflow-hidden">
                 <div className="overflow-x-auto">
-                  <div className="max-h-[28rem] overflow-y-auto">
+                  <div className="max-h=[28rem] overflow-y-auto">
                     <table className="w-full text-sm min-w-[880px]">
-                      <thead className="bg-rose-50 text-charcoal/80 sticky top-0 z-10">
+                      <thead className="bg-burgundy/5 text-charcoal/80 sticky top-0 z-10">
                         <tr>
                           <Th>When</Th>
                           <Th>Client</Th>
@@ -283,10 +284,10 @@ export default function AdminDashboard() {
                           const saving = !!savingStatus[b.id];
 
                           return (
-                            <tr key={b.id} className="border-t border-slate-100">
+                            <tr key={b.id} className="border-t border-burgundy/15">
                               <Td>
                                 <div className="flex items-center gap-2">
-                                  {isCanceled && <span className="text-rose font-semibold">●</span>}
+                                  {isCanceled && <span className="text-wine font-semibold">●</span>}
                                   <span>{when}</span>
                                 </div>
                                 <div className="text-slate-500">{b.details?.location}</div>
@@ -334,7 +335,7 @@ export default function AdminDashboard() {
                                     disabled={saving || isCanceled}
                                     onChange={(e) => changeStatus(b, e.target.value)}
                                     className={cls(
-                                      "rounded-full border border-rose/30 bg-white px-3 py-1.5 text-xs",
+                                      "rounded-full border border-burgundy/20 bg-white px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-gold",
                                       saving ? "opacity-60 cursor-wait" : ""
                                     )}
                                     title={isCanceled ? "This booking is canceled" : "Change status"}
@@ -352,9 +353,9 @@ export default function AdminDashboard() {
                               <Td>
                                 {isCanceled ? (
                                   <div className="flex items-center gap-2">
-                                    <span className="text-rose font-semibold">Canceled</span>
+                                    <span className="text-wine font-semibold">Canceled</span>
                                     <button
-                                      className="rounded-full px-2 py-1 text-xs font-semibold border border-rose/40 text-charcoal hover:bg-rose hover:text-ivory transition-all"
+                                      className="rounded-full px-2 py-1 text-xs font-semibold border border-burgundy/30 text-charcoal hover:bg-wine hover:text-white transition-colors"
                                       title="Delete canceled booking"
                                       onClick={() => deleteBooking(b.id, b.status)}
                                     >
@@ -363,7 +364,7 @@ export default function AdminDashboard() {
                                   </div>
                                 ) : (
                                   <button
-                                    className="rounded-full px-3 py-2 text-xs font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all"
+                                    className="rounded-full px-3 py-2 text-xs font-semibold bg-wine text-white hover:bg-maroon transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
                                     onClick={() => cancelBooking(b.id)}
                                     title="Cancel appointment"
                                   >
@@ -389,15 +390,15 @@ export default function AdminDashboard() {
                 value={refSearch}
                 onChange={(e) => setRefSearch(e.target.value)}
                 placeholder="Search by reference, name, or email…"
-                className="rounded-xl border border-rose/30 px-3 py-2 text-sm bg-white w-full md:w-96"
+                className="rounded-xl border border-burgundy/20 px-3 py-2 text-sm bg-white w-full md:w-96 focus:border-burgundy focus:ring-gold/40"
               />
               <div className="flex items-center gap-2">
                 <button
                   onClick={loadRefIndex}
                   disabled={refIndex.loading}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold",
-                    refIndex.loading ? "bg-blush text-charcoal/50" : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
+                    refIndex.loading ? "bg-burgundy/10 text-charcoal/50" : "bg-wine text-white hover:bg-maroon"
                   )}
                 >
                   {refIndex.loading ? "Refreshing…" : "Refresh List"}
@@ -408,12 +409,12 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {refIndex.error && <div className="mt-3 text-sm text-rose-700">{refIndex.error}</div>}
+            {refIndex.error && <div className="mt-3 text-sm text-wine">{refIndex.error}</div>}
 
-            <div className="mt-3 rounded-2xl border border-rose/30 bg-white overflow-hidden">
+            <div className="mt-3 rounded-2xl border border-burgundy/20 bg-white overflow-hidden">
               <div className="max-h-[24rem] overflow-y-auto">
                 <table className="w-full text-sm min-w-[760px]">
-                  <thead className="bg-rose-50 text-charcoal/80 sticky top-0 z-10">
+                  <thead className="bg-burgundy/5 text-charcoal/80 sticky top-0 z-10">
                     <tr>
                       <Th className="w-32">Ref</Th>
                       <Th>Name / Email</Th>
@@ -424,7 +425,7 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {filteredRefs.map((r) => (
-                      <tr key={r.id} className="border-t border-slate-100">
+                      <tr key={r.id} className="border-t border-burgundy/15">
                         <Td className="font-mono">{r.reference}</Td>
                         <Td>
                           <div className="font-medium">{r.name || "Client"}</div>
@@ -436,7 +437,7 @@ export default function AdminDashboard() {
                         </Td>
                         <Td>
                           <button
-                            className="rounded-full px-3 py-2 text-xs font-semibold bg-gold text-charcoal hover:bg-rose hover:text-ivory transition-all"
+                            className="rounded-full px-3 py-2 text-xs font-semibold bg-gold text-charcoal hover:bg-wine hover:text-white transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
                             onClick={() => {
                               setSelectedRefForMM(r.reference);
                               jumpTo("Media Manager");
@@ -462,7 +463,7 @@ export default function AdminDashboard() {
 
           {/* Media Manager — full width */}
           <Card title="Media Manager" className="lg:col-span-12">
-            <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
+            <div className="rounded-2xl border border-burgundy/20 bg-white overflow-hidden">
               <Suspense fallback={<div className="p-4 text-sm text-charcoal/60">Loading…</div>}>
                 <AdminMediaManager selectedRef={selectedRefForMM} />
               </Suspense>
@@ -488,15 +489,19 @@ function StatusPill({ status }) {
   const s = (status || "").toLowerCase();
   const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
   if (s === "confirmed") return <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>Confirmed</span>;
-  if (s === "finished")  return <span className={cls(base, "bg-slate-100 text-slate-800 ring-slate-200")}>Finished</span>;
-  if (s === "canceled")  return <span className={cls(base, "bg-rose-50 text-rose-800 ring-rose-200")}>Canceled</span>;
-  return <span className={cls(base, "bg-amber-50 text-amber-800 ring-amber-200")}>Pending</span>;
+  if (s === "finished")  return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Finished</span>;
+  if (s === "canceled")  return <span className={cls(base, "bg-wine/15 text-wine ring-wine/30")}>Canceled</span>;
+  return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Pending</span>;
 }
 
 function StatCard({ label, value, accent }) {
-  const ring = accent === "rose" ? "ring-rose/30" : accent === "gold" ? "ring-gold/30" : "ring-slate-200";
+  const ring =
+    accent === "gold" ? "ring-gold/30" : "ring-burgundy/15";
   return (
-    <div className={cls("rounded-2xl bg-white/80 border border-rose/30 shadow-[0_10px_30px_rgba(0,0,0,0.06)] p-4 ring-1", ring)}>
+    <div className={cls(
+      "rounded-2xl bg-white/85 border border-burgundy/20 shadow-soft p-4 ring-1 backdrop-blur-xs",
+      ring
+    )}>
       <div className="text-sm text-charcoal/70">{label}</div>
       <div className="text-2xl font-semibold text-charcoal mt-1">{value}</div>
     </div>
@@ -504,7 +509,7 @@ function StatCard({ label, value, accent }) {
 }
 function StatSkeleton() {
   return (
-    <div className="rounded-2xl bg-white/80 border border-rose/30 p-4 animate-pulse">
+    <div className="rounded-2xl bg-white/85 border border-burgundy/20 p-4 animate-pulse">
       <div className="h-3 w-24 bg-slate-200 rounded mb-3" />
       <div className="h-7 w-12 bg-slate-200 rounded" />
     </div>
@@ -512,8 +517,11 @@ function StatSkeleton() {
 }
 function Card({ title, className, children }) {
   return (
-    <section className={cls("rounded-2xl border border-rose/30 bg-blush/20 p-4 md:p-5 shadow-[0_10px_30px_rgba(0,0,0,0.06)]", className)}>
-      <h3 className="text-lg font-serif font-semibold text-charcoal mb-3">{title}</h3>
+    <section className={cls(
+      "rounded-2xl border border-burgundy/20 bg-burgundy/5 p-4 md:p-5 shadow-soft",
+      className
+    )}>
+      <h3 className="text-lg font-serif font-semibold text-burgundy mb-3">{title}</h3>
       {children}
     </section>
   );
@@ -526,7 +534,7 @@ function Td({ children, className, colSpan }) {
 }
 function TableSkeleton({ rows = 4 }) {
   return (
-    <div className="rounded-2xl border border-rose/30 bg-white overflow-hidden">
+    <div className="rounded-2xl border border-burgundy/20 bg-white overflow-hidden">
       <div className="animate-pulse p-4 space-y-3">
         {Array.from({ length: rows }).map((_, i) => <div key={i} className="h-10 bg-slate-100 rounded" />)}
       </div>
@@ -536,13 +544,19 @@ function TableSkeleton({ rows = 4 }) {
 function Action({ label, onClick, href }) {
   if (href) {
     return (
-      <a href={href} className="w-full text-center rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow">
+      <a
+        href={href}
+        className="w-full text-center rounded-full px-4 py-2 text-sm font-semibold bg-wine text-white hover:bg-maroon transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
+      >
         {label}
       </a>
     );
   }
   return (
-    <button onClick={onClick} className="w-full rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow">
+    <button
+      onClick={onClick}
+      className="w-full rounded-full px-4 py-2 text-sm font-semibold bg-wine text-white hover:bg-maroon transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
+    >
       {label}
     </button>
   );

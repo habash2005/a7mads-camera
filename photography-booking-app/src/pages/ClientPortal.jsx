@@ -1,12 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
-import {
-  collection,
-  getDocs,
-  limit,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 // Zip + Storage for downloads
 import JSZip from "jszip";
@@ -16,12 +10,8 @@ import { getStorage, ref as sref, getBlob } from "firebase/storage";
 const storage = getStorage();
 
 /* ---------- helpers ---------- */
-function cls(...xs) {
-  return xs.filter(Boolean).join(" ");
-}
-function upRef(s = "") {
-  return String(s).trim().toUpperCase();
-}
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
+function upRef(s = "") { return String(s).trim().toUpperCase(); }
 function fileNameFrom(img) {
   const base =
     img.original_filename ||
@@ -38,11 +28,10 @@ function fileNameFrom(img) {
 function storagePathOf(img) {
   if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
   const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
-  return m ? decodeURIComponent(m[1]) : (img.public_id || null); // our uploader saves public_id == storage path
+  return m ? decodeURIComponent(m[1]) : (img.public_id || null);
 }
 function parseRefFromUrl() {
   try {
-    // supports both hash and normal routers
     const search = window.location.search || "";
     const hash = window.location.hash || "";
     const params = new URLSearchParams(search || (hash.includes("?") ? hash.split("?")[1] : ""));
@@ -55,15 +44,105 @@ function parseRefFromUrl() {
 /* ---------- small UI bits ---------- */
 function StatusPill({ status }) {
   const s = (status || "").toLowerCase();
-  const base =
-    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
+  const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
   if (s === "confirmed")
     return <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>Confirmed</span>;
   if (s === "finished")
-    return <span className={cls(base, "bg-slate-100 text-slate-800 ring-slate-200")}>Finished</span>;
+    return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Finished</span>;
   if (s === "canceled")
-    return <span className={cls(base, "bg-rose-50 text-rose-800 ring-rose-200")}>Canceled</span>;
-  return <span className={cls(base, "bg-amber-50 text-amber-800 ring-amber-200")}>Pending</span>;
+    return <span className={cls(base, "bg-wine/15 text-wine ring-wine/30")}>Canceled</span>;
+  return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Pending</span>;
+}
+
+/* ----------------- SelectableGallery ----------------- */
+function SelectableGallery({ items, selected, onToggle, layout = "square" }) {
+  if (layout === "masonry") {
+    return (
+      <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+        {items.map((img) => (
+          <figure
+            key={img.public_id}
+            className="mb-4 break-inside-avoid rounded-2xl border border-burgundy/15 bg-white/70 backdrop-blur-sm overflow-hidden shadow-sm hover:shadow-lg transition-shadow relative group"
+            title={img.original_filename || img.public_id}
+          >
+            <img
+              src={img.secure_url}
+              alt={img.original_filename || img.public_id}
+              loading="lazy"
+              className="w-full h-auto object-cover transition-transform duration-200 group-hover:scale-[1.01]"
+            />
+            <SelectOverlay
+              checked={!!selected[img.public_id]}
+              onChange={() => onToggle(img.public_id)}
+            />
+          </figure>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      {items.map((img) => (
+        <figure
+          key={img.public_id}
+          className="relative overflow-hidden rounded-2xl border border-burgundy/15 bg-white/70 backdrop-blur-sm shadow-sm hover:shadow-lg transition-shadow group"
+          title={img.original_filename || img.public_id}
+        >
+          <div className="aspect-square w-full">
+            <img
+              src={img.secure_url}
+              alt={img.original_filename || img.public_id}
+              loading="lazy"
+              className="h-full w-full object-cover transition-transform duration-200 hover:scale-[1.01]"
+            />
+          </div>
+          <SelectOverlay
+            checked={!!selected[img.public_id]}
+            onChange={() => onToggle(img.public_id)}
+          />
+        </figure>
+      ))}
+    </div>
+  );
+}
+
+function SelectOverlay({ checked, onChange }) {
+  return (
+    <>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <label className="absolute top-2 left-2 inline-flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onChange}
+          className="peer sr-only"
+        />
+        <span
+          className={cls(
+            "grid place-items-center w-7 h-7 rounded-full text-[12px] font-bold shadow-soft transition-colors",
+            checked
+              ? "bg-wine text-white ring-2 ring-gold"
+              : "bg-white/90 text-charcoal ring-1 ring-burgundy/20 hover:bg-gold/20"
+          )}
+        >
+          {checked ? "✓" : "+"}
+        </span>
+      </label>
+      <a
+        className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+        href="#"
+        onClick={(e) => {
+          e.preventDefault();
+          const fig = e.currentTarget.closest("figure");
+          const img = fig?.querySelector("img");
+          if (img?.src) window.open(img.src, "_blank", "noopener,noreferrer");
+        }}
+      >
+        Original
+      </a>
+    </>
+  );
 }
 
 /* ---------- component ---------- */
@@ -74,7 +153,6 @@ export default function ClientPortal() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  // selection + zipping
   const [selected, setSelected] = useState({});
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
@@ -89,7 +167,6 @@ export default function ClientPortal() {
     setSelected(next);
   };
 
-  // Auto-login via ?ref=CODE or remembered session
   useEffect(() => {
     const urlRef = parseRefFromUrl();
     const saved = localStorage.getItem("clientRef") || "";
@@ -109,7 +186,6 @@ export default function ClientPortal() {
     setBooking(null);
 
     try {
-      // 1) find booking by reference
       const qy = query(collection(db, "bookings"), where("reference", "==", ref), limit(1));
       const bsnap = await getDocs(qy);
       if (bsnap.empty) {
@@ -121,17 +197,13 @@ export default function ClientPortal() {
       const bdata = { id: bdoc.id, ...bdoc.data() };
       setBooking(bdata);
 
-      // remember session
       localStorage.setItem("clientRef", ref);
 
-      // 2) load images from bookings/{bookingId}/images
       const imgsSnap = await getDocs(collection(db, `bookings/${bdoc.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
-      // sort newest first
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
-      // pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -154,44 +226,34 @@ export default function ClientPortal() {
     setZipProgress(0);
   }
 
-  // Client-side zipping via Firebase Storage + JSZip
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
       return;
     }
-
-    const TOTAL_LIMIT_MB = 500; // soft cap
+    const TOTAL_LIMIT_MB = 500;
     let approx = 0;
     for (const f of files) approx += f.size || 5_000_000;
     if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
     }
-
     setZipping(true);
     setZipProgress(0);
     try {
       const zip = new JSZip();
-
       for (let i = 0; i < files.length; i++) {
         const img = files[i];
         const path = storagePathOf(img);
-        if (!path) {
-          console.warn("Cannot derive storage path for", img);
-          continue;
-        }
+        if (!path) continue;
         const blob = await getBlob(sref(storage, path));
         zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
-
       const zipBlob = await zip.generateAsync(
         { type: "blob", compression: "DEFLATE", compressionOptions: { level: 3 } },
         (meta) => setZipProgress(80 + Math.round(meta.percent * 0.2))
       );
-
       saveAs(zipBlob, outName || "photos.zip");
     } catch (e) {
       console.error(e);
@@ -220,23 +282,22 @@ export default function ClientPortal() {
   }, [booking]);
 
   return (
-    <section className="w-full py-16 md:py-24 bg-ivory">
+    <section className="w-full py-16 md:py-24 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
             Client Portal
           </h2>
           {booking && (
             <button
               onClick={signOut}
-              className="rounded-full px-4 py-2 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition"
+              className="rounded-full px-4 py-2 text-sm font-semibold bg-wine text-white hover:bg-maroon focus:outline-none focus:ring-2 focus:ring-gold transition-colors shadow-soft"
             >
               Sign out
             </button>
           )}
         </div>
 
-        {/* Step 1: Login with reference */}
         {!booking && (
           <div className="mt-6 max-w-md space-y-3">
             <p className="text-charcoal/70">
@@ -247,7 +308,7 @@ export default function ClientPortal() {
               value={refInput}
               onChange={(e) => setRefInput(e.target.value)}
               placeholder="e.g., 8F2KQX"
-              className="w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+              className="w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !loading && refInput.trim()) loginWithRef();
               }}
@@ -256,27 +317,23 @@ export default function ClientPortal() {
               onClick={() => loginWithRef()}
               disabled={loading || !refInput.trim()}
               className={cls(
-                "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
+                "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
                 loading || !refInput.trim()
-                  ? "bg-blush text-charcoal/50 cursor-not-allowed"
-                  : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                  ? "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
+                  : "bg-wine text-white hover:bg-maroon"
               )}
             >
               {loading ? "Opening…" : "Open Portal"}
             </button>
-            {err && <div className="text-sm text-red-700">{err}</div>}
+            {err && <div className="text-sm text-wine">{err}</div>}
           </div>
         )}
 
-        {/* Step 2: Portal */}
         {booking && (
           <div className="mt-8">
-            {/* Header w/ status */}
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="font-serif text-xl text-charcoal">
-                  Welcome, {clientName}
-                </h3>
+                <h3 className="font-serif text-xl text-charcoal">Welcome, {clientName}</h3>
                 <div className="mt-1 text-xs text-charcoal/60">
                   Ref: <code className="font-mono">{booking.reference}</code> •{" "}
                   {booking.package?.name || "Package"}{" "}
@@ -303,10 +360,10 @@ export default function ClientPortal() {
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold shadow-md",
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
                     !someChecked || zipping
-                      ? "bg-blush text-charcoal/50"
-                      : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                      ? "bg-burgundy/10 text-charcoal/50"
+                      : "bg-wine text-white hover:bg-maroon"
                   )}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
@@ -316,10 +373,10 @@ export default function ClientPortal() {
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold shadow-md",
+                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
                     !images.length || zipping
-                      ? "bg-blush text-charcoal/50"
-                      : "bg-gold text-charcoal hover:bg-rose hover:text-ivory"
+                      ? "bg-burgundy/10 text-charcoal/50"
+                      : "bg-gold text-charcoal hover:bg-wine hover:text-white"
                   )}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
@@ -327,44 +384,23 @@ export default function ClientPortal() {
               </div>
             </div>
 
-            {/* Images */}
+            {zipping && (
+              <div className="mt-3 h-2 w-full bg-burgundy/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gold transition-all"
+                  style={{ width: `${zipProgress}%` }}
+                />
+              </div>
+            )}
+
             {images.length > 0 ? (
-              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                {images.map((img) => {
-                  const previewSrc = img.secure_url;
-                  return (
-                    <figure
-                      key={img.public_id}
-                      className="overflow-hidden rounded-xl shadow-sm hover:shadow-lg transition-shadow"
-                    >
-                      <img
-                        src={previewSrc}
-                        alt={img.public_id}
-                        loading="lazy"
-                        className="w-full aspect-square object-cover transition-transform duration-200 hover:scale-[1.01]"
-                      />
-                      <figcaption className="flex items-center justify-between px-3 py-2 text-xs bg-white/70">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={!!selected[img.public_id]}
-                            onChange={() => toggleOne(img.public_id)}
-                          />
-                          <span className="truncate max-w-[10rem]">{fileNameFrom(img)}</span>
-                        </label>
-                        <a
-                          className="underline text-charcoal/70 hover:text-rose"
-                          href={img.secure_url}
-                          title="Download original"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Original
-                        </a>
-                      </figcaption>
-                    </figure>
-                  );
-                })}
+              <div className="mt-6">
+                <SelectableGallery
+                  layout="square"
+                  items={images}
+                  selected={selected}
+                  onToggle={toggleOne}
+                />
               </div>
             ) : (
               <div className="mt-6 text-charcoal/60">No images yet for this booking.</div>

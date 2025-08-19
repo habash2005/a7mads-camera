@@ -4,46 +4,11 @@ import { checkAvailability, submitBooking } from "../lib/api";
 
 /* -------------------------------- Services -------------------------------- */
 const SERVICES = [
-  {
-    id: "events",
-    name: "Events",
-    duration: "3 hours",
-    desc: "For birthdays, celebrations, and gatherings you want remembered.",
-    notes: ["Candid + posed coverage", "Timeline coordination", "Gallery delivery"],
-    icon: "🎉",
-  },
-  {
-    id: "branding",
-    name: "Branding",
-    duration: "90 min",
-    desc: "For business owners and creatives who want photos that showcase their personality and work.",
-    notes: ["Headshots + lifestyle", "On-location or studio", "Usage-ready files"],
-    icon: "🏷️",
-  },
-  {
-    id: "portraits",
-    name: "Portraits",
-    duration: "60–90 min",
-    desc: "For personal, casual, or styled photos that reflect you.",
-    notes: ["Up to 2 outfits", "Natural & guided posing", "Online gallery"],
-    icon: "📸",
-  },
-  {
-    id: "graduation",
-    name: "Graduation",
-    duration: "60–90 min",
-    desc: "For seniors and graduates ready to capture their milestone with pride.",
-    notes: ["Campus locations", "Cap & gown options", "Family add-ons"],
-    icon: "🎓",
-  },
-  {
-    id: "couples",
-    name: "Couples",
-    duration: "60–90 min",
-    desc: "For partners wanting to celebrate love, connection, and shared moments.",
-    notes: ["Prompt-led candids", "Romantic & relaxed", "Multiple locations optional"],
-    icon: "💞",
-  },
+  { id: "events", name: "Events", duration: "3 hours", desc: "For birthdays, celebrations, and gatherings you want remembered.", notes: ["Candid + posed coverage", "Timeline coordination", "Gallery delivery"], icon: "🎉" },
+  { id: "branding", name: "Branding", duration: "90 min", desc: "For business owners and creatives who want photos that showcase their personality and work.", notes: ["Headshots + lifestyle", "On-location or studio", "Usage-ready files"], icon: "🏷️" },
+  { id: "portraits", name: "Portraits", duration: "60–90 min", desc: "For personal, casual, or styled photos that reflect you.", notes: ["Up to 2 outfits", "Natural & guided posing", "Online gallery"], icon: "📸" },
+  { id: "graduation", name: "Graduation", duration: "60–90 min", desc: "For seniors and graduates ready to capture their milestone with pride.", notes: ["Campus locations", "Cap & gown options", "Family add-ons"], icon: "🎓" },
+  { id: "couples", name: "Couples", duration: "60–90 min", desc: "For partners wanting to celebrate love, connection, and shared moments.", notes: ["Prompt-led candids", "Romantic & relaxed", "Multiple locations optional"], icon: "💞" },
 ];
 
 /* ----------------------------- Time utilities ----------------------------- */
@@ -73,7 +38,7 @@ function ChipBtn({ children, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-full border border-rose/30 px-3 py-1 text-xs font-medium text-charcoal/80 hover:bg-rose hover:text-ivory transition"
+      className="rounded-full border border-burgundy/30 px-3 py-1 text-xs font-medium text-charcoal/80 hover:bg-gold/20 hover:border-gold/60 transition-colors"
     >
       {children}
     </button>
@@ -82,8 +47,8 @@ function ChipBtn({ children, onClick }) {
 function SectionTitle({ children, sub }) {
   return (
     <div className="mb-2">
-      <h4 className="font-semibold text-charcoal">{children}</h4>
-      {sub && <p className="text-xs text-charcoal/60 mt-0.5">{sub}</p>}
+      <h4 className="font-semibold text-burgundy">{children}</h4>
+      {sub && <p className="text-xs text-charcoal/70 mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -104,39 +69,13 @@ export default function Booking() {
 
   // Core + Tally-style extras
   const [details, setDetails] = useState({
-    // core (API expects these)
-    name: "",
-    email: "",
-    phone: "",
-    location: "Studio",
-
-    // creative brief (already supported by API)
-    shootFor: "",
-    style: "",
-    locationNotes: "",
-    notes: "",
-
-    // Tally-style extras (we will merge into notes/locationNotes on submit)
-    contactPref: "",            // Email / Text / Call
-    bestContactTime: "",        // e.g., Weekdays after 5pm
-    instagram: "",
-    howHeard: "",               // Instagram / TikTok / Google / Friend / Other
-    peopleCount: "",            // guests / subjects
-    organization: "",           // company or school
-    venueName: "",
-    venueAddress: "",
-    city: "",
-    state: "",
-    zip: "",
-    indoorOutdoor: "",          // Indoor / Outdoor / Both
-    rainPlan: "",
-    accessibility: "",
-    shotList: "",               // must-have shots
-    moodboard: "",              // link
-    deadline: "",               // desired delivery date
-    deliverables: "",           // e.g., Web-size, Print-size, Album, etc.
-    usage: "",                  // (branding) Website / Social / Print / Ads
-    serviceOccasion: "",        // (events/couples) Birthday, Anniversary, etc.
+    name: "", email: "", phone: "", location: "Studio",
+    shootFor: "", style: "", locationNotes: "", notes: "",
+    contactPref: "", bestContactTime: "", instagram: "", howHeard: "",
+    peopleCount: "", organization: "", venueName: "", venueAddress: "",
+    city: "", state: "", zip: "", indoorOutdoor: "", rainPlan: "",
+    accessibility: "", shotList: "", moodboard: "", deadline: "",
+    deliverables: "", usage: "", serviceOccasion: "",
   });
 
   // Submit
@@ -181,21 +120,14 @@ export default function Booking() {
 
   /* ----------------------------- Submit flow ----------------------------- */
   function mergedNotesPayload(d) {
-    // Merge “extras” into a readable block so your current API still stores everything
     const lines = [];
-
-    // Contact & social
     if (d.contactPref)     lines.push(`Preferred contact: ${d.contactPref}`);
     if (d.bestContactTime) lines.push(`Best time to reach: ${d.bestContactTime}`);
     if (d.instagram)       lines.push(`Instagram: ${d.instagram}`);
     if (d.howHeard)        lines.push(`How they heard: ${d.howHeard}`);
-
-    // Service-specific context
     if (d.serviceOccasion) lines.push(`Occasion: ${d.serviceOccasion}`);
     if (d.organization)    lines.push(`Organization/School: ${d.organization}`);
     if (d.peopleCount)     lines.push(`People/Guests: ${d.peopleCount}`);
-
-    // Location specifics (will also mirror to locationNotes)
     const locBits = [];
     if (d.venueName)    locBits.push(`Venue: ${d.venueName}`);
     if (d.venueAddress) locBits.push(`Address: ${d.venueAddress}`);
@@ -205,17 +137,12 @@ export default function Booking() {
     if (d.rainPlan)     locBits.push(`Rain backup: ${d.rainPlan}`);
     if (d.accessibility)locBits.push(`Accessibility: ${d.accessibility}`);
     if (locBits.length) lines.push(locBits.join(" | "));
-
-    // Creative inputs
     if (d.shotList)  lines.push(`Shot list: ${d.shotList}`);
     if (d.moodboard) lines.push(`Mood board: ${d.moodboard}`);
     if (d.deadline)  lines.push(`Deadline/Needed by: ${d.deadline}`);
     if (d.deliverables) lines.push(`Deliverables: ${d.deliverables}`);
     if (d.usage)       lines.push(`Usage (branding): ${d.usage}`);
-
-    // Preserve any free-form notes last
     if (d.notes) lines.push(`Notes: ${d.notes}`);
-
     return lines.join("\n");
   }
 
@@ -223,10 +150,8 @@ export default function Booking() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Build a sendable details object your API accepts
       const { name, email, phone, location, shootFor, style } = details;
 
-      // Mirror location extras into locationNotes
       const locNoteLines = [];
       if (details.venueName)    locNoteLines.push(`Venue: ${details.venueName}`);
       if (details.venueAddress) locNoteLines.push(`Address: ${details.venueAddress}`);
@@ -247,16 +172,13 @@ export default function Booking() {
 
       const res = await submitBooking({
         pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
-        date,
-        time,
-        details: sendDetails,
+        date, time, details: sendDetails,
       });
 
       if (!res?.ok) throw new Error(res?.error || "Failed to submit booking");
 
-      // Keep portal flow intact
       if (res.reference) localStorage.setItem("clientRef", res.reference);
-      setResult(res); // { ok, id, reference }
+      setResult(res);
     } catch (e) {
       console.error(e);
       alert(e.message || "We couldn’t submit your request. Please try again.");
@@ -287,12 +209,12 @@ export default function Booking() {
 
   /* -------------------------------- Render -------------------------------- */
   return (
-    <section id="booking" className="w-full py-16 md:py-24 bg-ivory">
+    <section id="booking" className="w-full py-16 md:py-24 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
         <div className="flex items-end justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
+            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
               Book a Session
             </h2>
             <p className="text-charcoal/70 mt-1 text-sm">
@@ -303,11 +225,11 @@ export default function Booking() {
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-rose/30 bg-white/80 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-5 md:p-6">
+        <div className="rounded-2xl border border-burgundy/20 bg-white/85 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-5 md:p-6 backdrop-blur-sm">
           {/* Step 0: Service selection */}
           {step === 0 && (
             <div>
-              <h3 className="text-xl font-serif font-semibold text-charcoal">Choose a service</h3>
+              <h3 className="text-xl font-serif font-semibold text-burgundy">Choose a service</h3>
               <p className="text-sm text-charcoal/70 mt-1">
                 We’ll tailor the session to your goals. You can add notes later.
               </p>
@@ -321,16 +243,22 @@ export default function Booking() {
                       type="button"
                       onClick={() => setSelected({ ...s, price: 0 })}
                       className={cls(
-                        "text-left rounded-2xl border p-4 transition-all",
-                        active ? "border-rose bg-rose/5 shadow" : "border-rose/30 hover:border-rose"
+                        "text-left rounded-2xl border p-4 transition-all focus:outline-none focus:ring-2 focus:ring-gold",
+                        active
+                          ? "border-burgundy bg-burgundy/5 shadow"
+                          : "border-burgundy/20 hover:border-gold/60 hover:shadow"
                       )}
                     >
                       <div className="flex items-center justify-between">
                         <div className="text-2xl">{s.icon}</div>
-                        <span className={cls(
-                          "text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1",
-                          active ? "bg-rose text-ivory ring-rose" : "bg-amber-50 text-amber-800 ring-amber-200"
-                        )}>
+                        <span
+                          className={cls(
+                            "text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1",
+                            active
+                              ? "bg-wine text-white ring-wine"
+                              : "bg-gold/15 text-charcoal ring-gold/40"
+                          )}
+                        >
                           {s.duration}
                         </span>
                       </div>
@@ -353,8 +281,8 @@ export default function Booking() {
                   onClick={() => setStep(1)}
                   disabled={!canNext0}
                   className={cls(
-                    "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
-                    canNext0 ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal" : "bg-blush text-charcoal/50 cursor-not-allowed"
+                    "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
+                    canNext0 ? "bg-wine text-white hover:bg-maroon" : "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
                   )}
                 >
                   Next →
@@ -366,7 +294,7 @@ export default function Booking() {
           {/* Step 1: Date & Time */}
           {step === 1 && (
             <div>
-              <h3 className="text-xl font-serif font-semibold text-charcoal">Pick date &amp; time</h3>
+              <h3 className="text-xl font-serif font-semibold text-burgundy">Pick date &amp; time</h3>
               <p className="text-sm text-charcoal/70 mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
 
               <div className="mt-4 grid md:grid-cols-3 gap-4">
@@ -376,7 +304,7 @@ export default function Booking() {
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 focus:border-burgundy focus:ring-gold/40 px-3 py-2 bg-white"
                   />
                 </div>
 
@@ -385,14 +313,14 @@ export default function Booking() {
                   <select
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-rose/30 focus:border-rose focus:ring-rose/40 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 focus:border-burgundy focus:ring-gold/40 px-3 py-2 bg-white"
                   >
                     <option value="">— Select time —</option>
                     {TIME_OPTS.map((t) => (
                       <option key={t} value={t}>{to12h(t)}</option>
                     ))}
                   </select>
-                  {err && availability === false && <div className="text-xs text-rose mt-1">{err}</div>}
+                  {err && availability === false && <div className="text-xs text-wine mt-1">{err}</div>}
                 </div>
 
                 <div className="flex items-end">
@@ -400,8 +328,8 @@ export default function Booking() {
                     onClick={doCheck}
                     disabled={!date || !time || checking}
                     className={cls(
-                      "w-full rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
-                      !date || !time || checking ? "bg-blush text-charcoal/50 cursor-not-allowed" : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                      "w-full rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
+                      !date || !time || checking ? "bg-burgundy/10 text-charcoal/50 cursor-not-allowed" : "bg-wine text-white hover:bg-maroon"
                     )}
                   >
                     {checking ? "Checking..." : "Check Availability"}
@@ -410,16 +338,16 @@ export default function Booking() {
               </div>
 
               {availability === true && <p className="mt-3 text-sm text-emerald-700">✅ Slot available. You can proceed.</p>}
-              {availability === false && <p className="mt-3 text-sm text-rose-700">❌ That time conflicts. Try a different one.</p>}
+              {availability === false && <p className="mt-3 text-sm text-wine">❌ That time conflicts. Try a different one.</p>}
 
               <div className="mt-6 flex justify-between">
-                <button className="text-sm underline text-charcoal/70 hover:text-rose" onClick={() => setStep(0)}>← Back</button>
+                <button className="text-sm underline text-charcoal/70 hover:text-burgundy" onClick={() => setStep(0)}>← Back</button>
                 <button
                   onClick={() => setStep(2)}
                   disabled={!canNext1}
                   className={cls(
-                    "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
-                    canNext1 ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal" : "bg-blush text-charcoal/50 cursor-not-allowed"
+                    "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
+                    canNext1 ? "bg-wine text-white hover:bg-maroon" : "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
                   )}
                 >
                   Next →
@@ -431,7 +359,7 @@ export default function Booking() {
           {/* Step 2: Details (Tally-style) */}
           {step === 2 && (
             <div>
-              <h3 className="text-xl font-serif font-semibold text-charcoal">Your details</h3>
+              <h3 className="text-xl font-serif font-semibold text-burgundy">Your details</h3>
               <p className="text-sm text-charcoal/70 mt-1">
                 I’m organized, detail-oriented, and thoughtful in my approach. These details help me prepare so your session runs smoothly.
               </p>
@@ -441,7 +369,7 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Full name</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.name}
                     onChange={(e) => setDetails({ ...details, name: e.target.value })}
                     placeholder="Your name"
@@ -450,7 +378,7 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Email</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.email}
                     onChange={(e) => setDetails({ ...details, email: e.target.value })}
                     placeholder="you@example.com"
@@ -459,7 +387,7 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Phone</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.phone}
                     onChange={(e) => setDetails({ ...details, phone: e.target.value })}
                     placeholder="(555) 123-4567"
@@ -468,7 +396,7 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Preferred contact</label>
                   <select
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.contactPref}
                     onChange={(e) => setDetails({ ...details, contactPref: e.target.value })}
                   >
@@ -481,7 +409,7 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Best time to reach you</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.bestContactTime}
                     onChange={(e) => setDetails({ ...details, bestContactTime: e.target.value })}
                     placeholder="e.g., Weekdays after 5pm"
@@ -490,7 +418,7 @@ export default function Booking() {
                 <div>
                   <label className="text-sm font-medium text-charcoal">Instagram (optional)</label>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.instagram}
                     onChange={(e) => setDetails({ ...details, instagram: e.target.value })}
                     placeholder="@yourhandle"
@@ -506,7 +434,7 @@ export default function Booking() {
                     ))}
                   </div>
                   <input
-                    className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                     value={details.howHeard}
                     onChange={(e) => setDetails({ ...details, howHeard: e.target.value })}
                     placeholder="Tell me more (optional)"
@@ -526,7 +454,7 @@ export default function Booking() {
                       ))}
                     </div>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.shootFor}
                       onChange={(e) => setDetails({ ...details, shootFor: e.target.value })}
                       placeholder="e.g., Website refresh, graduation portraits, anniversary session…"
@@ -541,20 +469,19 @@ export default function Booking() {
                       ))}
                     </div>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.style}
                       onChange={(e) => setDetails({ ...details, style: e.target.value })}
                       placeholder="Warm & vibrant, candid/documentary, editorial, etc."
                     />
                   </div>
 
-                  {/* Light service-specifics */}
                   {selected.id === "branding" && (
                     <>
                       <div>
                         <label className="text-sm font-medium text-charcoal">Brand/Company</label>
                         <input
-                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                           value={details.organization}
                           onChange={(e) => setDetails({ ...details, organization: e.target.value })}
                           placeholder="Company name"
@@ -563,7 +490,7 @@ export default function Booking() {
                       <div>
                         <label className="text-sm font-medium text-charcoal">Usage</label>
                         <input
-                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                           value={details.usage}
                           onChange={(e) => setDetails({ ...details, usage: e.target.value })}
                           placeholder="Website, social, print, ads…"
@@ -576,7 +503,7 @@ export default function Booking() {
                       <div>
                         <label className="text-sm font-medium text-charcoal">Occasion</label>
                         <input
-                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                           value={details.serviceOccasion}
                           onChange={(e) => setDetails({ ...details, serviceOccasion: e.target.value })}
                           placeholder="Birthday, anniversary, proposal…"
@@ -586,7 +513,7 @@ export default function Booking() {
                         <label className="text-sm font-medium text-charcoal">People/Guests</label>
                         <input
                           type="number"
-                          className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                           value={details.peopleCount}
                           onChange={(e) => setDetails({ ...details, peopleCount: e.target.value })}
                           placeholder="Approximate count"
@@ -604,7 +531,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">Location</label>
                     <select
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.location}
                       onChange={(e) => setDetails({ ...details, location: e.target.value })}
                     >
@@ -616,7 +543,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">Venue name (optional)</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.venueName}
                       onChange={(e) => setDetails({ ...details, venueName: e.target.value })}
                       placeholder="Venue, campus, park, etc."
@@ -625,7 +552,7 @@ export default function Booking() {
                   <div className="md:col-span-2">
                     <label className="text-sm font-medium text-charcoal">Address (optional)</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.venueAddress}
                       onChange={(e) => setDetails({ ...details, venueAddress: e.target.value })}
                       placeholder="Street address"
@@ -634,7 +561,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">City</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.city}
                       onChange={(e) => setDetails({ ...details, city: e.target.value })}
                     />
@@ -642,7 +569,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">State</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.state}
                       onChange={(e) => setDetails({ ...details, state: e.target.value })}
                     />
@@ -650,7 +577,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">Zip</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.zip}
                       onChange={(e) => setDetails({ ...details, zip: e.target.value })}
                     />
@@ -658,7 +585,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">Indoor or Outdoor?</label>
                     <select
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.indoorOutdoor}
                       onChange={(e) => setDetails({ ...details, indoorOutdoor: e.target.value })}
                     >
@@ -671,7 +598,7 @@ export default function Booking() {
                   <div className="md:col-span-2">
                     <label className="text-sm font-medium text-charcoal">Rain/weather plan (optional)</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.rainPlan}
                       onChange={(e) => setDetails({ ...details, rainPlan: e.target.value })}
                       placeholder="Backup date, alternate indoor space, etc."
@@ -681,7 +608,7 @@ export default function Booking() {
                     <label className="text-sm font-medium text-charcoal">Accessibility needs (optional)</label>
                     <textarea
                       rows={2}
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.accessibility}
                       onChange={(e) => setDetails({ ...details, accessibility: e.target.value })}
                       placeholder="Parking, mobility access, sensory considerations, etc."
@@ -698,7 +625,7 @@ export default function Booking() {
                     <label className="text-sm font-medium text-charcoal">Must-have shots (optional)</label>
                     <textarea
                       rows={3}
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.shotList}
                       onChange={(e) => setDetails({ ...details, shotList: e.target.value })}
                       placeholder="List key people/moments, product angles, groupings, etc."
@@ -707,7 +634,7 @@ export default function Booking() {
                   <div>
                     <label className="text-sm font-medium text-charcoal">Mood board / inspiration link</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.moodboard}
                       onChange={(e) => setDetails({ ...details, moodboard: e.target.value })}
                       placeholder="Pinterest/Drive/Notion link"
@@ -717,7 +644,7 @@ export default function Booking() {
                     <label className="text-sm font-medium text-charcoal">Deadline / needed by</label>
                     <input
                       type="date"
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.deadline}
                       onChange={(e) => setDetails({ ...details, deadline: e.target.value })}
                     />
@@ -725,7 +652,7 @@ export default function Booking() {
                   <div className="md:col-span-2">
                     <label className="text-sm font-medium text-charcoal">Deliverables (optional)</label>
                     <input
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.deliverables}
                       onChange={(e) => setDetails({ ...details, deliverables: e.target.value })}
                       placeholder="Web-size, print-size, album, etc."
@@ -735,7 +662,7 @@ export default function Booking() {
                     <label className="text-sm font-medium text-charcoal">Anything else to share?</label>
                     <textarea
                       rows={3}
-                      className="mt-2 w-full rounded-xl border border-rose/30 px-3 py-2 bg-white"
+                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.notes}
                       onChange={(e) => setDetails({ ...details, notes: e.target.value })}
                       placeholder="Wardrobe ideas, sensitivities, specific requests, etc."
@@ -745,15 +672,15 @@ export default function Booking() {
               </div>
 
               <div className="mt-6 flex justify-between">
-                <button className="text-sm underline text-charcoal/70 hover:text-rose" onClick={() => setStep(1)}>
+                <button className="text-sm underline text-charcoal/70 hover:text-burgundy" onClick={() => setStep(1)}>
                   ← Back
                 </button>
                 <button
                   onClick={() => setStep(3)}
                   disabled={!canNext2}
                   className={cls(
-                    "rounded-full px-5 py-3 text-sm font-semibold shadow-md transition-all",
-                    canNext2 ? "bg-rose text-ivory hover:bg-gold hover:text-charcoal" : "bg-blush text-charcoal/50 cursor-not-allowed"
+                    "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
+                    canNext2 ? "bg-wine text-white hover:bg-maroon" : "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
                   )}
                 >
                   Next →
@@ -765,20 +692,20 @@ export default function Booking() {
           {/* Step 3: Review & Confirm */}
           {step === 3 && (
             <div>
-              <h3 className="text-xl font-serif font-semibold text-charcoal">Review &amp; confirm</h3>
+              <h3 className="text-xl font-serif font-semibold text-burgundy">Review &amp; confirm</h3>
 
               <div className="mt-4 grid md:grid-cols-2 gap-6">
-                <div className="p-4 rounded-xl border border-rose/30 bg-blush/20">
+                <div className="p-4 rounded-xl border border-burgundy/20 bg-burgundy/5">
                   <h4 className="font-semibold text-charcoal">Summary</h4>
                   <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
-                    <li>Service: <span className="font-medium text-rose">{selected.name}</span></li>
+                    <li>Service: <span className="font-medium text-burgundy">{selected.name}</span></li>
                     <li>Date &amp; Time: <span className="font-medium">{date || "—"} {time ? to12h(time) : ""}</span></li>
                     <li>Estimated duration: {selected.duration}</li>
                     <li>Location: {details.location}</li>
                   </ul>
                 </div>
 
-                <div className="p-4 rounded-xl border border-rose/30 bg-blush/20">
+                <div className="p-4 rounded-xl border border-burgundy/20 bg-burgundy/5">
                   <h4 className="font-semibold text-charcoal">Contact &amp; brief</h4>
                   <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
                     <li>Name: {details.name || "—"}</li>
@@ -798,33 +725,33 @@ export default function Booking() {
 
               {!result ? (
                 <div className="mt-6 flex justify-between">
-                  <button className="text-sm underline text-charcoal/70 hover:text-rose" onClick={() => setStep(2)}>
+                  <button className="text-sm underline text-charcoal/70 hover:text-burgundy" onClick={() => setStep(2)}>
                     ← Back
                   </button>
                   <button
                     onClick={confirm}
                     disabled={submitting}
-                    className="rounded-full px-5 py-3 text-sm font-semibold shadow-md bg-gold text-charcoal hover:bg-rose hover:text-ivory transition-all"
+                    className="rounded-full px-5 py-3 text-sm font-semibold shadow-soft bg-gold text-charcoal hover:bg-wine hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gold"
                   >
                     {submitting ? "Submitting..." : "Confirm Booking"}
                   </button>
                 </div>
               ) : (
-                <div className="mt-6 rounded-xl border border-rose/30 p-4 bg-blush/20">
+                <div className="mt-6 rounded-xl border border-burgundy/20 p-4 bg-burgundy/5">
                   <p className="font-semibold text-charcoal">🎉 Booking requested!</p>
                   <p className="text-sm text-charcoal/80 mt-1">
-                    Your reference: <span className="font-mono text-rose">{result.reference}</span>.
+                    Your reference: <span className="font-mono text-burgundy">{result.reference}</span>.
                   </p>
                   <div className="mt-4 flex gap-3">
                     <button
                       onClick={() => navigator.clipboard?.writeText(result.reference)}
-                      className="rounded-full px-4 py-2 text-xs font-semibold border border-rose/40 text-charcoal hover:bg-rose hover:text-ivory transition"
+                      className="rounded-full px-4 py-2 text-xs font-semibold border border-burgundy/30 text-charcoal hover:bg-gold/20 hover:border-gold/60 transition-colors"
                     >
                       Copy reference
                     </button>
                     <button
                       onClick={reset}
-                      className="rounded-full px-5 py-3 text-sm font-semibold bg-rose text-ivory hover:bg-gold hover:text-charcoal transition-all shadow-md"
+                      className="rounded-full px-5 py-3 text-sm font-semibold bg-wine text-white hover:bg-maroon transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
                     >
                       Book Another
                     </button>
@@ -853,17 +780,17 @@ function SimpleStepper({ step }) {
               className={cls(
                 "w-6 h-6 rounded-full grid place-items-center font-semibold",
                 done ? "bg-gold text-charcoal"
-                     : active ? "bg-rose text-ivory"
-                              : "bg-slate-200 text-slate-600"
+                     : active ? "bg-wine text-white"
+                              : "bg-burgundy/10 text-charcoal/60"
               )}
               title={label}
             >
               {i + 1}
             </div>
-            <span className={cls("uppercase tracking-wide", active ? "text-charcoal font-semibold" : "text-charcoal/60")}>
+            <span className={cls("uppercase tracking-wide", active ? "text-burgundy font-semibold" : "text-charcoal/60")}>
               {label}
             </span>
-            {i < items.length - 1 && <span className="w-8 h-px bg-slate-200 mx-1" />}
+            {i < items.length - 1 && <span className="w-8 h-px bg-burgundy/15 mx-1" />}
           </div>
         );
       })}

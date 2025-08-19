@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
-import heroImg from "../_DSC0154.jpg";
+import heroImg from "../img_4942.jpg";
 import MasonryGrid from "../components/MasonryGrid"; // <- masonry preview like lensofher
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
