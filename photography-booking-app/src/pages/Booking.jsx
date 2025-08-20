@@ -1,7 +1,7 @@
 // src/pages/Booking.jsx
 import React, { useMemo, useState } from "react";
 import { checkAvailability, submitBooking } from "../lib/api";
-
+import { Helmet } from "react-helmet-async"
 /* -------------------------------- Services -------------------------------- */
 const SERVICES = [
   {
@@ -77,6 +77,15 @@ function SectionTitle({ children, sub }) {
 
 /* --------------------------------- Page ----------------------------------- */
 export default function Booking() {
+
+  <Helmet>
+        <title>Lama Wafa | Raleigh, NC Photographer</title>
+        <meta
+          name="description"
+          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
+        <link rel="canonical" href="https://lamawafa.com/" />
+      </Helmet>
+
   const [step, setStep] = useState(0);
 
   // Selected service (price hidden in UI; 0 passed to API to satisfy validator)

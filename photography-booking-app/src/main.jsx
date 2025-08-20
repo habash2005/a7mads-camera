@@ -1,44 +1,48 @@
-// src/main.jsx (or wherever this router lives)
-import React from 'react'
-import { createRoot } from 'react-dom/client'
-import { createHashRouter, RouterProvider } from 'react-router-dom'
-import './index.css'
+// src/main.jsx
+import React from "react";
+import { createRoot } from "react-dom/client";
+import {
+  createBrowserRouter,
+  RouterProvider,
+} from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
+import "./index.css";
 
-import App from './App'
-import Home from './pages/Home'
-import Portfolio from './pages/Portfolio'
-import Booking from './pages/Booking'
-import FAQ from './pages/FAQ'
-import ClientGallery from './pages/ClientGallery'
-import ClientPortal from './pages/ClientPortal'
+import App from "./App";
+import Home from "./pages/Home";
+import Portfolio from "./pages/Portfolio";
+import Booking from "./pages/Booking";
+import FAQ from "./pages/FAQ";
+import ClientGallery from "./pages/ClientGallery";
+import ClientPortal from "./pages/ClientPortal";
 
 // Admin / protected
-import AdminLogin from './pages/AdminLogin'
-import AdminDashboard from './pages/AdminDashboard'
-import AdminBookings from './pages/AdminBookings' // ✅ route target
-import ProtectedRoute from './components/ProtectedRoute'
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
+import AdminBookings from "./pages/AdminBookings";
+import ProtectedRoute from "./components/ProtectedRoute";
 
-const router = createHashRouter([
+const router = createBrowserRouter([
   {
-    path: '/',
+    path: "/",
     element: <App />,
     children: [
       // Public
       { index: true, element: <Home /> },
-      { path: 'portfolio', element: <Portfolio /> },
-      { path: 'booking', element: <Booking /> },
-      { path: 'faq', element: <FAQ /> },
+      { path: "portfolio", element: <Portfolio /> },
+      { path: "booking", element: <Booking /> },
+      { path: "faq", element: <FAQ /> },
 
       // Clients
-      { path: 'portal', element: <ClientPortal /> },   // client portal
-      { path: 'client', element: <ClientGallery /> },  // legacy gallery (optional)
+      { path: "portal", element: <ClientPortal /> },   // client portal
+      { path: "client", element: <ClientGallery /> },  // legacy gallery (optional)
 
       // Auth
-      { path: 'admin-login', element: <AdminLogin /> },
+      { path: "admin-login", element: <AdminLogin /> },
 
       // Admin
       {
-        path: 'admin',
+        path: "admin",
         element: (
           <ProtectedRoute>
             <AdminDashboard />
@@ -46,7 +50,7 @@ const router = createHashRouter([
         ),
       },
       {
-        path: 'admin/bookings',              // ✅ NEW: manage statuses
+        path: "admin/bookings",
         element: (
           <ProtectedRoute>
             <AdminBookings />
@@ -55,10 +59,12 @@ const router = createHashRouter([
       },
     ],
   },
-])
+]);
 
-createRoot(document.getElementById('root')).render(
+createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <HelmetProvider>
+      <RouterProvider router={router} />
+    </HelmetProvider>
   </React.StrictMode>
-)
+);

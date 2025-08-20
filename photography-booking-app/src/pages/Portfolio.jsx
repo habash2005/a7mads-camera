@@ -3,10 +3,23 @@ import React, { useEffect, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import MasonryGrid from "../components/MasonryGrid";
+import { Helmet } from "react-helmet-async"
+
 
 const STEP = 48; // unused now, but keep if you re-add pagination
 
+
+
 export default function Portfolio() {
+
+  <Helmet>
+        <title>Lama Wafa | Raleigh, NC Photographer</title>
+        <meta
+          name="description"
+          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
+        <link rel="canonical" href="https://lamawafa.com/" />
+      </Helmet>
+      
   const [images, setImages] = useState([]); // [{id, src, alt, width, height, filename}]
   const [err, setErr] = useState("");
 

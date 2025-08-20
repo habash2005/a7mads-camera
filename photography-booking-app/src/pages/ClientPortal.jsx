@@ -7,6 +7,10 @@ import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { getStorage, ref as sref, getBlob } from "firebase/storage";
 
+
+import { Helmet } from "react-helmet-async"
+
+
 const storage = getStorage();
 
 /* ---------- helpers ---------- */
@@ -165,6 +169,13 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
 
 /* ---------- component ---------- */
 export default function ClientPortal() {
+  <Helmet>
+        <title>Lama Wafa | Raleigh, NC Photographer</title>
+        <meta
+          name="description"
+          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
+        <link rel="canonical" href="https://lamawafa.com/" />
+      </Helmet>
   const [refInput, setRefInput] = useState("");
   const [booking, setBooking] = useState(null);
   const [images, setImages] = useState([]);

@@ -5,6 +5,9 @@ import { collection, getDocs, limit, query, where } from "firebase/firestore";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
+
+import { Helmet } from "react-helmet-async"
+
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 /* ---------- shared helpers ---------- */
@@ -125,6 +128,15 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
 }
 
 export default function ClientGallery() {
+
+  <Helmet>
+        <title>Lama Wafa | Raleigh, NC Photographer</title>
+        <meta
+          name="description"
+          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
+        <link rel="canonical" href="https://lamawafa.com/" />
+      </Helmet>
+
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");

@@ -5,112 +5,126 @@ import { db } from "../lib/firebase";
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import heroImg from "../img_4942.jpg";
 import MasonryGrid from "../components/MasonryGrid"; // masonry preview like lensofher
+import { Helmet } from "react-helmet-async"
+
+
+
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
+
+
+
+
 export default function Home() {
   return (
+    <><Helmet>
+      <title>Lama Wafa | Raleigh, NC Photographer</title>
+      <meta
+        name="description"
+        content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
+      <link rel="canonical" href="https://lamawafa.com/" />
+    </Helmet>
     <section className="w-full bg-cream">
-      {/* ======= HERO (burgundy band) ======= */}
-      <div className="bg-gradient-to-b from-burgundy to-maroon">
-        <div className="max-w-7xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
-          {/* Copy */}
-          <div>
-            <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-white">
-              Welcome, I’m Lama — a photographer based in Raleigh, NC
-            </h1>
-            <p className="mt-4 text-white/80 text-base md:text-lg max-w-prose">
-              I’m excited to learn your story and capture it in a way that feels real and meaningful.
-            </p>
+        {/* ======= HERO (burgundy band) ======= */}
+        <div className="bg-gradient-to-b from-burgundy to-maroon">
+          <div className="max-w-7xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
+            {/* Copy */}
+            <div>
+              <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-white">
+                Welcome, I’m Lama — a photographer based in Raleigh, NC
+              </h1>
+              <p className="mt-4 text-white/80 text-base md:text-lg max-w-prose">
+                I’m excited to learn your story and capture it in a way that feels real and meaningful.
+              </p>
 
+              <div className="mt-6 flex gap-3">
+                <Link
+                  to="/booking"
+                  className="rounded-full px-5 py-3 text-sm font-semibold bg-wine text-white shadow-soft hover:bg-maroon focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
+                >
+                  Start Booking
+                </Link>
+                <Link
+                  to="/portfolio"
+                  className="px-5 py-3 rounded-full border border-gold/50 text-sm font-semibold text-white/95 hover:bg-white/10 transition-colors"
+                >
+                  View Portfolio
+                </Link>
+              </div>
+            </div>
+
+            {/* Image / Hero Card */}
+            <div className="relative overflow-hidden rounded-2xl bg-white/80 shadow-soft p-4 md:p-6 ring-1 ring-white/30">
+              <div className="relative w-full overflow-hidden rounded-xl">
+                <div className="relative aspect-[4/3] w-full">
+                  <img
+                    src={heroImg}
+                    alt="Lama holding a camera on a wooden bridge"
+                    loading="eager"
+                    decoding="async"
+                    fetchPriority="high"
+                    draggable="false"
+                    className="absolute inset-0 h-full w-full object-cover [object-position:50%_12%] md:[object-position:50%_18%]" />
+                </div>
+              </div>
+              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gold/30" />
+            </div>
+          </div>
+        </div>
+
+        {/* ======= MY STORY ======= */}
+        <div className="py-12 md:py-16 bg-cream">
+          <div className="max-w-3xl mx-auto px-4">
+            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">My Story</h2>
+            <div className="mt-4 space-y-4 text-charcoal/80 leading-relaxed">
+              <p>
+                My love for photography started with my big brother. He’d take pictures at family gatherings and
+                let me experiment with his camera, always telling me I had an eye for it. What began as a hobby
+                with just the family’s camera grew into a real passion.
+              </p>
+              <p>
+                I love photographing people and events because I want you to enjoy the moment while still having
+                memories to look back on. Growing up, I loved flipping through family albums, learning about
+                our stories, and feeling connected through those memories.
+              </p>
+              <p>
+                That’s what I aim to create for my clients: vibrant, warm, and candid images that tell your story
+                and preserve your memories for years to come.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ======= WHAT TO EXPECT ======= */}
+        <div className="py-12 md:py-16">
+          <div className="max-w-3xl mx-auto px-4">
+            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">What to Expect</h2>
+            <p className="mt-4 text-charcoal/80 leading-relaxed">
+              I’m organized, detail-oriented, and thoughtful in my approach. My goal is to make every session or
+              event run smoothly so you can feel comfortable and natural, enjoy the experience, and walk away
+              with images you’ll treasure forever.
+            </p>
             <div className="mt-6 flex gap-3">
               <Link
                 to="/booking"
-                className="rounded-full px-5 py-3 text-sm font-semibold bg-wine text-white shadow-soft hover:bg-maroon focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
+                className="rounded-full px-5 py-3 text-sm font-semibold bg-gold text-charcoal shadow-soft hover:bg-wine hover:text-white focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
               >
-                Start Booking
+                Check Availability
               </Link>
               <Link
-                to="/portfolio"
-                className="px-5 py-3 rounded-full border border-gold/50 text-sm font-semibold text-white/95 hover:bg-white/10 transition-colors"
+                to="/faq"
+                className="px-5 py-3 rounded-full border border-burgundy/30 text-sm font-semibold text-burgundy hover:bg-gold/10 transition-colors"
               >
-                View Portfolio
+                Read FAQs
               </Link>
             </div>
           </div>
-
-          {/* Image / Hero Card */}
-          <div className="relative overflow-hidden rounded-2xl bg-white/80 shadow-soft p-4 md:p-6 ring-1 ring-white/30">
-            <div className="relative w-full overflow-hidden rounded-xl">
-              <div className="relative aspect-[4/3] w-full">
-                <img
-                  src={heroImg}
-                  alt="Lama holding a camera on a wooden bridge"
-                  loading="eager"
-                  decoding="async"
-                  fetchPriority="high"
-                  draggable="false"
-                  className="absolute inset-0 h-full w-full object-cover [object-position:50%_12%] md:[object-position:50%_18%]"
-                />
-              </div>
-            </div>
-            <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gold/30" />
-          </div>
         </div>
-      </div>
 
-      {/* ======= MY STORY ======= */}
-      <div className="py-12 md:py-16 bg-cream">
-        <div className="max-w-3xl mx-auto px-4">
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">My Story</h2>
-          <div className="mt-4 space-y-4 text-charcoal/80 leading-relaxed">
-            <p>
-              My love for photography started with my big brother. He’d take pictures at family gatherings and
-              let me experiment with his camera, always telling me I had an eye for it. What began as a hobby
-              with just the family’s camera grew into a real passion.
-            </p>
-            <p>
-              I love photographing people and events because I want you to enjoy the moment while still having
-              memories to look back on. Growing up, I loved flipping through family albums, learning about
-              our stories, and feeling connected through those memories.
-            </p>
-            <p>
-              That’s what I aim to create for my clients: vibrant, warm, and candid images that tell your story
-              and preserve your memories for years to come.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ======= WHAT TO EXPECT ======= */}
-      <div className="py-12 md:py-16">
-        <div className="max-w-3xl mx-auto px-4">
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">What to Expect</h2>
-          <p className="mt-4 text-charcoal/80 leading-relaxed">
-            I’m organized, detail-oriented, and thoughtful in my approach. My goal is to make every session or
-            event run smoothly so you can feel comfortable and natural, enjoy the experience, and walk away
-            with images you’ll treasure forever.
-          </p>
-          <div className="mt-6 flex gap-3">
-            <Link
-              to="/booking"
-              className="rounded-full px-5 py-3 text-sm font-semibold bg-gold text-charcoal shadow-soft hover:bg-wine hover:text-white focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
-            >
-              Check Availability
-            </Link>
-            <Link
-              to="/faq"
-              className="px-5 py-3 rounded-full border border-burgundy/30 text-sm font-semibold text-burgundy hover:bg-gold/10 transition-colors"
-            >
-              Read FAQs
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* ======= LATEST PORTFOLIO (lazy masonry preview) ======= */}
-      <PortfolioOnScroll />
-    </section>
+        {/* ======= LATEST PORTFOLIO (lazy masonry preview) ======= */}
+        <PortfolioOnScroll />
+      </section></>
   );
 }
 

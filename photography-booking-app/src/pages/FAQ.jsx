@@ -1,7 +1,19 @@
 // src/pages/FAQ.jsx
 import React from 'react'
 
+import { Helmet } from "react-helmet-async"
+
+
+
+
 export default function FAQ() {
+  <Helmet>
+        <title>Lama Wafa | Raleigh, NC Photographer</title>
+        <meta
+          name="description"
+          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
+        <link rel="canonical" href="https://lamawafa.com/" />
+      </Helmet>
   const items = [
     {
       q: 'What should I wear for my session?',
