@@ -39,8 +39,8 @@ export default function Home() {
             </div>
 
             <div className="mt-6 flex items-center gap-2 text-sm text-white/80">
-              <span aria-hidden>★★★★★</span>
-              <span>100+ happy clients</span>
+              <span aria-hidden></span>
+              <span></span>
             </div>
           </div>
 

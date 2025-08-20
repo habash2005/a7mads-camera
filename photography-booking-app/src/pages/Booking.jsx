@@ -4,11 +4,41 @@ import { checkAvailability, submitBooking } from "../lib/api";
 
 /* -------------------------------- Services -------------------------------- */
 const SERVICES = [
-  { id: "events", name: "Events", duration: "3 hours", desc: "For birthdays, celebrations, and gatherings you want remembered.", notes: ["Candid + posed coverage", "Timeline coordination", "Gallery delivery"], icon: "🎉" },
-  { id: "branding", name: "Branding", duration: "90 min", desc: "For business owners and creatives who want photos that showcase their personality and work.", notes: ["Headshots + lifestyle", "On-location or studio", "Usage-ready files"], icon: "🏷️" },
-  { id: "portraits", name: "Portraits", duration: "60–90 min", desc: "For personal, casual, or styled photos that reflect you.", notes: ["Up to 2 outfits", "Natural & guided posing", "Online gallery"], icon: "📸" },
-  { id: "graduation", name: "Graduation", duration: "60–90 min", desc: "For seniors and graduates ready to capture their milestone with pride.", notes: ["Campus locations", "Cap & gown options", "Family add-ons"], icon: "🎓" },
-  { id: "couples", name: "Couples", duration: "60–90 min", desc: "For partners wanting to celebrate love, connection, and shared moments.", notes: ["Prompt-led candids", "Romantic & relaxed", "Multiple locations optional"], icon: "💞" },
+  {
+    id: "events",
+    name: "Events",
+    duration: "2 hours",
+    desc:
+      "Candid, polished coverage for birthdays, showers, and small gatherings—focused on people, details, and atmosphere."
+  },
+  {
+    id: "branding",
+    name: "Branding",
+    duration: "60 min",
+    desc:
+      "Headshots and lifestyle imagery that feel fresh and on‑brand—great for websites, social, and press kits."
+  },
+  {
+    id: "portraits",
+    name: "Portraits",
+    duration: "45–60 min",
+    desc:
+      "Natural portraits with gentle guidance and a relaxed pace—perfect for personal milestones or profile refreshes."
+  },
+  {
+    id: "graduation",
+    name: "Graduation",
+    duration: "45–60 min",
+    desc:
+      "On‑campus session celebrating your milestone—clean, timeless images with space for personality."
+  },
+  {
+    id: "couples",
+    name: "Couples",
+    duration: "60 min",
+    desc:
+      "Warm, candid storytelling for two—prompt‑led moments that feel fun, romantic, and true to you."
+  },
 ];
 
 /* ----------------------------- Time utilities ----------------------------- */
@@ -67,7 +97,7 @@ export default function Booking() {
   const [availability, setAvailability] = useState(null);
   const [err, setErr] = useState("");
 
-  // Core + Tally-style extras
+  // Core + extras (we keep full state/logic; some fields simply aren’t rendered)
   const [details, setDetails] = useState({
     name: "", email: "", phone: "", location: "Studio",
     shootFor: "", style: "", locationNotes: "", notes: "",
@@ -90,7 +120,7 @@ export default function Booking() {
     details.phone.trim() &&
     details.location.trim();
 
-  // Suggestions (kept simple)
+  // Suggestions (kept simple) — we keep these even if some aren’t shown
   const styleSuggestions = ["Warm & vibrant", "Clean & minimal", "Moody/editorial", "Candid & documentary"];
   const shootForSuggestions = useMemo(() => {
     switch (selected.id) {
@@ -250,7 +280,7 @@ export default function Booking() {
                       )}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="text-2xl">{s.icon}</div>
+                        <div className="text-lg font-semibold text-charcoal">{s.name}</div>
                         <span
                           className={cls(
                             "text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1",
@@ -262,14 +292,11 @@ export default function Booking() {
                           {s.duration}
                         </span>
                       </div>
-                      <div className="mt-3">
-                        <div className="text-lg font-semibold text-charcoal">{s.name}</div>
-                        <p className="text-sm text-charcoal/70 mt-1">{s.desc}</p>
-                      </div>
-                      {!!s.notes?.length && (
-                        <ul className="mt-3 text-xs text-charcoal/70 list-disc ml-4 space-y-0.5">
-                          {s.notes.map((n, i) => <li key={i}>{n}</li>)}
-                        </ul>
+
+                      {s.desc && (
+                        <p className="mt-2 text-sm text-charcoal/70">
+                          {s.desc}
+                        </p>
                       )}
                     </button>
                   );
@@ -356,12 +383,12 @@ export default function Booking() {
             </div>
           )}
 
-          {/* Step 2: Details (Tally-style) */}
+          {/* Step 2: Details (Simplified) */}
           {step === 2 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-burgundy">Your details</h3>
               <p className="text-sm text-charcoal/70 mt-1">
-                I’m organized, detail-oriented, and thoughtful in my approach. These details help me prepare so your session runs smoothly.
+                A few essentials so I can prepare and follow up.
               </p>
 
               {/* Contact basics */}
@@ -442,86 +469,20 @@ export default function Booking() {
                 </div>
               </div>
 
-              {/* Service context */}
+              {/* Preferred style */}
               <div className="mt-8">
-                <SectionTitle>Session context</SectionTitle>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">What is this shoot for?</label>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {shootForSuggestions.map((s) => (
-                        <ChipBtn key={s} onClick={() => setDetails((d) => ({ ...d, shootFor: s }))}>{s}</ChipBtn>
-                      ))}
-                    </div>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.shootFor}
-                      onChange={(e) => setDetails({ ...details, shootFor: e.target.value })}
-                      placeholder="e.g., Website refresh, graduation portraits, anniversary session…"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">Preferred style</label>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {styleSuggestions.map((s) => (
-                        <ChipBtn key={s} onClick={() => setDetails((d) => ({ ...d, style: s }))}>{s}</ChipBtn>
-                      ))}
-                    </div>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.style}
-                      onChange={(e) => setDetails({ ...details, style: e.target.value })}
-                      placeholder="Warm & vibrant, candid/documentary, editorial, etc."
-                    />
-                  </div>
-
-                  {selected.id === "branding" && (
-                    <>
-                      <div>
-                        <label className="text-sm font-medium text-charcoal">Brand/Company</label>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                          value={details.organization}
-                          onChange={(e) => setDetails({ ...details, organization: e.target.value })}
-                          placeholder="Company name"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-charcoal">Usage</label>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                          value={details.usage}
-                          onChange={(e) => setDetails({ ...details, usage: e.target.value })}
-                          placeholder="Website, social, print, ads…"
-                        />
-                      </div>
-                    </>
-                  )}
-                  {(selected.id === "events" || selected.id === "couples") && (
-                    <>
-                      <div>
-                        <label className="text-sm font-medium text-charcoal">Occasion</label>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                          value={details.serviceOccasion}
-                          onChange={(e) => setDetails({ ...details, serviceOccasion: e.target.value })}
-                          placeholder="Birthday, anniversary, proposal…"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-charcoal">People/Guests</label>
-                        <input
-                          type="number"
-                          className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                          value={details.peopleCount}
-                          onChange={(e) => setDetails({ ...details, peopleCount: e.target.value })}
-                          placeholder="Approximate count"
-                        />
-                      </div>
-                    </>
-                  )}
+                <SectionTitle>Preferred style</SectionTitle>
+                <div className="flex flex-wrap gap-2">
+                  {styleSuggestions.map((s) => (
+                    <ChipBtn key={s} onClick={() => setDetails((d) => ({ ...d, style: s }))}>{s}</ChipBtn>
+                  ))}
                 </div>
+                <input
+                  className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
+                  value={details.style}
+                  onChange={(e) => setDetails({ ...details, style: e.target.value })}
+                  placeholder="Other style notes (optional)"
+                />
               </div>
 
               {/* Location & logistics */}
@@ -631,31 +592,13 @@ export default function Booking() {
                       placeholder="List key people/moments, product angles, groupings, etc."
                     />
                   </div>
-                  <div>
+                  <div className="md:col-span-2">
                     <label className="text-sm font-medium text-charcoal">Mood board / inspiration link</label>
                     <input
                       className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
                       value={details.moodboard}
                       onChange={(e) => setDetails({ ...details, moodboard: e.target.value })}
                       placeholder="Pinterest/Drive/Notion link"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">Deadline / needed by</label>
-                    <input
-                      type="date"
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.deadline}
-                      onChange={(e) => setDetails({ ...details, deadline: e.target.value })}
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Deliverables (optional)</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.deliverables}
-                      onChange={(e) => setDetails({ ...details, deliverables: e.target.value })}
-                      placeholder="Web-size, print-size, album, etc."
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -689,7 +632,7 @@ export default function Booking() {
             </div>
           )}
 
-          {/* Step 3: Review & Confirm */}
+          {/* Step 3: Review & Confirm (unchanged logic) */}
           {step === 3 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-burgundy">Review &amp; confirm</h3>
