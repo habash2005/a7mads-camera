@@ -46,7 +46,6 @@ export default function Portfolio() {
           <h1 className="text-3xl md:text-5xl font-serif font-semibold tracking-tight text-white">
             Portfolio
           </h1>
-          <p className="mt-2 text-white/70">Recent work, curated.</p>
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import heroImg from "../img_4942.jpg";
-import MasonryGrid from "../components/MasonryGrid"; // <- masonry preview like lensofher
+import MasonryGrid from "../components/MasonryGrid"; // masonry preview like lensofher
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
@@ -17,7 +17,7 @@ export default function Home() {
           {/* Copy */}
           <div>
             <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-white">
-              Hey, I’m Lama, a photographer based in Raleigh, NC.
+              Welcome, I’m Lama — a photographer based in Raleigh, NC
             </h1>
             <p className="mt-4 text-white/80 text-base md:text-lg max-w-prose">
               I’m excited to learn your story and capture it in a way that feels real and meaningful.
@@ -36,11 +36,6 @@ export default function Home() {
               >
                 View Portfolio
               </Link>
-            </div>
-
-            <div className="mt-6 flex items-center gap-2 text-sm text-white/80">
-              <span aria-hidden></span>
-              <span></span>
             </div>
           </div>
 
@@ -76,7 +71,7 @@ export default function Home() {
             </p>
             <p>
               I love photographing people and events because I want you to enjoy the moment while still having
-              a record of it to look back on. Growing up, I loved flipping through family albums, learning about
+              memories to look back on. Growing up, I loved flipping through family albums, learning about
               our stories, and feeling connected through those memories.
             </p>
             <p>
@@ -190,8 +185,8 @@ function PortfolioOnScroll() {
           "transition-all duration-700",
           ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
         )}>
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">Latest Portfolio</h2>
-          <p className="text-charcoal/70 mt-1">A few favorites—more inside the full portfolio.</p>
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">Portfolio</h2>
+          <p className="text-charcoal/70 mt-1"></p>
         </header>
 
         <div className="mt-6">

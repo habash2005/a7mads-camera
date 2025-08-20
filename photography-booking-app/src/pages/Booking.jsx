@@ -8,36 +8,28 @@ const SERVICES = [
     id: "events",
     name: "Events",
     duration: "2 hours",
-    desc:
-      "Candid, polished coverage for birthdays, showers, and small gatherings—focused on people, details, and atmosphere."
+    desc: "Concerts, celebrations, and gatherings",
   },
   {
     id: "branding",
     name: "Branding",
     duration: "60 min",
     desc:
-      "Headshots and lifestyle imagery that feel fresh and on‑brand—great for websites, social, and press kits."
+      "For business owners and creatives who want photos that showcase their personality and work",
   },
   {
     id: "portraits",
-    name: "Portraits",
+    name: "Portraits + Milestones",
     duration: "45–60 min",
     desc:
-      "Natural portraits with gentle guidance and a relaxed pace—perfect for personal milestones or profile refreshes."
-  },
-  {
-    id: "graduation",
-    name: "Graduation",
-    duration: "45–60 min",
-    desc:
-      "On‑campus session celebrating your milestone—clean, timeless images with space for personality."
+      "Seniors, milestone, and personal portraits (casual or styled)",
   },
   {
     id: "couples",
     name: "Couples",
     duration: "60 min",
     desc:
-      "Warm, candid storytelling for two—prompt‑led moments that feel fun, romantic, and true to you."
+      "For partners wanting to celebrate love and shared moments",
   },
 ];
 
@@ -97,10 +89,10 @@ export default function Booking() {
   const [availability, setAvailability] = useState(null);
   const [err, setErr] = useState("");
 
-  // Core + extras (we keep full state/logic; some fields simply aren’t rendered)
+  // Core + extras
   const [details, setDetails] = useState({
     name: "", email: "", phone: "", location: "Studio",
-    shootFor: "", style: "", locationNotes: "", notes: "",
+    shootFor: "", locationNotes: "", notes: "",
     contactPref: "", bestContactTime: "", instagram: "", howHeard: "",
     peopleCount: "", organization: "", venueName: "", venueAddress: "",
     city: "", state: "", zip: "", indoorOutdoor: "", rainPlan: "",
@@ -120,15 +112,17 @@ export default function Booking() {
     details.phone.trim() &&
     details.location.trim();
 
-  // Suggestions (kept simple) — we keep these even if some aren’t shown
-  const styleSuggestions = ["Warm & vibrant", "Clean & minimal", "Moody/editorial", "Candid & documentary"];
+  // (Kept for future use if you add chips later; currently unused in UI)
   const shootForSuggestions = useMemo(() => {
     switch (selected.id) {
-      case "branding":   return ["Website refresh", "Social content", "Team headshots", "Product launch"];
-      case "events":     return ["Birthday", "Engagement party", "Corporate mixer", "Baby shower"];
-      case "graduation": return ["Senior portraits", "Cap & gown", "Family add-on", "Campus walk"];
-      case "couples":    return ["Anniversary", "Proposal", "Save-the-date", "Casual session"];
-      default:           return ["Personal portraits", "Creative concept", "Portfolio update", "Gift session"];
+      case "branding":
+        return ["Website refresh", "Social content", "Team headshots", "Product launch"];
+      case "events":
+        return ["Birthday", "Engagement party", "Corporate mixer", "Baby shower"];
+      case "couples":
+        return ["Anniversary", "Proposal", "Save-the-date", "Casual session"];
+      default:
+        return ["Senior portraits", "Personal portraits", "Creative concept", "Portfolio update"];
     }
   }, [selected.id]);
 
@@ -180,7 +174,7 @@ export default function Booking() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const { name, email, phone, location, shootFor, style } = details;
+      const { name, email, phone, location, shootFor } = details;
 
       const locNoteLines = [];
       if (details.venueName)    locNoteLines.push(`Venue: ${details.venueName}`);
@@ -195,7 +189,6 @@ export default function Booking() {
       const sendDetails = {
         name, email, phone, location,
         shootFor: shootFor || selected.name,
-        style: style || "",
         locationNotes: [details.locationNotes || "", ...locNoteLines].filter(Boolean).join("\n"),
         notes: mergedNotesPayload(details),
       };
@@ -225,7 +218,7 @@ export default function Booking() {
     setAvailability(null);
     setDetails({
       name: "", email: "", phone: "", location: "Studio",
-      shootFor: "", style: "", locationNotes: "", notes: "",
+      shootFor: "", locationNotes: "", notes: "",
       contactPref: "", bestContactTime: "", instagram: "", howHeard: "",
       peopleCount: "", organization: "", venueName: "", venueAddress: "",
       city: "", state: "", zip: "", indoorOutdoor: "", rainPlan: "",
@@ -247,9 +240,6 @@ export default function Booking() {
             <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
               Book a Session
             </h2>
-            <p className="text-charcoal/70 mt-1 text-sm">
-              Select a service, choose a time, and share a few details. I’ll follow up to confirm.
-            </p>
           </div>
           <SimpleStepper step={step} />
         </div>
@@ -387,9 +377,6 @@ export default function Booking() {
           {step === 2 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-burgundy">Your details</h3>
-              <p className="text-sm text-charcoal/70 mt-1">
-                A few essentials so I can prepare and follow up.
-              </p>
 
               {/* Contact basics */}
               <div className="mt-4 grid md:grid-cols-2 gap-4">
@@ -467,22 +454,6 @@ export default function Booking() {
                     placeholder="Tell me more (optional)"
                   />
                 </div>
-              </div>
-
-              {/* Preferred style */}
-              <div className="mt-8">
-                <SectionTitle>Preferred style</SectionTitle>
-                <div className="flex flex-wrap gap-2">
-                  {styleSuggestions.map((s) => (
-                    <ChipBtn key={s} onClick={() => setDetails((d) => ({ ...d, style: s }))}>{s}</ChipBtn>
-                  ))}
-                </div>
-                <input
-                  className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                  value={details.style}
-                  onChange={(e) => setDetails({ ...details, style: e.target.value })}
-                  placeholder="Other style notes (optional)"
-                />
               </div>
 
               {/* Location & logistics */}
@@ -632,7 +603,7 @@ export default function Booking() {
             </div>
           )}
 
-          {/* Step 3: Review & Confirm (unchanged logic) */}
+          {/* Step 3: Review & Confirm */}
           {step === 3 && (
             <div>
               <h3 className="text-xl font-serif font-semibold text-burgundy">Review &amp; confirm</h3>
@@ -655,7 +626,6 @@ export default function Booking() {
                     <li>Email: {details.email || "—"}</li>
                     <li>Phone: {details.phone || "—"}</li>
                     {details.shootFor && <li>Shoot: {details.shootFor}</li>}
-                    {details.style && <li>Style: {details.style}</li>}
                     {(details.locationNotes || details.venueName || details.venueAddress || details.city || details.state || details.zip) && (
                       <li>Location notes will be included.</li>
                     )}

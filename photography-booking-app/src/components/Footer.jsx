@@ -24,13 +24,6 @@ export default function Footer() {
             >
               lamawafa13@gmail.com
             </a>
-            <a
-              href="tel:+19195930459"
-              className="btn btn-primary px-3 py-1.5"
-              aria-label="Call Lama"
-            >
-              (919) 593-0459
-            </a>
           </div>
         </div>
 
