@@ -260,7 +260,7 @@ export default function Booking() {
             <div>
               <h3 className="text-xl font-serif font-semibold text-burgundy">Choose a service</h3>
               <p className="text-sm text-charcoal/70 mt-1">
-                We’ll tailor the session to your goals. You can add notes later.
+               
               </p>
 
               <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
