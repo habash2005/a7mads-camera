@@ -32,7 +32,7 @@ export default function Home() {
             {/* Copy */}
             <div>
               <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-white">
-                Welcome, I’m Lama — a photographer based in Raleigh, NC
+                Welcome, I’m Lama, a photographer based in Raleigh, NC
               </h1>
               <p className="mt-4 text-white/80 text-base md:text-lg max-w-prose">
                 I’m excited to learn your story and capture it in a way that feels real and meaningful.
