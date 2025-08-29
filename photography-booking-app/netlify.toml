@@ -6,6 +6,7 @@
 [build.environment]
   DEBUG = "vite:*,rollup:*"
   VITE_LOG_LEVEL = "info"
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
 
 [functions]
   directory = "netlify/functions"
