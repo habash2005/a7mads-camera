@@ -1,7 +1,7 @@
 // src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, Suspense, useMemo } from "react";
-import { auth, db } from "../lib/firebase";
-import { signOut } from "firebase/auth";
+import { db } from "../lib/firebase";
+import { useAuth } from "../lib/auth";
 import {
   collection,
   getDocs,
@@ -14,6 +14,7 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  Timestamp,
 } from "firebase/firestore";
 
 const AdminUpload       = React.lazy(() => import("./AdminUpload"));
@@ -31,6 +32,8 @@ async function safeCount(qy) {
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 export default function AdminDashboard() {
+  const { user, logout } = useAuth();
+
   const [stats, setStats] = useState(null);
   const [upcoming, setUpcoming] = useState({ rows: [], loading: true, error: "" });
   const [loadingStats, setLoadingStats] = useState(true);
@@ -47,7 +50,11 @@ export default function AdminDashboard() {
       const totalBookings = await safeCount(query(bookingsCol));
       const pending = await safeCount(query(bookingsCol, where("status", "==", "pending")));
       const confirmedUpcoming = await safeCount(
-        query(bookingsCol, where("status", "==", "confirmed"), where("startAt", ">=", new Date()))
+        query(
+          bookingsCol,
+          where("status", "==", "confirmed"),
+          where("startAt", ">=", Timestamp.fromDate(new Date()))
+        )
       );
       const galleries = await safeCount(query(galleriesCol));
       setStats({ totalBookings, pending, confirmedUpcoming, galleries });
@@ -63,7 +70,7 @@ export default function AdminDashboard() {
       const bookingsCol = collection(db, "bookings");
       const qy = query(
         bookingsCol,
-        where("startAt", ">=", new Date()),
+        where("startAt", ">=", Timestamp.fromDate(new Date())),
         orderBy("startAt", "asc"),
         limit(6)
       );
@@ -179,8 +186,8 @@ export default function AdminDashboard() {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
-      window.location.href = "/"; // redirect to home/login
+      await logout();
+      window.location.hash = "#/admin/login";
     } catch (err) {
       alert("Sign out failed: " + err.message);
     }

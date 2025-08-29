@@ -1,51 +1,77 @@
+// src/pages/AdminLogin.jsx
 import React, { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../lib/firebase";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/auth";
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const navigate = useNavigate();
+  const { ready, user, isAdmin, login } = useAuth();
+  const nav = useNavigate();
+  const location = useLocation();
+  const redirectTo = location.state?.from?.pathname || "/admin";
 
-  const login = async (e) => {
+  const [email, setEmail] = useState("");
+  const [pass, setPass] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (ready && user && isAdmin) {
+    return <Navigate to={redirectTo} replace />;
+  }
+
+  async function submit(e) {
     e.preventDefault();
-    setError("");
+    setErr("");
+    setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate("/admin");
-    } catch (err) {
-      setError("Invalid email or password");
+      await login(email.trim(), pass);
+      nav(redirectTo, { replace: true });
+    } catch (e2) {
+      setErr(e2?.message || "Login failed");
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="max-w-sm mx-auto py-12">
-      <h1 className="text-2xl font-semibold mb-4">Admin Login</h1>
-      {error && <p className="text-red-500">{error}</p>}
-      <form onSubmit={login} className="space-y-4">
-        <input
-          type="email"
-          placeholder="Email"
-          className="w-full border px-3 py-2 rounded"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          className="w-full border px-3 py-2 rounded"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button
-          type="submit"
-          className="bg-rose text-ivory px-4 py-2 rounded w-full"
-        >
-          Login
-        </button>
-      </form>
-    </div>
+    <section className="container-site py-12">
+      <div className="max-w-md mx-auto card p-6">
+        <h1 className="h2">Admin Login</h1>
+        <p className="text-sm text-[color:var(--muted)] mt-1">
+          Sign in with your admin email.
+        </p>
+
+        <form onSubmit={submit} className="mt-6 space-y-4">
+          <div>
+            <label className="text-sm">Email</label>
+            <input
+              className="input mt-1 w-full"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-sm">Password</label>
+            <input
+              className="input mt-1 w-full"
+              type="password"
+              autoComplete="current-password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          {err && <p className="text-rose text-sm">{err}</p>}
+
+          <button className="btn btn-primary w-full" disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
+    </section>
   );
 }

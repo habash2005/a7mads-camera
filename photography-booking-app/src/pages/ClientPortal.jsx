@@ -1,17 +1,14 @@
+// src/pages/ClientPortal.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { db } from "../lib/firebase";
+import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 // Zip + Storage for downloads
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { getStorage, ref as sref, getBlob } from "firebase/storage";
+import { ref as sref, getBlob } from "firebase/storage";
 
-
-import { Helmet } from "react-helmet-async"
-
-
-const storage = getStorage();
+import { Helmet } from "react-helmet-async";
 
 /* ---------- helpers ---------- */
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
@@ -76,11 +73,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               loading="lazy"
               className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
             />
-
-            {/* soft top gradient for control legibility */}
             <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
-            {/* Select bubble */}
             <label className="absolute top-2 left-2 inline-flex items-center">
               <input
                 type="checkbox"
@@ -100,8 +93,6 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
                 {selected[img.public_id] ? "✓" : "+"}
               </span>
             </label>
-
-            {/* 'Original' link */}
             <a
               className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
               href={img.secure_url}
@@ -133,7 +124,6 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
             />
           </div>
-
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <label className="absolute top-2 left-2 inline-flex items-center">
             <input
@@ -169,13 +159,6 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
 
 /* ---------- component ---------- */
 export default function ClientPortal() {
-  <Helmet>
-        <title>Lama Wafa | Raleigh, NC Photographer</title>
-        <meta
-          name="description"
-          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
-        <link rel="canonical" href="https://lamawafa.com/" />
-      </Helmet>
   const [refInput, setRefInput] = useState("");
   const [booking, setBooking] = useState(null);
   const [images, setImages] = useState([]);
@@ -201,6 +184,7 @@ export default function ClientPortal() {
     const saved = localStorage.getItem("clientRef") || "";
     const initial = upRef(urlRef || saved);
     if (initial) loginWithRef(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loginWithRef(rawRef) {
@@ -311,6 +295,14 @@ export default function ClientPortal() {
 
   return (
     <section className="w-full py-16 md:py-24 bg-cream">
+      <Helmet>
+        <title>Client Portal | A7mads Camera</title>
+        <meta
+          name="description"
+          content="Access your gallery using your reference code. Download selected photos or your full set."
+        />
+      </Helmet>
+
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl md:3xl font-serif font-semibold text-burgundy">Client Portal</h2>
@@ -413,7 +405,7 @@ export default function ClientPortal() {
             {images.length > 0 ? (
               <div className="mt-6">
                 <SelectableGallery
-                  layout="masonry"   // 👈 Lens-style masonry
+                  layout="masonry"
                   items={images}
                   selected={selected}
                   onToggle={toggleOne}
