@@ -4,9 +4,6 @@
   command = "npm ci && npm run build"
   publish = "dist"
 
-[build.environment]
-  NODE_VERSION = "20"
-
 # Only keep this block if you actually have functions in this folder.
 [functions]
   directory = "photography-booking-app/netlify/functions"
