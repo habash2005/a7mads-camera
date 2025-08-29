@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+
 /* ===== Theme tokens (Slate Noir) ===== */
 :root,
 html[data-theme="dark"]{

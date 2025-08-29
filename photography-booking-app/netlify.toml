@@ -1,10 +1,13 @@
-# /netlify.toml
 [build]
   base = "photography-booking-app"
   command = "npm i --no-fund --no-audit && npm run build"
   publish = "dist"
 
-# Make directory relative to the base above
+[build.environment]
+  NODE_VERSION = "20"
+  DEBUG = "vite:*,rollup:*"
+  VITE_LOG_LEVEL = "info"
+
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
