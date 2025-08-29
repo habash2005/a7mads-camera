@@ -1,4 +1,4 @@
-// src/components/Nav.jsx
+// src/components/SiteHeader.jsx
 import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 
@@ -6,7 +6,7 @@ function cls(...xs) {
   return xs.filter(Boolean).join(" ");
 }
 
-export default function Nav() {
+export default function SiteHeader() {
   const [open, setOpen] = useState(false);
   const menuId = "mobile-nav-menu";
 
@@ -20,11 +20,13 @@ export default function Nav() {
     );
 
   return (
-    <header className={cls(
-      "sticky top-0 z-40 border-b border-default",
-      "bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/60",
-      open && "shadow-md"
-    )}>
+    <header
+      className={cls(
+        "sticky top-0 z-40 border-b border-default",
+        "bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/60",
+        open && "shadow-md"
+      )}
+    >
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
         {/* Brand */}
         <Link
@@ -37,7 +39,7 @@ export default function Nav() {
             <span className="h-1.5 w-1.5 rounded-full bg-rose" />
           </span>
           <span className="text-base font-serif font-semibold tracking-tight text-charcoal">
-            Lama Wafa
+            A7mads Camera
           </span>
         </Link>
 
@@ -49,15 +51,13 @@ export default function Nav() {
           <NavLink to="/booking" className={itemClass}>
             Book
           </NavLink>
-          <NavLink to="/portal" className={itemClass}>
+          <NavLink to="/client-portal" className={itemClass}>
             Client Portal
           </NavLink>
           <NavLink to="/faq" className={itemClass}>
             FAQ
           </NavLink>
-          <NavLink to="/admin" className={itemClass}>
-            Admin
-          </NavLink>
+          {/* Removed Admin from header per your request */}
         </nav>
 
         {/* Desktop CTA */}
@@ -65,7 +65,7 @@ export default function Nav() {
           <button className="btn btn-primary shadow-sm">Book Now →</button>
         </Link>
 
-        {/* Mobile toggle — visible, nice, minimal */}
+        {/* Mobile toggle */}
         <button
           aria-label="Toggle menu"
           aria-controls={menuId}
@@ -76,7 +76,6 @@ export default function Nav() {
             "bg-white/90 shadow-sm ring-1 ring-[var(--border)]"
           )}
         >
-          {/* Hamburger -> X */}
           <div className="relative w-5 h-5">
             <span
               className={cls(
@@ -97,7 +96,6 @@ export default function Nav() {
               )}
             />
           </div>
-          {/* “Menu” label + chevron */}
           <span className="text-sm font-semibold text-charcoal">Menu</span>
           <svg
             className={cls(
@@ -128,16 +126,18 @@ export default function Nav() {
         id={menuId}
         className={cls(
           "md:hidden relative z-40 overflow-hidden transition-[max-height,opacity] duration-300",
-          open ? "max-h-96 opacity-100 border-t border-default bg-white/95 backdrop-blur" : "max-h-0 opacity-0"
+          open
+            ? "max-h-96 opacity-100 border-t border-default bg-white/95 backdrop-blur"
+            : "max-h-0 opacity-0"
         )}
       >
         <div className="px-4 py-3 space-y-2">
           {[
             { to: "/portfolio", label: "Portfolio" },
             { to: "/booking", label: "Book" },
-            { to: "/portal", label: "Client Portal" },
+            { to: "/client-portal", label: "Client Portal" }, // fixed path
             { to: "/faq", label: "FAQ" },
-            { to: "/admin", label: "Admin" },
+            // No Admin here
           ].map((item) => (
             <NavLink
               key={item.to}

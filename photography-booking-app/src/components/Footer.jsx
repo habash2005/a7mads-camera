@@ -1,6 +1,7 @@
+// src/components/Footer.jsx
 import { Link } from "react-router-dom";
 
-export default function Footer(){
+export default function Footer() {
   return (
     <footer className="mt-16 border-t border-[color:var(--border)] bg-[color:var(--surface)]">
       <div className="container-site py-10 grid gap-8 md:grid-cols-4">
@@ -10,14 +11,17 @@ export default function Footer(){
             Modern photography for brands, people, and events across North Carolina.
           </p>
         </div>
+
         <div>
           <h5 className="font-semibold mb-3">Explore</h5>
           <ul className="space-y-2 text-sm text-[color:var(--muted)]">
             <li><Link to="/portfolio" className="hover:text-[color:var(--text)]">Portfolio</Link></li>
             <li><Link to="/booking" className="hover:text-[color:var(--text)]">Booking</Link></li>
-            <li><Link to="/contact" className="hover:text-[color:var(--text)]">Contact</Link></li>
+            <li><Link to="/faq" className="hover:text-[color:var(--text)]">FAQ</Link></li>
+            <li><Link to="/client-portal" className="hover:text-[color:var(--text)]">Client Portal</Link></li>
           </ul>
         </div>
+
         <div>
           <h5 className="font-semibold mb-3">Contact</h5>
           <ul className="space-y-2 text-sm text-[color:var(--muted)]">
@@ -27,8 +31,14 @@ export default function Footer(){
           </ul>
         </div>
       </div>
+
       <div className="border-t border-[color:var(--border)] py-4 text-center text-xs text-[color:var(--muted)]">
         © {new Date().getFullYear()} A7mads Camera
+        <span className="mx-2">•</span>
+        {/* Admin link lives in the footer */}
+        <Link to="/admin" className="underline underline-offset-4 hover:text-[color:var(--text)]">
+          Admin Portal
+        </Link>
       </div>
     </footer>
   );
