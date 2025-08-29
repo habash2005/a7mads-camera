@@ -4,10 +4,6 @@
   command = "npm i --no-fund --no-audit && npm run build"
   publish = "dist"
 
-
-[build.environment]
-  NODE_VERSION = "20"
-
 # Make directory relative to the base above
 [functions]
   directory = "netlify/functions"
