@@ -1,12 +1,15 @@
 {
-  "name": "photography-booking-app",
+  "name": "a7mads-camera",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview --port 4173",
+    "lint": "eslint . --ext .js,.jsx --report-unused-disable-directives --max-warnings 0",
+    "format": "prettier --write .",
+    "prepare": "tailwindcss -i ./src/index.css -o ./dist/tailwind.css --minify"
   },
   "dependencies": {
     "archiver": "^6.0.1",
@@ -23,9 +26,15 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
-    "netlify-cli": "^23.1.4",
+    "netlify-cli": "^17.33.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
-    "vite": "^5.4.19"
+    "vite": "^5.4.19",
+    "eslint": "^9.9.0",
+    "eslint-config-react-app": "^7.0.1",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
