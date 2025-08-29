@@ -4,7 +4,6 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
   DEBUG = "vite:*,rollup:*"
   VITE_LOG_LEVEL = "info"
 
