@@ -1,4 +1,3 @@
-// src/lib/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import {
@@ -10,13 +9,26 @@ import { getStorage } from "firebase/storage";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
-const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "limlim-32e6a";
+// Use ONLY one project. Set these in .env for ahmad-port
+// VITE_FIREBASE_PROJECT_ID=ahmad-port
+// VITE_FIREBASE_API_KEY=...
+// VITE_FIREBASE_AUTH_DOMAIN=ahmad-port.firebaseapp.com
+// VITE_FIREBASE_STORAGE_BUCKET=ahmad-port.appspot.com
+// VITE_FIREBASE_MESSAGING_SENDER_ID=...
+// VITE_FIREBASE_APP_ID=...
+// VITE_FIREBASE_MEASUREMENT_ID=G-...
+// VITE_RECAPTCHA_V3_SITE_KEY= (App Check site key for THIS web app)
+
+const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "ahmad-port";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
+  authDomain:
+    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, // set to limlim-32e6a.firebasestorage.app
+  // IMPORTANT: bucket NAME, not a URL/domain
+  storageBucket:
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
@@ -24,24 +36,38 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
-// App Check (as you had)
+// ---- App Check ----
 if (typeof window !== "undefined") {
-  if (import.meta.env.DEV) self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  const SITE_KEY = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY || "6LfnIakrAAAAAKu3hQwM4EqNaEOiZhNCK0Qipm5o";
-  initializeAppCheck(app, { provider: new ReCaptchaV3Provider(SITE_KEY), isTokenAutoRefreshEnabled: true });
+  // In dev, enable debug token so local runs work even with enforcement ON.
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-undef
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+
+  const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
+  // You still need a provider even when using a debug token.
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(siteKey || "unused"),
+    isTokenAutoRefreshEnabled: true,
+  });
 }
 
-// Firestore
+// ---- Firestore ----
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
-  useFetchStreams: true,
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
 });
 
-// Auth
+// ---- Auth ----
 export const auth = getAuth(app);
 
-// 🔴 Force the bucket explicitly so we never fall back to appspot:
-export const storage = getStorage(app, "gs://limlim-32e6a.firebasestorage.app");
+// ---- Storage ----
+// Let SDK use storageBucket from config (recommended). Do NOT pass the wrong URL.
+export const storage = getStorage(app);
 
-isSupported().then((ok) => ok && getAnalytics(app));
+// ---- Analytics (optional) ----
+isSupported().then(
+  (ok) => ok && firebaseConfig.measurementId && getAnalytics(app)
+);

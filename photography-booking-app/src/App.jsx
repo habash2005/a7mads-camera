@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
-import Header from "./components/Header.jsx";
+import { HelmetProvider } from "react-helmet-async";
+import Header from "./components/SiteHeader";
 import Footer from "./components/Footer";
 import "./index.css";
 

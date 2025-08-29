@@ -1,36 +1,14 @@
 // src/pages/Booking.jsx
 import React, { useMemo, useState } from "react";
 import { checkAvailability, submitBooking } from "../lib/api";
-import { Helmet } from "react-helmet-async"
+import { Helmet } from "react-helmet-async";
+
 /* -------------------------------- Services -------------------------------- */
 const SERVICES = [
-  {
-    id: "events",
-    name: "Events",
-    duration: "2 hours",
-    desc: "Concerts, celebrations, and gatherings",
-  },
-  {
-    id: "branding",
-    name: "Branding",
-    duration: "60 min",
-    desc:
-      "For business owners and creatives who want photos that showcase their personality and work",
-  },
-  {
-    id: "portraits",
-    name: "Portraits + Milestones",
-    duration: "45–60 min",
-    desc:
-      "Seniors, milestone, and personal portraits (casual or styled)",
-  },
-  {
-    id: "couples",
-    name: "Couples",
-    duration: "60 min",
-    desc:
-      "For partners wanting to celebrate love and shared moments",
-  },
+  { id: "events",   name: "Events",              duration: "2 hours",   desc: "Concerts, celebrations, and gatherings" },
+  { id: "branding", name: "Branding",            duration: "60 min",    desc: "Photo sets for websites, social, and launches" },
+  { id: "portraits",name: "Portraits + Milestones", duration: "45–60 min", desc: "Seniors, milestones, personal portraits" },
+  { id: "couples",  name: "Couples",             duration: "60 min",    desc: "Celebrate your story with a modern look" },
 ];
 
 /* ----------------------------- Time utilities ----------------------------- */
@@ -55,12 +33,18 @@ function to12h(hhmm) {
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 /* ----------------------------- Small UI helpers --------------------------- */
-function ChipBtn({ children, onClick }) {
+function ChipBtn({ children, onClick, active }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-full border border-burgundy/30 px-3 py-1 text-xs font-medium text-charcoal/80 hover:bg-gold/20 hover:border-gold/60 transition-colors"
+      className={cls(
+        "rounded-pill px-3 py-1 text-xs font-semibold transition-all",
+        "border",
+        active
+          ? "border-[color:var(--accent-600)] bg-[color:var(--accent-soft)] text-[color:var(--text)]"
+          : "border-[color:var(--border)] text-[color:var(--muted)] hover:bg-[color:var(--accent-soft)]"
+      )}
     >
       {children}
     </button>
@@ -69,23 +53,14 @@ function ChipBtn({ children, onClick }) {
 function SectionTitle({ children, sub }) {
   return (
     <div className="mb-2">
-      <h4 className="font-semibold text-burgundy">{children}</h4>
-      {sub && <p className="text-xs text-charcoal/70 mt-0.5">{sub}</p>}
+      <h4 className="h3 text-[color:var(--text)]">{children}</h4>
+      {sub && <p className="text-xs text-[color:var(--muted)] mt-1">{sub}</p>}
     </div>
   );
 }
 
 /* --------------------------------- Page ----------------------------------- */
 export default function Booking() {
-
-  <Helmet>
-        <title>Lama Wafa | Raleigh, NC Photographer</title>
-        <meta
-          name="description"
-          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
-        <link rel="canonical" href="https://lamawafa.com/" />
-      </Helmet>
-
   const [step, setStep] = useState(0);
 
   // Selected service (price hidden in UI; 0 passed to API to satisfy validator)
@@ -121,7 +96,6 @@ export default function Booking() {
     details.phone.trim() &&
     details.location.trim();
 
-  // (Kept for future use if you add chips later; currently unused in UI)
   const shootForSuggestions = useMemo(() => {
     switch (selected.id) {
       case "branding":
@@ -241,450 +215,370 @@ export default function Booking() {
 
   /* -------------------------------- Render -------------------------------- */
   return (
-    <section id="booking" className="w-full py-16 md:py-24 bg-cream">
-      <div className="max-w-7xl mx-auto px-4">
-        {/* Header */}
-        <div className="flex items-end justify-between gap-4 mb-6">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
-              Book a Session
-            </h2>
-          </div>
-          <SimpleStepper step={step} />
-        </div>
+    <>
+      <Helmet>
+        <title>A7mads Camera — Book a Session</title>
+        <meta
+          name="description"
+          content="Book portraits, branding, or event photography with A7mads Camera. Clean light. Sharp detail. Consistent results."
+        />
+        <link rel="canonical" href="https://a7madscamera.com/#/booking" />
+      </Helmet>
 
-        {/* Card */}
-        <div className="rounded-2xl border border-burgundy/20 bg-white/85 shadow-[0_10px_30px_rgba(0,0,0,0.08)] p-5 md:p-6 backdrop-blur-sm">
-          {/* Step 0: Service selection */}
-          {step === 0 && (
+      <section id="booking" className="w-full py-16 md:py-24">
+        <div className="container-site">
+          {/* Header */}
+          <div className="flex items-end justify-between gap-4 mb-6">
             <div>
-              <h3 className="text-xl font-serif font-semibold text-burgundy">Choose a service</h3>
-              <p className="text-sm text-charcoal/70 mt-1">
-               
+              <h2 className="h2 text-2xl md:text-3xl">Book a Session</h2>
+              <p className="text-sm text-[color:var(--muted)] mt-1">
+                Choose a service, pick a time, and share a few details. I’ll confirm by email.
               </p>
-
-              <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {SERVICES.map((s) => {
-                  const active = s.id === selected.id;
-                  return (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => setSelected({ ...s, price: 0 })}
-                      className={cls(
-                        "text-left rounded-2xl border p-4 transition-all focus:outline-none focus:ring-2 focus:ring-gold",
-                        active
-                          ? "border-burgundy bg-burgundy/5 shadow"
-                          : "border-burgundy/20 hover:border-gold/60 hover:shadow"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-lg font-semibold text-charcoal">{s.name}</div>
-                        <span
-                          className={cls(
-                            "text-[11px] font-semibold rounded-full px-2 py-0.5 ring-1",
-                            active
-                              ? "bg-wine text-white ring-wine"
-                              : "bg-gold/15 text-charcoal ring-gold/40"
-                          )}
-                        >
-                          {s.duration}
-                        </span>
-                      </div>
-
-                      {s.desc && (
-                        <p className="mt-2 text-sm text-charcoal/70">
-                          {s.desc}
-                        </p>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-6 flex justify-end">
-                <button
-                  onClick={() => setStep(1)}
-                  disabled={!canNext0}
-                  className={cls(
-                    "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    canNext0 ? "bg-wine text-white hover:bg-maroon" : "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
-                  )}
-                >
-                  Next →
-                </button>
-              </div>
             </div>
-          )}
+            <SimpleStepper step={step} />
+          </div>
 
-          {/* Step 1: Date & Time */}
-          {step === 1 && (
-            <div>
-              <h3 className="text-xl font-serif font-semibold text-burgundy">Pick date &amp; time</h3>
-              <p className="text-sm text-charcoal/70 mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
+          {/* Card */}
+          <div className="card p-5 md:p-6">
+            {/* Step 0: Service selection */}
+            {step === 0 && (
+              <div>
+                <h3 className="h3 text-xl">Choose a service</h3>
 
-              <div className="mt-4 grid md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Date</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 focus:border-burgundy focus:ring-gold/40 px-3 py-2 bg-white"
-                  />
+                <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {SERVICES.map((s) => {
+                    const active = s.id === selected.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setSelected({ ...s, price: 0 })}
+                        className={cls(
+                          "text-left rounded-xl2 border p-4 transition-all focus:outline-none",
+                          active
+                            ? "border-[color:var(--accent-600)] bg-[color:var(--accent-soft)] shadow-soft"
+                            : "border-[color:var(--border)] hover:border-[color:var(--accent-600)] hover:bg-[color:var(--accent-soft)]"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="text-lg font-semibold">{s.name}</div>
+                          <span
+                            className={cls(
+                              "text-[11px] font-semibold rounded-pill px-2 py-0.5 ring-1",
+                              active
+                                ? "bg-[color:var(--accent)] text-[#0b0e11] ring-[color:var(--accent-600)]"
+                                : "bg-[color:var(--accent-soft)] text-[color:var(--text)] ring-[color:var(--border)]"
+                            )}
+                          >
+                            {s.duration}
+                          </span>
+                        </div>
+
+                        {s.desc && (
+                          <p className="mt-2 text-sm text-[color:var(--muted)]">
+                            {s.desc}
+                          </p>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Time</label>
-                  <select
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 focus:border-burgundy focus:ring-gold/40 px-3 py-2 bg-white"
-                  >
-                    <option value="">— Select time —</option>
-                    {TIME_OPTS.map((t) => (
-                      <option key={t} value={t}>{to12h(t)}</option>
-                    ))}
-                  </select>
-                  {err && availability === false && <div className="text-xs text-wine mt-1">{err}</div>}
-                </div>
-
-                <div className="flex items-end">
+                <div className="mt-6 flex justify-end">
                   <button
-                    onClick={doCheck}
-                    disabled={!date || !time || checking}
+                    onClick={() => setStep(1)}
+                    disabled={!canNext0}
                     className={cls(
-                      "w-full rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                      !date || !time || checking ? "bg-burgundy/10 text-charcoal/50 cursor-not-allowed" : "bg-wine text-white hover:bg-maroon"
+                      "btn btn-primary rounded-pill",
+                      !canNext0 && "opacity-50 cursor-not-allowed"
                     )}
                   >
-                    {checking ? "Checking..." : "Check Availability"}
+                    Next →
                   </button>
                 </div>
               </div>
+            )}
 
-              {availability === true && <p className="mt-3 text-sm text-emerald-700">✅ Slot available. You can proceed.</p>}
-              {availability === false && <p className="mt-3 text-sm text-wine">❌ That time conflicts. Try a different one.</p>}
+            {/* Step 1: Date & Time */}
+            {step === 1 && (
+              <div>
+                <h3 className="h3 text-xl">Pick date &amp; time</h3>
+                <p className="text-sm text-[color:var(--muted)] mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
 
-              <div className="mt-6 flex justify-between">
-                <button className="text-sm underline text-charcoal/70 hover:text-burgundy" onClick={() => setStep(0)}>← Back</button>
-                <button
-                  onClick={() => setStep(2)}
-                  disabled={!canNext1}
-                  className={cls(
-                    "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    canNext1 ? "bg-wine text-white hover:bg-maroon" : "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
-                  )}
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 2: Details (Simplified) */}
-          {step === 2 && (
-            <div>
-              <h3 className="text-xl font-serif font-semibold text-burgundy">Your details</h3>
-
-              {/* Contact basics */}
-              <div className="mt-4 grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Full name</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.name}
-                    onChange={(e) => setDetails({ ...details, name: e.target.value })}
-                    placeholder="Your name"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Email</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.email}
-                    onChange={(e) => setDetails({ ...details, email: e.target.value })}
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Phone</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.phone}
-                    onChange={(e) => setDetails({ ...details, phone: e.target.value })}
-                    placeholder="(555) 123-4567"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Preferred contact</label>
-                  <select
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.contactPref}
-                    onChange={(e) => setDetails({ ...details, contactPref: e.target.value })}
-                  >
-                    <option value="">— Select —</option>
-                    <option>Email</option>
-                    <option>Text</option>
-                    <option>Call</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Best time to reach you</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.bestContactTime}
-                    onChange={(e) => setDetails({ ...details, bestContactTime: e.target.value })}
-                    placeholder="e.g., Weekdays after 5pm"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-charcoal">Instagram (optional)</label>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.instagram}
-                    onChange={(e) => setDetails({ ...details, instagram: e.target.value })}
-                    placeholder="@yourhandle"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-charcoal">How did you hear about me?</label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {["Instagram", "TikTok", "Google", "Friend/Family", "Other"].map((opt) => (
-                      <ChipBtn key={opt} onClick={() => setDetails((d) => ({ ...d, howHeard: opt }))}>
-                        {opt}
-                      </ChipBtn>
-                    ))}
-                  </div>
-                  <input
-                    className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                    value={details.howHeard}
-                    onChange={(e) => setDetails({ ...details, howHeard: e.target.value })}
-                    placeholder="Tell me more (optional)"
-                  />
-                </div>
-              </div>
-
-              {/* Location & logistics */}
-              <div className="mt-8">
-                <SectionTitle sub="If unsure, you can leave these blank for now.">Location & logistics</SectionTitle>
-                <div className="grid md:grid-cols-2 gap-4">
+                <div className="mt-4 grid md:grid-cols-3 gap-4">
                   <div>
-                    <label className="text-sm font-medium text-charcoal">Location</label>
+                    <label className="text-sm font-medium">Date</label>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className="input mt-2 w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium">Time</label>
                     <select
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.location}
-                      onChange={(e) => setDetails({ ...details, location: e.target.value })}
+                      value={time}
+                      onChange={(e) => setTime(e.target.value)}
+                      className="input mt-2 w-full"
                     >
-                      <option>Studio</option>
-                      <option>Client Location</option>
-                      <option>Outdoors</option>
+                      <option value="">— Select time —</option>
+                      {TIME_OPTS.map((t) => (
+                        <option key={t} value={t}>{to12h(t)}</option>
+                      ))}
                     </select>
+                    {err && availability === false && <div className="text-xs text-red-400 mt-1">{err}</div>}
                   </div>
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">Venue name (optional)</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.venueName}
-                      onChange={(e) => setDetails({ ...details, venueName: e.target.value })}
-                      placeholder="Venue, campus, park, etc."
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Address (optional)</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.venueAddress}
-                      onChange={(e) => setDetails({ ...details, venueAddress: e.target.value })}
-                      placeholder="Street address"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">City</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.city}
-                      onChange={(e) => setDetails({ ...details, city: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">State</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.state}
-                      onChange={(e) => setDetails({ ...details, state: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">Zip</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.zip}
-                      onChange={(e) => setDetails({ ...details, zip: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-charcoal">Indoor or Outdoor?</label>
-                    <select
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.indoorOutdoor}
-                      onChange={(e) => setDetails({ ...details, indoorOutdoor: e.target.value })}
+
+                  <div className="flex items-end">
+                    <button
+                      onClick={doCheck}
+                      disabled={!date || !time || checking}
+                      className={cls(
+                        "btn btn-ghost w-full",
+                        (!date || !time || checking) && "opacity-50 cursor-not-allowed"
+                      )}
                     >
-                      <option value="">— Select —</option>
-                      <option>Indoor</option>
-                      <option>Outdoor</option>
-                      <option>Both</option>
-                    </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Rain/weather plan (optional)</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.rainPlan}
-                      onChange={(e) => setDetails({ ...details, rainPlan: e.target.value })}
-                      placeholder="Backup date, alternate indoor space, etc."
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Accessibility needs (optional)</label>
-                    <textarea
-                      rows={2}
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.accessibility}
-                      onChange={(e) => setDetails({ ...details, accessibility: e.target.value })}
-                      placeholder="Parking, mobility access, sensory considerations, etc."
-                    />
+                      {checking ? "Checking..." : "Check Availability"}
+                    </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Creative inputs */}
-              <div className="mt-8">
-                <SectionTitle>Creative preferences</SectionTitle>
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Must-have shots (optional)</label>
-                    <textarea
-                      rows={3}
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.shotList}
-                      onChange={(e) => setDetails({ ...details, shotList: e.target.value })}
-                      placeholder="List key people/moments, product angles, groupings, etc."
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Mood board / inspiration link</label>
-                    <input
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.moodboard}
-                      onChange={(e) => setDetails({ ...details, moodboard: e.target.value })}
-                      placeholder="Pinterest/Drive/Notion link"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium text-charcoal">Anything else to share?</label>
-                    <textarea
-                      rows={3}
-                      className="mt-2 w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
-                      value={details.notes}
-                      onChange={(e) => setDetails({ ...details, notes: e.target.value })}
-                      placeholder="Wardrobe ideas, sensitivities, specific requests, etc."
-                    />
-                  </div>
-                </div>
-              </div>
+                {availability === true && <p className="mt-3 text-sm text-emerald-400">✅ Slot available. You can proceed.</p>}
+                {availability === false && <p className="mt-3 text-sm text-red-400">❌ That time conflicts. Try a different one.</p>}
 
-              <div className="mt-6 flex justify-between">
-                <button className="text-sm underline text-charcoal/70 hover:text-burgundy" onClick={() => setStep(1)}>
-                  ← Back
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  disabled={!canNext2}
-                  className={cls(
-                    "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    canNext2 ? "bg-wine text-white hover:bg-maroon" : "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
-                  )}
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Review & Confirm */}
-          {step === 3 && (
-            <div>
-              <h3 className="text-xl font-serif font-semibold text-burgundy">Review &amp; confirm</h3>
-
-              <div className="mt-4 grid md:grid-cols-2 gap-6">
-                <div className="p-4 rounded-xl border border-burgundy/20 bg-burgundy/5">
-                  <h4 className="font-semibold text-charcoal">Summary</h4>
-                  <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
-                    <li>Service: <span className="font-medium text-burgundy">{selected.name}</span></li>
-                    <li>Date &amp; Time: <span className="font-medium">{date || "—"} {time ? to12h(time) : ""}</span></li>
-                    <li>Estimated duration: {selected.duration}</li>
-                    <li>Location: {details.location}</li>
-                  </ul>
-                </div>
-
-                <div className="p-4 rounded-xl border border-burgundy/20 bg-burgundy/5">
-                  <h4 className="font-semibold text-charcoal">Contact &amp; brief</h4>
-                  <ul className="mt-2 text-sm text-charcoal/80 space-y-1">
-                    <li>Name: {details.name || "—"}</li>
-                    <li>Email: {details.email || "—"}</li>
-                    <li>Phone: {details.phone || "—"}</li>
-                    {details.shootFor && <li>Shoot: {details.shootFor}</li>}
-                    {(details.locationNotes || details.venueName || details.venueAddress || details.city || details.state || details.zip) && (
-                      <li>Location notes will be included.</li>
-                    )}
-                    {(details.notes || details.shotList || details.moodboard || details.deadline || details.deliverables) && (
-                      <li>Creative preferences will be included.</li>
-                    )}
-                  </ul>
-                </div>
-              </div>
-
-              {!result ? (
                 <div className="mt-6 flex justify-between">
-                  <button className="text-sm underline text-charcoal/70 hover:text-burgundy" onClick={() => setStep(2)}>
+                  <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(0)}>← Back</button>
+                  <button
+                    onClick={() => setStep(2)}
+                    disabled={!canNext1}
+                    className={cls(
+                      "btn btn-primary rounded-pill",
+                      !canNext1 && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Details (Simplified) */}
+            {step === 2 && (
+              <div>
+                <h3 className="h3 text-xl">Your details</h3>
+
+                {/* Contact basics */}
+                <div className="mt-4 grid md:grid-cols-2 gap-4">
+                  <FormInput label="Full name" value={details.name} onChange={(v)=>setDetails({...details, name:v})} placeholder="Your name" />
+                  <FormInput label="Email" value={details.email} onChange={(v)=>setDetails({...details, email:v})} placeholder="you@example.com" />
+                  <FormInput label="Phone" value={details.phone} onChange={(v)=>setDetails({...details, phone:v})} placeholder="(555) 123-4567" />
+                  <FormSelect label="Preferred contact" value={details.contactPref} onChange={(v)=>setDetails({...details, contactPref:v})} options={["Email","Text","Call"]} />
+                  <FormInput label="Best time to reach you" value={details.bestContactTime} onChange={(v)=>setDetails({...details, bestContactTime:v})} placeholder="e.g., Weekdays after 5pm" />
+                  <FormInput label="Instagram (optional)" value={details.instagram} onChange={(v)=>setDetails({...details, instagram:v})} placeholder="@yourhandle" />
+
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-medium">How did you hear about me?</label>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {["Instagram", "TikTok", "Google", "Friend/Family", "Other"].map((opt) => (
+                        <ChipBtn
+                          key={opt}
+                          active={details.howHeard === opt}
+                          onClick={() => setDetails((d) => ({ ...d, howHeard: opt }))}
+                        >
+                          {opt}
+                        </ChipBtn>
+                      ))}
+                    </div>
+                    <input
+                      className="input mt-2 w-full"
+                      value={details.howHeard}
+                      onChange={(e) => setDetails({ ...details, howHeard: e.target.value })}
+                      placeholder="Tell me more (optional)"
+                    />
+                  </div>
+                </div>
+
+                {/* Location & logistics */}
+                <div className="mt-8">
+                  <SectionTitle sub="If unsure, you can leave these blank for now.">Location & logistics</SectionTitle>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <FormSelect label="Location" value={details.location} onChange={(v)=>setDetails({...details, location:v})} options={["Studio","Client Location","Outdoors"]} />
+                    <FormInput label="Venue name (optional)" value={details.venueName} onChange={(v)=>setDetails({...details, venueName:v})} placeholder="Venue, campus, park, etc." />
+                    <div className="md:col-span-2">
+                      <FormInput label="Address (optional)" value={details.venueAddress} onChange={(v)=>setDetails({...details, venueAddress:v})} placeholder="Street address" />
+                    </div>
+                    <FormInput label="City" value={details.city} onChange={(v)=>setDetails({...details, city:v})}/>
+                    <FormInput label="State" value={details.state} onChange={(v)=>setDetails({...details, state:v})}/>
+                    <FormInput label="Zip" value={details.zip} onChange={(v)=>setDetails({...details, zip:v})}/>
+                    <FormSelect label="Indoor or Outdoor?" value={details.indoorOutdoor} onChange={(v)=>setDetails({...details, indoorOutdoor:v})} options={["Indoor","Outdoor","Both"]} />
+                    <div className="md:col-span-2">
+                      <FormInput label="Rain/weather plan (optional)" value={details.rainPlan} onChange={(v)=>setDetails({...details, rainPlan:v})} placeholder="Backup date, alternate indoor space, etc." />
+                    </div>
+                    <div className="md:col-span-2">
+                      <FormText label="Accessibility needs (optional)" rows={2} value={details.accessibility} onChange={(v)=>setDetails({...details, accessibility:v})} placeholder="Parking, mobility access, sensory considerations, etc." />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Creative inputs */}
+                <div className="mt-8">
+                  <SectionTitle>Creative preferences</SectionTitle>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <FormText label="Must-have shots (optional)" rows={3} value={details.shotList} onChange={(v)=>setDetails({...details, shotList:v})} placeholder="List key people/moments, product angles, groupings, etc." />
+                    </div>
+                    <div className="md:col-span-2">
+                      <FormInput label="Mood board / inspiration link" value={details.moodboard} onChange={(v)=>setDetails({...details, moodboard:v})} placeholder="Pinterest/Drive/Notion link" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <FormText label="Anything else to share?" rows={3} value={details.notes} onChange={(v)=>setDetails({...details, notes:v})} placeholder="Wardrobe ideas, sensitivities, specific requests, etc." />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-between">
+                  <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(1)}>
                     ← Back
                   </button>
                   <button
-                    onClick={confirm}
-                    disabled={submitting}
-                    className="rounded-full px-5 py-3 text-sm font-semibold shadow-soft bg-gold text-charcoal hover:bg-wine hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-gold"
+                    onClick={() => setStep(3)}
+                    disabled={!canNext2}
+                    className={cls(
+                      "btn btn-primary rounded-pill",
+                      !canNext2 && "opacity-50 cursor-not-allowed"
+                    )}
                   >
-                    {submitting ? "Submitting..." : "Confirm Booking"}
+                    Next →
                   </button>
                 </div>
-              ) : (
-                <div className="mt-6 rounded-xl border border-burgundy/20 p-4 bg-burgundy/5">
-                  <p className="font-semibold text-charcoal">🎉 Booking requested!</p>
-                  <p className="text-sm text-charcoal/80 mt-1">
-                    Your reference: <span className="font-mono text-burgundy">{result.reference}</span>.
-                  </p>
-                  <div className="mt-4 flex gap-3">
-                    <button
-                      onClick={() => navigator.clipboard?.writeText(result.reference)}
-                      className="rounded-full px-4 py-2 text-xs font-semibold border border-burgundy/30 text-charcoal hover:bg-gold/20 hover:border-gold/60 transition-colors"
-                    >
-                      Copy reference
-                    </button>
-                    <button
-                      onClick={reset}
-                      className="rounded-full px-5 py-3 text-sm font-semibold bg-wine text-white hover:bg-maroon transition-colors shadow-soft focus:outline-none focus:ring-2 focus:ring-gold"
-                    >
-                      Book Another
-                    </button>
+              </div>
+            )}
+
+            {/* Step 3: Review & Confirm */}
+            {step === 3 && (
+              <div>
+                <h3 className="h3 text-xl">Review &amp; confirm</h3>
+
+                <div className="mt-4 grid md:grid-cols-2 gap-6">
+                  <div className="card p-4">
+                    <h4 className="font-semibold">Summary</h4>
+                    <ul className="mt-2 text-sm text-[color:var(--muted)] space-y-1">
+                      <li>Service: <span className="font-medium text-[color:var(--text)]">{selected.name}</span></li>
+                      <li>Date &amp; Time: <span className="font-medium text-[color:var(--text)]">{date || "—"} {time ? to12h(time) : ""}</span></li>
+                      <li>Estimated duration: {selected.duration}</li>
+                      <li>Location: {details.location}</li>
+                    </ul>
+                  </div>
+
+                  <div className="card p-4">
+                    <h4 className="font-semibold">Contact &amp; brief</h4>
+                    <ul className="mt-2 text-sm text-[color:var(--muted)] space-y-1">
+                      <li>Name: {details.name || "—"}</li>
+                      <li>Email: {details.email || "—"}</li>
+                      <li>Phone: {details.phone || "—"}</li>
+                      {details.shootFor && <li>Shoot: {details.shootFor}</li>}
+                      {(details.locationNotes || details.venueName || details.venueAddress || details.city || details.state || details.zip) && (
+                        <li>Location notes will be included.</li>
+                      )}
+                      {(details.notes || details.shotList || details.moodboard || details.deadline || details.deliverables) && (
+                        <li>Creative preferences will be included.</li>
+                      )}
+                    </ul>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+
+                {!result ? (
+                  <div className="mt-6 flex justify-between">
+                    <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(2)}>
+                      ← Back
+                    </button>
+                    <button
+                      onClick={confirm}
+                      disabled={submitting}
+                      className={cls(
+                        "btn btn-primary rounded-pill",
+                        submitting && "opacity-70"
+                      )}
+                    >
+                      {submitting ? "Submitting..." : "Confirm Booking"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-6 card p-4">
+                    <p className="font-semibold">🎉 Booking requested!</p>
+                    <p className="text-sm text-[color:var(--muted)] mt-1">
+                      Your reference: <span className="font-mono text-[color:var(--text)]">{result.reference}</span>.
+                    </p>
+                    <div className="mt-4 flex gap-3">
+                      <button
+                        onClick={() => navigator.clipboard?.writeText(result.reference)}
+                        className="btn btn-ghost text-xs"
+                      >
+                        Copy reference
+                      </button>
+                      <button
+                        onClick={reset}
+                        className="btn btn-primary"
+                      >
+                        Book Another
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
+  );
+}
+
+/* ---------------------------- Reusable fields ----------------------------- */
+function FormInput({ label, value, onChange, placeholder }) {
+  return (
+    <div>
+      <label className="text-sm font-medium">{label}</label>
+      <input
+        className="input mt-2 w-full"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+function FormText({ label, value, onChange, placeholder, rows = 3 }) {
+  return (
+    <div>
+      <label className="text-sm font-medium">{label}</label>
+      <textarea
+        rows={rows}
+        className="input mt-2 w-full h-auto py-2"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+function FormSelect({ label, value, onChange, options = [] }) {
+  return (
+    <div>
+      <label className="text-sm font-medium">{label}</label>
+      <select
+        className="input mt-2 w-full"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">— Select —</option>
+        {options.map((opt) => (
+          <option key={opt} value={opt}>{opt}</option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -701,18 +595,20 @@ function SimpleStepper({ step }) {
             <div
               className={cls(
                 "w-6 h-6 rounded-full grid place-items-center font-semibold",
-                done ? "bg-gold text-charcoal"
-                     : active ? "bg-wine text-white"
-                              : "bg-burgundy/10 text-charcoal/60"
+                done   ? "bg-[color:var(--accent)]  text-[#0b0e11]"
+              : active ? "bg-[color:var(--accent-600)] text-white"
+              : "bg-[color:var(--accent-soft)] text-[color:var(--muted)]"
               )}
               title={label}
             >
               {i + 1}
             </div>
-            <span className={cls("uppercase tracking-wide", active ? "text-burgundy font-semibold" : "text-charcoal/60")}>
+            <span className={cls("uppercase tracking-wide",
+              active ? "text-[color:var(--text)] font-semibold" : "text-[color:var(--muted)]"
+            )}>
               {label}
             </span>
-            {i < items.length - 1 && <span className="w-8 h-px bg-burgundy/15 mx-1" />}
+            {i < items.length - 1 && <span className="w-8 h-px bg-[color:var(--border)] mx-1" />}
           </div>
         );
       })}

@@ -1,137 +1,105 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchPortfolioImages } from "../lib/storage";
 
-/* ------------------------------------------------------------------ */
-/* Replace the image URLs with your own (Cloudinary/Storage/local).   */
-/* Add/remove categories as needed: "Portraits" | "Branding" | "Events" */
-/* ------------------------------------------------------------------ */
-const IMAGES = [
-  // Portraits
-  { id: "p1", src: "/portfolio/portraits/p1.jpg", w: 1200, h: 1600, category: "Portraits", alt: "Portrait 1" },
-  { id: "p2", src: "/portfolio/portraits/p2.jpg", w: 1600, h: 1200, category: "Portraits", alt: "Portrait 2" },
-  // Branding
-  { id: "b1", src: "/portfolio/branding/b1.jpg", w: 1600, h: 1067, category: "Branding", alt: "Branding 1" },
-  { id: "b2", src: "/portfolio/branding/b2.jpg", w: 1200, h: 1600, category: "Branding", alt: "Branding 2" },
-  // Events
-  { id: "e1", src: "/portfolio/events/e1.jpg", w: 1600, h: 1067, category: "Events", alt: "Event 1" },
-  { id: "e2", src: "/portfolio/events/e2.jpg", w: 1200, h: 1600, category: "Events", alt: "Event 2" },
-  // Add more...
-];
+export default function Home(){
+  const [images,setImages]=useState([]);
+  const [state,setState]=useState({loading:true,error:""});
 
-const CATEGORIES = ["All", "Portraits", "Branding", "Events"];
-
-export default function Home() {
-  const [active, setActive] = useState("All");
-  const [query, setQuery] = useState("");
-
-  const items = useMemo(() => {
-    let list = active === "All" ? IMAGES : IMAGES.filter(i => i.category === active);
-    if (query.trim()) {
-      const q = query.toLowerCase();
-      list = list.filter(i => i.alt.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
-    }
-    return list;
-  }, [active, query]);
+  useEffect(()=>{
+    let on=true;
+    (async()=>{
+      try{
+        const urls=await fetchPortfolioImages({ path:"portfolio", includeSubfolders:true });
+        on && setImages(urls);
+      }catch(e){
+        on && setState(s=>({...s,error:"Failed to load portfolio."}));
+      }finally{
+        on && setState(s=>({...s,loading:false}));
+      }
+    })();
+    return ()=>{on=false;}
+  },[]);
 
   return (
     <main>
       {/* HERO */}
       <section className="relative isolate">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 md:py-28">
-          <div className="grid gap-10 md:grid-cols-2 items-center">
+        <div className="container-site py-20 md:py-28">
+          <div className="grid gap-12 md:grid-cols-2 items-center">
             <div>
-              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
-                Confident, modern photography—built around you.
-              </h1>
-              <p className="mt-4 text-lg text-muted max-w-xl">
-                Portraits, branding, and events across North Carolina. Clean light. Sharp detail. Consistent results.
+              <h1 className="h1 text-4xl md:text-5xl">Studio-grade photography for people & brands.</h1>
+              <p className="mt-4 text-lg text-[color:var(--muted)] max-w-xl">
+                Crisp, contemporary imagery with consistent craft—portraits, branding, and events across North Carolina.
               </p>
               <div className="mt-8 flex gap-3">
                 <Link to="/booking" className="btn btn-primary">Book a Session</Link>
-                {/* Keep a Portfolio route if you still want a full-page gallery */}
-                {/* <Link to="/portfolio" className="btn btn-ghost">Full Portfolio</Link> */}
+                <a href="#portfolio" className="btn btn-ghost">View Recent Work</a>
+              </div>
+              <div className="mt-10 grid grid-cols-3 gap-6 text-sm text-[color:var(--muted)]">
+                <Stat k="300+" v="Sessions"/> <Stat k="4.9★" v="avg. rating"/> <Stat k="72hr" v="typical turn-around"/>
               </div>
             </div>
-
-            <div className="relative">
-              <div className="aspect-[4/3] rounded-xl2 overflow-hidden border border-[color:var(--border)] shadow-soft">
-                <img
-                  src="/hero-placeholder.jpg"
-                  alt="A7mads Camera hero"
-                  className="h-full w-full object-cover"
-                  loading="eager"
-                />
-              </div>
-              <div className="pointer-events-none absolute inset-0 rounded-xl2 ring-1 ring-white/5" />
+            <div className="img-tile aspect-[4/3]">
+              <img src="/hero-placeholder.jpg" alt="Hero" className="h-full w-full object-cover" />
             </div>
           </div>
         </div>
       </section>
 
-      {/* INLINE PORTFOLIO */}
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 md:pb-24">
-        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">Portfolio</h2>
-
-          <div className="flex items-center gap-2">
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-2">
-              {CATEGORIES.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setActive(cat)}
-                  className={`px-3 py-1.5 rounded-xl2 text-sm transition-colors border border-[color:var(--border)]
-                    ${active === cat ? "bg-electric text-white" : "text-paper/80 hover:text-white hover:bg-white/5"}`}
-                >
-                  {cat}
-                </button>
-              ))}
+      {/* SERVICES (clean, 3-up) */}
+      <section className="container-site pb-14 md:pb-20">
+        <h2 className="h2 text-2xl md:text-3xl mb-6">Services</h2>
+        <div className="grid gap-4 md:gap-6 md:grid-cols-3">
+          {[
+            {t:"Portraits",d:"Clean, confident portraits for profiles, teams, and talent."},
+            {t:"Branding",d:"On-brand lifestyle & product sets for web and social."},
+            {t:"Events",d:"Polished coverage focused on people, moments, and atmosphere."},
+          ].map((s)=>(
+            <div key={s.t} className="card p-6">
+              <h3 className="h3 text-xl">{s.t}</h3>
+              <p className="mt-2 text-sm text-[color:var(--muted)]">{s.d}</p>
             </div>
-            {/* Search */}
-            <div className="relative">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search (e.g., portraits)"
-                className="h-10 w-56 rounded-xl2 border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-sm outline-none focus:ring-2 focus:ring-electric"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Masonry-ish responsive grid */}
-        <div className="grid gap-3 sm:gap-4"
-             style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
-          {items.map(img => (
-            <figure key={img.id} className="group relative overflow-hidden rounded-xl2 border border-[color:var(--border)] shadow-soft">
-              {/* Use sizes for responsive loading; replace src with <img srcSet> if you have variants */}
-              <img
-                src={img.src}
-                alt={img.alt}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
-                loading="lazy"
-                width={img.w}
-                height={img.h}
-                sizes="(max-width: 768px) 100vw, 33vw"
-              />
-              <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">{img.category}</span>
-                  <span className="text-xs text-paper/70">{img.alt}</span>
-                </div>
-              </figcaption>
-            </figure>
           ))}
         </div>
+      </section>
 
-        {/* CTA bar */}
-        <div className="mt-10 flex items-center justify-between gap-4 rounded-xl2 border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
-          <p className="text-sm text-muted">
-            Want to see a tailored set for your shoot type? I’ll send a curated selection based on your vibe.
-          </p>
+      {/* PORTFOLIO (from Firebase) */}
+      <section id="portfolio" className="container-site pb-16 md:pb-24">
+        <h2 className="h2 text-2xl md:text-3xl mb-6">Selected Work</h2>
+
+        {state.loading && (
+          <div className="grid gap-4" style={{gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))"}}>
+            {Array.from({length:9}).map((_,i)=><div key={i} className="card h-60 animate-pulse" />)}
+          </div>
+        )}
+
+        {!state.loading && state.error && (
+          <div className="card p-4 border border-red-500/30 bg-red-500/10 text-sm">{state.error}</div>
+        )}
+
+        {!state.loading && !state.error && (
+          <div className="grid gap-4" style={{gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))"}}>
+            {images.map(img=>(
+              <figure key={img.id} className="img-tile">
+                <img src={img.src} alt={img.path} className="h-full w-full object-cover" loading="lazy" />
+              </figure>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-10 card p-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-[color:var(--muted)]">Want a tailored preview for your project? I’ll curate a set to your brief.</p>
           <Link to="/booking" className="btn btn-primary">Request a Curated Set</Link>
         </div>
       </section>
     </main>
   );
 }
+
+function Stat({k,v}){ return (
+  <div>
+    <div className="text-xl font-extrabold">{k}</div>
+    <div>{v}</div>
+  </div>
+)}
