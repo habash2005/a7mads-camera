@@ -1,8 +1,9 @@
 # /netlify.toml
 [build]
   base = "photography-booking-app"
-  command = "npm ci && npm run build"
+  command = "npm i --no-fund --no-audit && npm run build"
   publish = "dist"
+
 
 [build.environment]
   NODE_VERSION = "20"
