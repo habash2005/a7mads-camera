@@ -1,15 +1,17 @@
+# /netlify.toml
 [build]
-  # Your app lives in this subfolder:
   base = "photography-booking-app"
   command = "npm ci && npm run build"
   publish = "dist"
 
-# Only keep this block if you actually have functions in this folder.
+[build.environment]
+  NODE_VERSION = "20"
+
+# Make directory relative to the base above
 [functions]
-  directory = "photography-booking-app/netlify/functions"
+  directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# SPA fallback (keeps deep links working)
 [[redirects]]
   from = "/*"
   to = "/index.html"
