@@ -1,248 +1,137 @@
-// src/pages/Home.jsx
-import React, { useEffect, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { db } from "../lib/firebase";
-import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
-import heroImg from "../img_4942.jpg";
-import MasonryGrid from "../components/MasonryGrid"; // masonry preview like lensofher
-import { Helmet } from "react-helmet-async"
 
+/* ------------------------------------------------------------------ */
+/* Replace the image URLs with your own (Cloudinary/Storage/local).   */
+/* Add/remove categories as needed: "Portraits" | "Branding" | "Events" */
+/* ------------------------------------------------------------------ */
+const IMAGES = [
+  // Portraits
+  { id: "p1", src: "/portfolio/portraits/p1.jpg", w: 1200, h: 1600, category: "Portraits", alt: "Portrait 1" },
+  { id: "p2", src: "/portfolio/portraits/p2.jpg", w: 1600, h: 1200, category: "Portraits", alt: "Portrait 2" },
+  // Branding
+  { id: "b1", src: "/portfolio/branding/b1.jpg", w: 1600, h: 1067, category: "Branding", alt: "Branding 1" },
+  { id: "b2", src: "/portfolio/branding/b2.jpg", w: 1200, h: 1600, category: "Branding", alt: "Branding 2" },
+  // Events
+  { id: "e1", src: "/portfolio/events/e1.jpg", w: 1600, h: 1067, category: "Events", alt: "Event 1" },
+  { id: "e2", src: "/portfolio/events/e2.jpg", w: 1200, h: 1600, category: "Events", alt: "Event 2" },
+  // Add more...
+];
 
-
-
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
-
-
-
-
+const CATEGORIES = ["All", "Portraits", "Branding", "Events"];
 
 export default function Home() {
+  const [active, setActive] = useState("All");
+  const [query, setQuery] = useState("");
+
+  const items = useMemo(() => {
+    let list = active === "All" ? IMAGES : IMAGES.filter(i => i.category === active);
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(i => i.alt.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+    }
+    return list;
+  }, [active, query]);
+
   return (
-    <><Helmet>
-      <title>Lama Wafa | Raleigh, NC Photographer</title>
-      <meta
-        name="description"
-        content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
-      <link rel="canonical" href="https://lamawafa.com/" />
-    </Helmet>
-    <section className="w-full bg-cream">
-        {/* ======= HERO (burgundy band) ======= */}
-        <div className="bg-gradient-to-b from-burgundy to-maroon">
-          <div className="max-w-7xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
-            {/* Copy */}
+    <main>
+      {/* HERO */}
+      <section className="relative isolate">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20 md:py-28">
+          <div className="grid gap-10 md:grid-cols-2 items-center">
             <div>
-              <h1 className="text-3xl md:text-5xl font-serif font-semibold leading-tight text-white">
-                Welcome, I’m Lama, a photographer based in Raleigh, NC
+              <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
+                Confident, modern photography—built around you.
               </h1>
-              <p className="mt-4 text-white/80 text-base md:text-lg max-w-prose">
-                I’m excited to learn your story and capture it in a way that feels real and meaningful.
+              <p className="mt-4 text-lg text-muted max-w-xl">
+                Portraits, branding, and events across North Carolina. Clean light. Sharp detail. Consistent results.
               </p>
-
-              <div className="mt-6 flex gap-3">
-                <Link
-                  to="/booking"
-                  className="rounded-full px-5 py-3 text-sm font-semibold bg-wine text-white shadow-soft hover:bg-maroon focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
-                >
-                  Start Booking
-                </Link>
-                <Link
-                  to="/portfolio"
-                  className="px-5 py-3 rounded-full border border-gold/50 text-sm font-semibold text-white/95 hover:bg-white/10 transition-colors"
-                >
-                  View Portfolio
-                </Link>
+              <div className="mt-8 flex gap-3">
+                <Link to="/booking" className="btn btn-primary">Book a Session</Link>
+                {/* Keep a Portfolio route if you still want a full-page gallery */}
+                {/* <Link to="/portfolio" className="btn btn-ghost">Full Portfolio</Link> */}
               </div>
             </div>
 
-            {/* Image / Hero Card */}
-            <div className="relative overflow-hidden rounded-2xl bg-white/80 shadow-soft p-4 md:p-6 ring-1 ring-white/30">
-              <div className="relative w-full overflow-hidden rounded-xl">
-                <div className="relative aspect-[4/3] w-full">
-                  <img
-                    src={heroImg}
-                    alt="Lama holding a camera on a wooden bridge"
-                    loading="eager"
-                    decoding="async"
-                    fetchPriority="high"
-                    draggable="false"
-                    className="absolute inset-0 h-full w-full object-cover [object-position:50%_12%] md:[object-position:50%_18%]" />
+            <div className="relative">
+              <div className="aspect-[4/3] rounded-xl2 overflow-hidden border border-[color:var(--border)] shadow-soft">
+                <img
+                  src="/hero-placeholder.jpg"
+                  alt="A7mads Camera hero"
+                  className="h-full w-full object-cover"
+                  loading="eager"
+                />
+              </div>
+              <div className="pointer-events-none absolute inset-0 rounded-xl2 ring-1 ring-white/5" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* INLINE PORTFOLIO */}
+      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 md:pb-24">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">Portfolio</h2>
+
+          <div className="flex items-center gap-2">
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setActive(cat)}
+                  className={`px-3 py-1.5 rounded-xl2 text-sm transition-colors border border-[color:var(--border)]
+                    ${active === cat ? "bg-electric text-white" : "text-paper/80 hover:text-white hover:bg-white/5"}`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            {/* Search */}
+            <div className="relative">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search (e.g., portraits)"
+                className="h-10 w-56 rounded-xl2 border border-[color:var(--border)] bg-[color:var(--surface)] px-3 text-sm outline-none focus:ring-2 focus:ring-electric"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Masonry-ish responsive grid */}
+        <div className="grid gap-3 sm:gap-4"
+             style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+          {items.map(img => (
+            <figure key={img.id} className="group relative overflow-hidden rounded-xl2 border border-[color:var(--border)] shadow-soft">
+              {/* Use sizes for responsive loading; replace src with <img srcSet> if you have variants */}
+              <img
+                src={img.src}
+                alt={img.alt}
+                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                loading="lazy"
+                width={img.w}
+                height={img.h}
+                sizes="(max-width: 768px) 100vw, 33vw"
+              />
+              <figcaption className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold">{img.category}</span>
+                  <span className="text-xs text-paper/70">{img.alt}</span>
                 </div>
-              </div>
-              <div className="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-gold/30" />
-            </div>
-          </div>
+              </figcaption>
+            </figure>
+          ))}
         </div>
 
-        {/* ======= MY STORY ======= */}
-        <div className="py-12 md:py-16 bg-cream">
-          <div className="max-w-3xl mx-auto px-4">
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">My Story</h2>
-            <div className="mt-4 space-y-4 text-charcoal/80 leading-relaxed">
-              <p>
-                My love for photography started with my big brother. He’d take pictures at family gatherings and
-                let me experiment with his camera, always telling me I had an eye for it. What began as a hobby
-                with just the family’s camera grew into a real passion.
-              </p>
-              <p>
-                I love photographing people and events because I want you to enjoy the moment while still having
-                memories to look back on. Growing up, I loved flipping through family albums, learning about
-                our stories, and feeling connected through those memories.
-              </p>
-              <p>
-                That’s what I aim to create for my clients: vibrant, warm, and candid images that tell your story
-                and preserve your memories for years to come.
-              </p>
-            </div>
-          </div>
+        {/* CTA bar */}
+        <div className="mt-10 flex items-center justify-between gap-4 rounded-xl2 border border-[color:var(--border)] bg-[color:var(--surface)] p-4">
+          <p className="text-sm text-muted">
+            Want to see a tailored set for your shoot type? I’ll send a curated selection based on your vibe.
+          </p>
+          <Link to="/booking" className="btn btn-primary">Request a Curated Set</Link>
         </div>
-
-        {/* ======= WHAT TO EXPECT ======= */}
-        <div className="py-12 md:py-16">
-          <div className="max-w-3xl mx-auto px-4">
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">What to Expect</h2>
-            <p className="mt-4 text-charcoal/80 leading-relaxed">
-              I’m organized, detail-oriented, and thoughtful in my approach. My goal is to make every session or
-              event run smoothly so you can feel comfortable and natural, enjoy the experience, and walk away
-              with images you’ll treasure forever.
-            </p>
-            <div className="mt-6 flex gap-3">
-              <Link
-                to="/booking"
-                className="rounded-full px-5 py-3 text-sm font-semibold bg-gold text-charcoal shadow-soft hover:bg-wine hover:text-white focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
-              >
-                Check Availability
-              </Link>
-              <Link
-                to="/faq"
-                className="px-5 py-3 rounded-full border border-burgundy/30 text-sm font-semibold text-burgundy hover:bg-gold/10 transition-colors"
-              >
-                Read FAQs
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* ======= LATEST PORTFOLIO (lazy masonry preview) ======= */}
-        <PortfolioOnScroll />
-      </section></>
-  );
-}
-
-/* ----------------- Portfolio On-Scroll ----------------- */
-function PortfolioOnScroll() {
-  const [ready, setReady] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [imgs, setImgs] = useState([]);
-  const [err, setErr] = useState("");
-  const sentryRef = useRef(null);
-
-  useEffect(() => {
-    const el = sentryRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      (entries) => entries[0]?.isIntersecting && setReady(true),
-      { rootMargin: "0px 0px -15% 0px", threshold: 0.15 }
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!ready) return;
-    (async () => {
-      setLoading(true);
-      setErr("");
-      try {
-        // 1) portfolio gallery
-        const galQ = query(collection(db, "galleries"), where("tag", "==", "portfolio"), limit(1));
-        const galSnap = await getDocs(galQ);
-        if (galSnap.empty) { setErr("Portfolio is not configured yet."); setImgs([]); return; }
-        const galId = galSnap.docs[0].id;
-
-        // 2) latest images
-        let imgsSnap;
-        try {
-          imgsSnap = await getDocs(
-            query(collection(db, `galleries/${galId}/images`), orderBy("createdAt", "desc"), limit(12))
-          );
-        } catch {
-          imgsSnap = await getDocs(query(collection(db, `galleries/${galId}/images`), limit(12)));
-        }
-        const rows = imgsSnap.docs.map((d) => d.data());
-        rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-        setImgs(rows.map(r => ({
-          id: r.public_id,
-          src: r.secure_url,
-          alt: r.original_filename || r.public_id,
-          width: r.width,
-          height: r.height,
-          filename: r.original_filename
-        })));
-      } catch (e) {
-        console.error("[Home portfolio] load failed:", e);
-        const msg = String(e.code || e.message).toLowerCase();
-        setErr(msg.includes("permission")
-          ? "We couldn't load the portfolio (permission denied)."
-          : "We couldn't load the portfolio right now. Please try again."
-        );
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [ready]);
-
-  return (
-    <div ref={sentryRef} className="py-12 md:py-20 bg-cream">
-      <div className="max-w-7xl mx-auto px-4">
-        <header className={cls(
-          "transition-all duration-700",
-          ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
-        )}>
-          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">Portfolio</h2>
-          <p className="text-charcoal/70 mt-1"></p>
-        </header>
-
-        <div className="mt-6">
-          {err && <div className="text-sm text-rose mb-4">{err}</div>}
-          {loading ? (
-            <SkeletonGrid />
-          ) : imgs.length === 0 ? (
-            <div className="text-sm text-charcoal/60">No portfolio images yet.</div>
-          ) : (
-            // Natural-aspect masonry preview (like lensofher)
-            <MasonryGrid items={imgs} />
-          )}
-        </div>
-
-        <div className={cls(
-          "mt-8 flex",
-          ready ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3",
-          "transition-all duration-700"
-        )}>
-          <Link
-            to="/portfolio"
-            className="rounded-full px-5 py-3 text-sm font-semibold bg-wine text-white shadow-soft hover:bg-maroon focus:outline-none focus:ring-2 focus:ring-gold transition-colors"
-          >
-            See Full Portfolio
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SkeletonGrid() {
-  // Styled to echo the masonry look (taller rectangles here and there)
-  return (
-    <div className="columns-1 sm:columns-2 xl:columns-3 2xl:columns-4 gap-3">
-      {Array.from({ length: 8 }).map((_, i) => (
-        <div
-          key={i}
-          className="mb-3 rounded-xl bg-neutral-200/60 animate-pulse"
-          style={{ height: i % 3 === 0 ? 280 : i % 3 === 1 ? 360 : 220 }}
-        />
-      ))}
-    </div>
+      </section>
+    </main>
   );
 }

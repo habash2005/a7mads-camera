@@ -1,36 +1,26 @@
 /** @type {import('tailwindcss').Config} */
-module.exports = {
-    content: [
-      "./index.html",
-      "./src/**/*.{js,jsx,ts,tsx}",
-    ],
-    theme: {
-      extend: {
-        colors: {
-          // your existing palette
-          blush: "#FADADD",
-          rose: "#F4A6A6",
-          ivory: "#FFF8F0",
-          charcoal: "#333333",
-          gold: "#D4AF37",
-  
-          // burgundy / maroon system
-          burgundy: "#4A0E1A",  // deep wine
-          maroon:   "#6B1224",  // slightly brighter
-          wine:     "#821829",
-          // helpful translucent tokens
-          burgundy50: "rgba(74,14,26,0.5)",
-          gold10:     "rgba(212,175,55,0.10)",
-        },
-        boxShadow: {
-          soft: "0 6px 24px rgba(74,14,26,0.12)",
-        },
-        fontFamily: {
-          sans: ['"Poppins"', "sans-serif"],
-          serif: ['"Playfair Display"', "serif"],
-        },
+export default {
+  content: ["./index.html", "./src/**/*.{js,jsx,ts,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        ink: "#0B0F14",
+        charcoal: "#111827",
+        slate: "#1F2937",
+        paper: "#E5E7EB",
+        muted: "#9CA3AF",
+        electric: "#2563EB",
+        cobalt: "#1E40AF",
+        bronze: "#B08968",
+        border: "rgba(255,255,255,.08)"
       },
-    },
-    plugins: [],
-  };
-  
+      boxShadow: {
+        soft: "0 10px 25px -10px rgba(0,0,0,.35)"
+      },
+      borderRadius: {
+        xl2: "1rem"
+      }
+    }
+  },
+  plugins: []
+}

@@ -1,15 +1,51 @@
+/* Tailwind base/components/utilities should remain if present */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Base element tweaks */
-@layer base {
-  ::selection { @apply bg-[rgba(212,175,55,0.28)] text-[rgb(74,14,26)]; } /* gold on burgundy */
-  a { text-underline-offset: 2px; }
-  a:hover { text-decoration-color: #D4AF37; }
+/* Design tokens */
+:root{
+  --bg:#0B0F14;          /* ink */
+  --surface:#0E1218;     /* deep charcoal */
+  --text:#E5E7EB;        /* paper */
+  --muted:#9CA3AF;
+  --accent:#2563EB;      /* electric */
+  --accent-600:#1E40AF;  /* cobalt */
+  --border:rgba(255,255,255,.08);
 }
 
-/* Reusable utilities */
-@layer utilities {
-  .glass { @apply bg-white/70 backdrop-blur-md; }
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
 }
+
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--accent-600); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px -10px rgba(0,0,0,.35);
+}
+
+/* Buttons */
+.btn {
+  @apply inline-flex items-center justify-center px-4 py-2 rounded-xl2 font-semibold transition-colors;
+}
+.btn-primary { @apply text-white bg-electric hover:bg-cobalt; }
+.btn-ghost { @apply text-paper/90 hover:text-white hover:bg-white/5; }
+
+/* Focus for keyboard users */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 8px;
+}
+
+/* Subtle scrollbars (webkit) */
+*::-webkit-scrollbar{ width:10px; height:10px; }
+*::-webkit-scrollbar-thumb{ background:#e5e7eb; border-radius:999px; }
+*::-webkit-scrollbar-thumb:hover{ background:#d1d5db; }
+*::-webkit-scrollbar-track{ background:transparent; }

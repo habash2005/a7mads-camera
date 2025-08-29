@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-
-Sitemap: https://lamawafa.com/sitemap.xml
+Sitemap: https://a7madscamera.com/sitemap.xml
