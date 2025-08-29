@@ -1,21 +1,18 @@
-# netlify.toml (repo root)
-
 [build]
-  base = "photography-booking-app"   # your app lives here
+  # Your app lives in this subfolder:
+  base = "photography-booking-app"
   command = "npm ci && npm run build"
   publish = "dist"
 
 [build.environment]
   NODE_VERSION = "20"
-  # Optional: increase verbosity if needed
-  # NPM_CONFIG_LOGLEVEL = "verbose"
 
-# If you actually have Netlify Functions in this subfolder:
+# Only keep this block if you actually have functions in this folder.
 [functions]
   directory = "photography-booking-app/netlify/functions"
   node_bundler = "esbuild"
 
-# SPA fallback (fine with hash routing too)
+# SPA fallback (keeps deep links working)
 [[redirects]]
   from = "/*"
   to = "/index.html"
