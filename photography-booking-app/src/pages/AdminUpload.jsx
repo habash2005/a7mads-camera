@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-const ADMIN_EMAIL = "lamawafa13@gmail.com";
+const ADMIN_EMAIL = "Ahmadhijaz325@gmail.com";
 const MAX_SIZE = 25 * 1024 * 1024;
 const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "";
 const CONCURRENCY = 4;
