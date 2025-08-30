@@ -1,5 +1,10 @@
-// src/lib/auth.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { auth } from "./firebase";
 import {
   onAuthStateChanged,
@@ -7,13 +12,22 @@ import {
   signOut as fbSignOut,
 } from "firebase/auth";
 
-// Set your admin allow-list here
+/**
+ * ✅ ADMIN ALLOW-LIST
+ * Add any admin emails here (lowercase).
+ */
 const ADMIN_EMAILS = new Set([
   "ahmadhijaz325@gmail.com",
   // "lamawafa13@gmail.com",
 ]);
 
-const AuthCtx = createContext({ ready: false, user: null, isAdmin: false });
+const AuthCtx = createContext({
+  ready: false,
+  user: null,
+  isAdmin: false,
+  login: async () => {},
+  logout: async () => {},
+});
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -27,17 +41,18 @@ export function AuthProvider({ children }) {
     return () => unsub();
   }, []);
 
-  const isAdmin = useMemo(
-    () => !!user && ADMIN_EMAILS.has((user.email || "").toLowerCase()),
-    [user]
-  );
+  const isAdmin = useMemo(() => {
+    const email = (user?.email || "").toLowerCase();
+    return !!email && ADMIN_EMAILS.has(email);
+  }, [user]);
 
   const value = useMemo(
     () => ({
       ready,
       user,
       isAdmin,
-      login: (email, password) => signInWithEmailAndPassword(auth, email, password),
+      login: (email, password) =>
+        signInWithEmailAndPassword(auth, email, password),
       logout: () => fbSignOut(auth),
     }),
     [ready, user, isAdmin]
@@ -50,7 +65,11 @@ export function useAuth() {
   return useContext(AuthCtx);
 }
 
+/**
+ * Optional hook if you need a quick one-off admin check.
+ */
 export function useIsAdmin(u) {
-  const user = u ?? useAuth().user;
-  return !!user && ADMIN_EMAILS.has((user.email || "").toLowerCase());
+  const { user } = useAuth();
+  const email = (u?.email || user?.email || "").toLowerCase();
+  return !!email && ADMIN_EMAILS.has(email);
 }
