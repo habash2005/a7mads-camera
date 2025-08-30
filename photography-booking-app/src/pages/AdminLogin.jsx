@@ -1,4 +1,3 @@
-// src/pages/AdminLogin.jsx
 import React, { useState } from "react";
 import { useAuth } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
@@ -33,10 +32,7 @@ export default function AdminLogin() {
     <section className="container-site py-12">
       <div className="max-w-md mx-auto bg-white/70 backdrop-blur rounded-2xl p-6 ring-1 ring-[var(--border)] shadow-soft">
         <h2 className="text-xl font-semibold mb-1">Admin Login</h2>
-        <p className="text-sm text-[color:var(--muted)] mb-6">
-          Sign in with your admin email.
-        </p>
-
+        <p className="text-sm text-[color:var(--muted)] mb-6">Sign in with your admin email.</p>
         <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">
             <span className="text-sm font-medium">Email</span>
@@ -48,7 +44,6 @@ export default function AdminLogin() {
               required
             />
           </label>
-
           <label className="block">
             <span className="text-sm font-medium">Password</span>
             <input
@@ -59,9 +54,7 @@ export default function AdminLogin() {
               required
             />
           </label>
-
           {err && <div className="text-sm text-wine">{err}</div>}
-
           <button type="submit" disabled={busy} className="btn btn-primary w-full">
             {busy ? "Signing in…" : "Sign in"}
           </button>

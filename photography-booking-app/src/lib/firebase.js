@@ -1,5 +1,4 @@
 /* global self */
-// src/lib/firebase.js
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import {
@@ -11,18 +10,6 @@ import { getStorage } from "firebase/storage";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
-/**
- * REQUIRED ENV VARS (set in Netlify & local .env):
- * VITE_FIREBASE_PROJECT_ID=ahmad-port
- * VITE_FIREBASE_API_KEY=...
- * VITE_FIREBASE_AUTH_DOMAIN=ahmad-port.firebaseapp.com
- * VITE_FIREBASE_STORAGE_BUCKET=ahmad-port.firebasestorage.app
- * VITE_FIREBASE_MESSAGING_SENDER_ID=...
- * VITE_FIREBASE_APP_ID=...
- * VITE_FIREBASE_MEASUREMENT_ID=G-...           (optional)
- * VITE_RECAPTCHA_V3_SITE_KEY=...               (prod only; optional in dev)
- */
-
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "ahmad-port";
 
 const firebaseConfig = {
@@ -30,41 +17,38 @@ const firebaseConfig = {
   authDomain:
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-  // NOTE: Firebase config wants the bucket *name* (not URL). We'll still override Storage below.
+  // ✅ keep your Blaze bucket domain
   storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`,
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// ---- App ----
 export const app = initializeApp(firebaseConfig);
 
 // ---- App Check ----
 if (typeof window !== "undefined") {
   if (import.meta.env.DEV) {
-    // Enable local dev without solving reCAPTCHA (must be set before init)
+    // allow localhost even if reCAPTCHA is flaky
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
   const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
-  // Only initialize reCAPTCHA in prod with a real key
-  if (!import.meta.env.DEV && siteKey) {
+
+  try {
+    // Always init; in dev, debug token makes it work even if siteKey isn’t set
     initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(siteKey),
+      provider: new ReCaptchaV3Provider(siteKey || "missing-site-key"),
       isTokenAutoRefreshEnabled: true,
     });
-  } else {
-    console.info(
-      "[firebase] App Check not initialized (dev or missing VITE_RECAPTCHA_V3_SITE_KEY)."
-    );
+  } catch (e) {
+    console.warn("[firebase] App Check init warning:", e?.message || e);
   }
 }
 
 // ---- Firestore ----
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
-  useFetchStreams: true,
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),
@@ -74,12 +58,7 @@ export const db = initializeFirestore(app, {
 export const auth = getAuth(app);
 
 // ---- Storage ----
-// You said your bucket name is *literally* "ahmad-port.firebasestorage.app".
-// Pass the GS URL so the SDK treats it as a bucket, not an HTTPS host.
-const BUCKET_NAME = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET;
-export const storage = BUCKET_NAME
-  ? getStorage(app, `gs://${BUCKET_NAME}`)
-  : getStorage(app);
+export const storage = getStorage(app);
 
 // ---- Analytics (optional) ----
 isSupported().then((ok) => {
