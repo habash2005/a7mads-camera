@@ -1,4 +1,3 @@
-// src/lib/firebase.js
 /* global self */
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -16,7 +15,7 @@ import { getAnalytics, isSupported } from "firebase/analytics";
  * VITE_FIREBASE_PROJECT_ID=ahmad-port
  * VITE_FIREBASE_API_KEY=...
  * VITE_FIREBASE_AUTH_DOMAIN=ahmad-port.firebaseapp.com
- * VITE_FIREBASE_STORAGE_BUCKET=ahmad-port.appspot.com
+ * VITE_FIREBASE_STORAGE_BUCKET=ahmad-port.firebasestorage.app   ✅ bucket name
  * VITE_FIREBASE_MESSAGING_SENDER_ID=...
  * VITE_FIREBASE_APP_ID=...
  * VITE_FIREBASE_MEASUREMENT_ID=G-...           (optional)
@@ -30,9 +29,8 @@ const firebaseConfig = {
   authDomain:
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-  // IMPORTANT: this must be the bucket NAME (e.g. "<project>.appspot.com"), not a URL
   storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.appspot.com`,
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`, // 👈 using your Blaze bucket
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID, // ok if undefined
@@ -41,9 +39,8 @@ const firebaseConfig = {
 // ---- Core app ----
 export const app = initializeApp(firebaseConfig);
 
-// ---- App Check (safe & quiet in dev) ----
+// ---- App Check ----
 if (typeof window !== "undefined") {
-  // In dev, enable debug token so calls work even if enforcement is on
   if (import.meta.env.DEV) {
     // Must be set BEFORE initializeAppCheck
     self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
@@ -51,7 +48,6 @@ if (typeof window !== "undefined") {
 
   const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
 
-  // Only initialize reCAPTCHA V3 in production with a real site key.
   if (!import.meta.env.DEV && siteKey) {
     initializeAppCheck(app, {
       provider: new ReCaptchaV3Provider(siteKey),
@@ -67,8 +63,6 @@ if (typeof window !== "undefined") {
 // ---- Firestore ----
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
-  // useFetchStreams is fine in modern browsers; remove if you see issues in older ones
-  useFetchStreams: true,
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),
@@ -78,8 +72,7 @@ export const db = initializeFirestore(app, {
 export const auth = getAuth(app);
 
 // ---- Storage ----
-// Let SDK read storageBucket from config (do NOT pass a URL here)
-export const storage = getStorage(app);
+export const storage = getStorage(app); // will use the `ahmad-port.firebasestorage.app` bucket
 
 // ---- Analytics (optional) ----
 isSupported().then((ok) => {
