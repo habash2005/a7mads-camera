@@ -499,7 +499,7 @@ export default function AdminUpload() {
           )}
         >
           {notAdmin
-            ? "Not signed in as admin (lamawafa13@gmail.com). Uploads will be blocked by rules."
+            ? "Not signed in as admin (Ahmadhijaz325@gmail.com). Uploads will be blocked by rules."
             : `Signed in as ${me?.email}.`}
         </div>
         <div className="text-[11px] rounded-lg px-3 py-2 bg-slate-50 text-slate-600">

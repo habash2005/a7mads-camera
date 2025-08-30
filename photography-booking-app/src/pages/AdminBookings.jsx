@@ -14,7 +14,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-const ADMIN_EMAIL = "lamawafa13@gmail.com";
+const ADMIN_EMAIL = "Ahmadhijaz325@gmail.com";
 const PAGE_LIMIT = 200;
 const STATUSES = ["pending", "confirmed", "finished"];
 

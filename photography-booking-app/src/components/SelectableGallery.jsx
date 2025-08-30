@@ -102,3 +102,4 @@ export default function SelectableGallery({ items, selected, onToggle, layout = 
     </div>
   );
 }
+

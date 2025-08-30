@@ -13,7 +13,7 @@ import {
 } from "firebase/firestore";
 import { ref as sRef, deleteObject } from "firebase/storage";
 
-const ADMIN_EMAIL = "lamawafa13@gmail.com";
+const ADMIN_EMAIL = "Ahmadhijaz325@gmail.com";
 const CONCURRENCY = 5;
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
