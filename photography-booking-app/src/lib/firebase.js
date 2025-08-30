@@ -17,7 +17,6 @@ const firebaseConfig = {
   authDomain:
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-  // ✅ you asked to keep this as firebasestorage.app
   storageBucket:
     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -27,28 +26,26 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
-// ---- App Check (quiet in dev, real in prod) ----
+// ---- App Check (skip on localhost to avoid reCAPTCHA errors) ----
 if (typeof window !== "undefined") {
   const isLocal =
     location.hostname === "localhost" ||
     location.hostname === "127.0.0.1" ||
     location.hostname.endsWith(".local");
+
   const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
 
-  try {
-    if (isLocal || !siteKey) {
-      // Don’t force reCAPTCHA on localhost — avoids “recaptcha-error” noise
-      // If enforcement is enabled, you can uncomment the debug token:
-      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-      console.info("[firebase] App Check: skipped on dev (localhost) or missing site key.");
-    } else {
+  if (!isLocal && siteKey) {
+    try {
       initializeAppCheck(app, {
         provider: new ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true,
       });
+    } catch (e) {
+      console.warn("[firebase] App Check init warning:", e?.message || e);
     }
-  } catch (e) {
-    console.warn("[firebase] App Check init warning:", e?.message || e);
+  } else {
+    console.info("[firebase] App Check skipped on localhost / missing site key.");
   }
 }
 
@@ -60,10 +57,8 @@ export const db = initializeFirestore(app, {
   }),
 });
 
-// ---- Auth ----
+// ---- Auth & Storage ----
 export const auth = getAuth(app);
-
-// ---- Storage ----
 export const storage = getStorage(app);
 
 // ---- Analytics (optional) ----
