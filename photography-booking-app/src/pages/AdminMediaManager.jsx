@@ -1,7 +1,7 @@
+// src/pages/AdminMediaManager.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
-import { useIsAdmin } from "../lib/auth";
 import {
   collection,
   getDocs,
@@ -13,6 +13,13 @@ import {
   deleteDoc,
 } from "firebase/firestore";
 import { ref as sRef, deleteObject } from "firebase/storage";
+
+/* ———————————————————————————————
+   ADMIN DETECTION (changed only)
+   ——————————————————————————————— */
+const ADMIN_EMAILS = new Set([
+  "ahmadhijaz325@gmail.com",
+].map((s) => s.toLowerCase()));
 
 const CONCURRENCY = 5;
 const cls = (...xs) => xs.filter(Boolean).join(" ");
@@ -27,7 +34,7 @@ function storagePathOf(img) {
 
 export default function AdminMediaManager({ selectedRef = "" }) {
   const [me, setMe] = useState(null);
-  const isAdmin = useIsAdmin(me);
+  const isAdmin = !!me && ADMIN_EMAILS.has((me.email || "").toLowerCase());
   const notAdmin = !isAdmin;
 
   const [tab, setTab] = useState("portfolio"); // 'portfolio' | 'client'
@@ -151,14 +158,17 @@ export default function AdminMediaManager({ selectedRef = "" }) {
       setCLoading(false);
     }
   }
+
+  /* legacy button handler (uses input field) */
   async function loadClientByRef() {
     await loadClientByRefWithCode(refCode);
   }
 
-  // react to external quick-pick (from AdminDashboard)
+  // 👂 react to external quick-pick (from AdminDashboard)
   useEffect(() => {
     const ext = String(selectedRef || "").trim().toUpperCase();
     if (!ext) return;
+    // Switch to client tab, set field, and load
     setTab("client");
     setRefCode(ext);
     loadClientByRefWithCode(ext);
@@ -198,6 +208,8 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           }
           console.warn("Storage: already gone", path);
         }
+      } else {
+        console.warn("No storage path for", img);
       }
 
       const dref =
@@ -253,7 +265,9 @@ export default function AdminMediaManager({ selectedRef = "" }) {
       failed += results.filter((r) => !r.ok).length;
     }
 
-    alert(`Deleted ${deleted}${failed ? ` — ${failed} failed` : " — done!"}`);
+    alert(
+      `Deleted ${deleted}${failed ? ` — ${failed} failed${notAdmin ? " (not admin?)" : ""}` : " — done!"}`
+    );
 
     if (type === "p") await loadPortfolio();
     else await loadClientByRefWithCode(client?.reference || refCode);
@@ -273,15 +287,6 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           >
             Portfolio
           </button>
-          <button
-            className={cls(
-              "px-3 py-1.5 rounded-full text-sm font-semibold",
-              tab === "client" ? "bg-rose text-ivory" : "bg-white border border-rose/30 text-charcoal"
-            )}
-            onClick={() => setTab("client")}
-          >
-            Client
-          </button>
         </div>
 
         <div
@@ -290,12 +295,102 @@ export default function AdminMediaManager({ selectedRef = "" }) {
             notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
           )}
         >
-          {notAdmin ? "Not signed in as admin — deletes will fail." : `Signed in as ${me?.email}`}
+          {notAdmin ? `Not signed in as admin (${Array.from(ADMIN_EMAILS).join(", ")}) — deletes will fail.` : `Signed in as ${me?.email}`}
         </div>
       </div>
 
-      {/* …the rest of your original component (UI, lists, buttons) remains unchanged … */}
-      {/* Paste your existing JSX below. No more hardcoded email checks are needed. */}
+      {/* Portfolio tab */}
+      {tab === "portfolio" && (
+        <div className="rounded-2xl border border-rose/30 bg-white p-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-sm text-charcoal/70">
+              {portfolioId ? <>Gallery ID: <code>{portfolioId}</code></> : "Load portfolio images"}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadPortfolio}
+                disabled={pLoading}
+                className={cls(
+                  "rounded-full px-4 py-2 text-sm font-semibold",
+                  pLoading ? "bg-blush text-charcoal/50" : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+                )}
+              >
+                {pLoading ? "Loading…" : "Refresh"}
+              </button>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={pImgs.length > 0 && pCount === pImgs.length}
+                  ref={(el) => el && (el.indeterminate = pCount > 0 && pCount < pImgs.length)}
+                  onChange={(e) => toggleAll("p", e.target.checked)}
+                />
+                Select all
+              </label>
+              <button
+                onClick={() => deleteSelected({ type: "p" })}
+                disabled={pCount === 0 || pLoading || notAdmin}
+                className={cls(
+                  "rounded-full px-4 py-2 text-sm font-semibold",
+                  pCount === 0 || pLoading || notAdmin
+                    ? "bg-blush text-charcoal/50"
+                    : "bg-red-600 text-white hover:bg-red-700"
+                )}
+              >
+                Delete selected ({pCount})
+              </button>
+            </div>
+          </div>
+
+          {pMsg && <div className="mt-3 text-sm text-rose-700">{pMsg}</div>}
+
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {pImgs.map((img) => {
+              const status = pDeleting[img.id];
+              return (
+                <figure
+                  key={img.id}
+                  className="relative group overflow-hidden rounded-xl border border-rose/20"
+                  title={img.public_id}
+                >
+                  <img
+                    src={img.secure_url}
+                    alt={img.original_filename || img.public_id}
+                    className="w-full aspect-square object-cover"
+                    loading="lazy"
+                  />
+                  <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
+                    <input
+                      type="checkbox"
+                      checked={!!pSel[img.id]}
+                      onChange={() => setPSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+                      disabled={status === "pending"}
+                    />
+                    {img.original_filename || "image"}
+                  </label>
+                  {status && (
+                    <div
+                      className={cls(
+                        "absolute bottom-2 right-2 text-[11px] rounded-md px-2 py-1 shadow",
+                        status === "pending"
+                          ? "bg-amber-100 text-amber-800"
+                          : status === "ok"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      )}
+                    >
+                      {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
+                    </div>
+                  )}
+                </figure>
+              );
+            })}
+          </div>
+
+          {!pLoading && pImgs.length === 0 && (
+            <div className="mt-3 text-sm text-charcoal/60">No images.</div>
+          )}
+        </div>
+      )}
     </section>
   );
 }
