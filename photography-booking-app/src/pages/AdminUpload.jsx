@@ -16,7 +16,7 @@ import {
 import { ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 /* ———————————————————————————————
-   ADMIN DETECTION (changed only)
+   ADMIN DETECTION (case-insensitive)
    ——————————————————————————————— */
 const ADMIN_EMAILS = new Set([
   "ahmadhijaz325@gmail.com",

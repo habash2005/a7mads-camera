@@ -1,15 +1,14 @@
+// src/lib/auth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { auth } from "./firebase";
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut as fbSignOut,
-} from "firebase/auth";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut as fbSignOut } from "firebase/auth";
 
-// ✅ case-insensitive allow-list
-const ADMIN_EMAILS = new Set([
-  "ahmadhijaz325@gmail.com",
-]);
+/** Case-insensitive admin allow-list (edit here only) */
+export const ADMIN_ALLOW_LIST = new Set(["ahmadhijaz325@gmail.com"]);
+
+function isAdminEmail(email) {
+  return !!email && ADMIN_ALLOW_LIST.has(String(email).toLowerCase());
+}
 
 const AuthCtx = createContext({
   ready: false,
@@ -25,36 +24,25 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
+      setUser(u || null);
       setReady(true);
     });
     return () => unsub();
   }, []);
 
-  const isAdmin = useMemo(() => {
-    const email = (user?.email || "").toLowerCase();
-    return !!email && ADMIN_EMAILS.has(email);
-  }, [user]);
+  const isAdmin = useMemo(() => isAdminEmail(user?.email || ""), [user]);
 
-  const value = useMemo(
-    () => ({
-      ready,
-      user,
-      isAdmin,
-      login: (email, password) => signInWithEmailAndPassword(auth, email, password),
-      logout: () => fbSignOut(auth),
-    }),
-    [ready, user, isAdmin]
-  );
+  const value = useMemo(() => ({
+    ready,
+    user,
+    isAdmin,
+    login: (email, password) => signInWithEmailAndPassword(auth, email, password),
+    logout: () => fbSignOut(auth),
+  }), [ready, user, isAdmin]);
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export function useAuth() {
   return useContext(AuthCtx);
-}
-
-export function useIsAdmin(u) {
-  const email = (u?.email || useAuth().user?.email || "").toLowerCase();
-  return !!email && ADMIN_EMAILS.has(email);
 }

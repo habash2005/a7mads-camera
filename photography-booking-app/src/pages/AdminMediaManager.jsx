@@ -15,13 +15,14 @@ import {
 import { ref as sRef, deleteObject } from "firebase/storage";
 
 /* ———————————————————————————————
-   ADMIN DETECTION (changed only)
+   ADMIN DETECTION (case-insensitive)
    ——————————————————————————————— */
 const ADMIN_EMAILS = new Set([
   "ahmadhijaz325@gmail.com",
 ].map((s) => s.toLowerCase()));
 
 const CONCURRENCY = 5;
+
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 function storagePathOf(img) {
@@ -287,6 +288,15 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           >
             Portfolio
           </button>
+          <button
+            className={cls(
+              "px-3 py-1.5 rounded-full text-sm font-semibold",
+              tab === "client" ? "bg-rose text-ivory" : "bg-white border border-rose/30 text-charcoal"
+            )}
+            onClick={() => setTab("client")}
+          >
+            Client
+          </button>
         </div>
 
         <div
@@ -391,6 +401,143 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           )}
         </div>
       )}
+
+      {/* Client tab */}
+      {tab === "client" && (
+        <div className="rounded-2xl border border-rose/30 bg-white p-3">
+          <ClientTab
+            refCode={refCode}
+            setRefCode={setRefCode}
+            loadClientByRef={loadClientByRef}
+            cLoading={cLoading}
+            client={client}
+            cImgs={cImgs}
+            cSel={cSel}
+            setCSel={setCSel}
+            cCount={cCount}
+            cDeleting={cDeleting}
+            cMsg={cMsg}
+            deleteSelected={() => deleteSelected({ type: "c" })}
+            notAdmin={notAdmin}
+          />
+      </div>
+      )}
     </section>
+  );
+}
+
+/* Small helper component for client tab UI (keeps file tidy) */
+function ClientTab({
+  refCode, setRefCode, loadClientByRef, cLoading, client,
+  cImgs, cSel, setCSel, cCount, cDeleting, cMsg, deleteSelected, notAdmin
+}) {
+  const cls = (...xs) => xs.filter(Boolean).join(" ");
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <input
+            value={refCode}
+            onChange={(e) => setRefCode(e.target.value)}
+            placeholder="Enter client reference (e.g., ABC123)"
+            className="rounded-xl border border-rose/30 px-3 py-2 text-sm bg-white"
+          />
+          <button
+            onClick={loadClientByRef}
+            disabled={cLoading || !refCode.trim()}
+            className={cls(
+              "rounded-full px-4 py-2 text-sm font-semibold",
+              cLoading || !refCode.trim()
+                ? "bg-blush text-charcoal/50"
+                : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
+            )}
+          >
+            {cLoading ? "Loading…" : "Load"}
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {client && (
+            <div className="text-xs text-charcoal/70">
+              Loaded: <code>{client.reference}</code> — {client.details?.name || "Client"}
+            </div>
+          )}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={cImgs.length > 0 && cCount === cImgs.length}
+              ref={(el) => el && (el.indeterminate = cCount > 0 && cCount < cImgs.length)}
+              onChange={(e) => {
+                const s = {};
+                cImgs.forEach((r) => (s[r.id] = !!e.target.checked));
+                setCSel(s);
+              }}
+            />
+            Select all
+          </label>
+          <button
+            onClick={deleteSelected}
+            disabled={cCount === 0 || cLoading || notAdmin || !client}
+            className={cls(
+              "rounded-full px-4 py-2 text-sm font-semibold",
+              cCount === 0 || cLoading || notAdmin || !client
+                ? "bg-blush text-charcoal/50"
+                : "bg-red-600 text-white hover:bg-red-700"
+            )}
+          >
+            Delete selected ({cCount})
+          </button>
+        </div>
+      </div>
+
+      {cMsg && <div className="mt-3 text-sm text-rose-700">{cMsg}</div>}
+
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        {cImgs.map((img) => {
+          const status = cDeleting[img.id];
+          return (
+            <figure
+              key={img.id}
+              className="relative group overflow-hidden rounded-xl border border-rose/20"
+              title={img.public_id}
+            >
+              <img
+                src={img.secure_url}
+                alt={img.original_filename || img.public_id}
+                className="w-full aspect-square object-cover"
+                loading="lazy"
+              />
+              <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
+                <input
+                  type="checkbox"
+                  checked={!!cSel[img.id]}
+                  onChange={() => setCSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+                  disabled={status === "pending"}
+                />
+                {img.original_filename || "image"}
+              </label>
+              {status && (
+                <div
+                  className={cls(
+                    "absolute bottom-2 right-2 text-[11px] rounded-md px-2 py-1 shadow",
+                    status === "pending"
+                      ? "bg-amber-100 text-amber-800"
+                      : status === "ok"
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-rose-100 text-rose-800"
+                  )}
+                >
+                  {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
+                </div>
+              )}
+            </figure>
+          );
+        })}
+      </div>
+
+      {!cLoading && client && cImgs.length === 0 && (
+        <div className="mt-3 text-sm text-charcoal/60">No images for this client.</div>
+      )}
+    </>
   );
 }
