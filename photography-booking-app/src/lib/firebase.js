@@ -1,4 +1,3 @@
-// src/lib/firebase.js
 /* global self */
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -11,39 +10,45 @@ import { getStorage } from "firebase/storage";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
+// ---- Config (keep your custom bucket) ----
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "ahmad-port";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:
-    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
-  projectId: PROJECT_ID,
-  // ✅ keep your custom domain (you requested this)
-  storageBucket:
-    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
+  apiKey:       import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:   import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
+  projectId:    PROJECT_ID,
+  // IMPORTANT: you said to keep this EXACT bucket name
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  appId:        import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 export const app = initializeApp(firebaseConfig);
 
-// ---- App Check ----
+// ---- App Check (do it only when truly configured) ----
 if (typeof window !== "undefined") {
-  // In dev (vite serve / localhost), allow debug so you can work without a site key.
-  if (import.meta.env.DEV) {
-    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-  }
-
+  const disableAppCheck = String(import.meta.env.VITE_APPCHECK_DISABLED || "").trim() === "1";
   const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
 
   try {
-    // In production you MUST provide a valid siteKey that is ALLOWED for your Netlify domain
-    // in Firebase Console > App Check > Web app > reCAPTCHA v3.
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(siteKey || "missing-site-key"),
-      isTokenAutoRefreshEnabled: true,
-    });
+    if (!disableAppCheck && siteKey) {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(siteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      console.info("[firebase] App Check enabled with reCAPTCHA v3.");
+    } else if (import.meta.env.DEV) {
+      // dev convenience so local runs work
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider("local-dev"),
+        isTokenAutoRefreshEnabled: true,
+      });
+      console.info("[firebase] App Check debug mode (DEV).");
+    } else {
+      console.warn("[firebase] App Check SKIPPED (no site key or VITE_APPCHECK_DISABLED=1).");
+    }
   } catch (e) {
     console.warn("[firebase] App Check init warning:", e?.message || e);
   }
