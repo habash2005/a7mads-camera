@@ -1,3 +1,4 @@
+// src/lib/firebase.js
 /* global self */
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -17,6 +18,7 @@ const firebaseConfig = {
   authDomain:
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
+  // ✅ keep your custom domain (you requested this)
   storageBucket:
     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -26,26 +28,24 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
-// ---- App Check (skip on localhost to avoid reCAPTCHA errors) ----
+// ---- App Check ----
 if (typeof window !== "undefined") {
-  const isLocal =
-    location.hostname === "localhost" ||
-    location.hostname === "127.0.0.1" ||
-    location.hostname.endsWith(".local");
+  // In dev (vite serve / localhost), allow debug so you can work without a site key.
+  if (import.meta.env.DEV) {
+    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
 
   const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
 
-  if (!isLocal && siteKey) {
-    try {
-      initializeAppCheck(app, {
-        provider: new ReCaptchaV3Provider(siteKey),
-        isTokenAutoRefreshEnabled: true,
-      });
-    } catch (e) {
-      console.warn("[firebase] App Check init warning:", e?.message || e);
-    }
-  } else {
-    console.info("[firebase] App Check skipped on localhost / missing site key.");
+  try {
+    // In production you MUST provide a valid siteKey that is ALLOWED for your Netlify domain
+    // in Firebase Console > App Check > Web app > reCAPTCHA v3.
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(siteKey || "missing-site-key"),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (e) {
+    console.warn("[firebase] App Check init warning:", e?.message || e);
   }
 }
 
@@ -57,8 +57,10 @@ export const db = initializeFirestore(app, {
   }),
 });
 
-// ---- Auth & Storage ----
+// ---- Auth ----
 export const auth = getAuth(app);
+
+// ---- Storage ----
 export const storage = getStorage(app);
 
 // ---- Analytics (optional) ----
