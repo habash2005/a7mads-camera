@@ -1,88 +1,71 @@
+// src/pages/AdminLogin.jsx
 import React, { useState } from "react";
-import { useNavigate, useLocation, Link } from "react-router-dom";
-import { auth } from "../lib/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-
-function prettyError(code) {
-  switch (code) {
-    case "auth/invalid-email": return "That email doesn’t look right.";
-    case "auth/user-not-found":
-    case "auth/wrong-password": return "Incorrect email or password.";
-    case "auth/too-many-requests": return "Too many attempts. Please wait and try again.";
-    case "auth/network-request-failed": return "Network error. Check your connection.";
-    default: return "Couldn’t sign in. Please try again.";
-  }
-}
+import { useAuth } from "../lib/auth";
+import { useNavigate } from "react-router-dom";
 
 export default function AdminLogin() {
+  const { login } = useAuth();
   const nav = useNavigate();
-  const { state } = useLocation();
   const [email, setEmail] = useState("");
-  const [pass, setPass] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [pw, setPw] = useState("");
   const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const onSubmit = async (e) => {
+  async function onSubmit(e) {
     e.preventDefault();
     setErr("");
-    setSubmitting(true);
+    setBusy(true);
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), pass);
-      const dest = state?.from?.pathname || "/admin";
-      nav(dest, { replace: true });
+      await login(email, pw);
+      nav("/admin", { replace: true });
     } catch (e) {
-      // If something else throws, Firebase errors have 'code'
-      setErr(prettyError(e?.code));
+      const msg =
+        e?.code === "auth/invalid-credential"
+          ? "Invalid email or password."
+          : e?.message || "Sign-in failed.";
+      setErr(msg);
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
-  };
+  }
 
   return (
-    <section className="w-full py-10 md:py-16">
-      <div className="max-w-md mx-auto px-4">
-        <h2 className="text-2xl font-serif font-semibold mb-2">Admin Login</h2>
-        <p className="text-sm text-[color:var(--muted)] mb-6">Sign in with your admin email.</p>
+    <section className="container-site py-12">
+      <div className="max-w-md mx-auto bg-white/70 backdrop-blur rounded-2xl p-6 ring-1 ring-[var(--border)] shadow-soft">
+        <h2 className="text-xl font-semibold mb-1">Admin Login</h2>
+        <p className="text-sm text-[color:var(--muted)] mb-6">
+          Sign in with your admin email.
+        </p>
 
-        <form onSubmit={onSubmit} className="space-y-3">
+        <form onSubmit={onSubmit} className="space-y-4">
           <label className="block">
-            <div className="text-xs font-semibold mb-1">Email</div>
+            <span className="text-sm font-medium">Email</span>
             <input
               type="email"
-              className="input w-full"
-              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 input w-full"
               required
             />
           </label>
 
           <label className="block">
-            <div className="text-xs font-semibold mb-1">Password</div>
+            <span className="text-sm font-medium">Password</span>
             <input
               type="password"
-              className="input w-full"
-              autoComplete="current-password"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
+              value={pw}
+              onChange={(e) => setPw(e.target.value)}
+              className="mt-1 input w-full"
               required
             />
           </label>
 
           {err && <div className="text-sm text-wine">{err}</div>}
 
-          <button
-            type="submit"
-            className="btn btn-primary w-full"
-            disabled={submitting}
-          >
-            {submitting ? "Signing in…" : "Sign in"}
+          <button type="submit" disabled={busy} className="btn btn-primary w-full">
+            {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
-
-        <div className="mt-6 text-xs text-[color:var(--muted)]">
-          <Link to="/">← Back to site</Link>
-        </div>
       </div>
     </section>
   );

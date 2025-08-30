@@ -1,36 +1,56 @@
+// src/lib/auth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { auth } from "./firebase";
-import { onAuthStateChanged, getIdTokenResult } from "firebase/auth";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut as fbSignOut,
+} from "firebase/auth";
 
-const AuthCtx = createContext({ ready: false, user: null, claims: null });
+// Set your admin allow-list here
+const ADMIN_EMAILS = new Set([
+  "ahmadhijaz325@gmail.com",
+  // "lamawafa13@gmail.com",
+]);
+
+const AuthCtx = createContext({ ready: false, user: null, isAdmin: false });
 
 export function AuthProvider({ children }) {
-  const [ready, setReady] = useState(false);
   const [user, setUser] = useState(null);
-  const [claims, setClaims] = useState(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u || null);
-      if (u) {
-        try {
-          const t = await getIdTokenResult(u, true);
-          setClaims(t.claims || null);
-        } catch {
-          setClaims(null);
-        }
-      } else {
-        setClaims(null);
-      }
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
       setReady(true);
     });
     return () => unsub();
   }, []);
 
-  const value = useMemo(() => ({ ready, user, claims }), [ready, user, claims]);
+  const isAdmin = useMemo(
+    () => !!user && ADMIN_EMAILS.has((user.email || "").toLowerCase()),
+    [user]
+  );
+
+  const value = useMemo(
+    () => ({
+      ready,
+      user,
+      isAdmin,
+      login: (email, password) => signInWithEmailAndPassword(auth, email, password),
+      logout: () => fbSignOut(auth),
+    }),
+    [ready, user, isAdmin]
+  );
+
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export function useAuth() {
   return useContext(AuthCtx);
+}
+
+export function useIsAdmin(u) {
+  const user = u ?? useAuth().user;
+  return !!user && ADMIN_EMAILS.has((user.email || "").toLowerCase());
 }
