@@ -1,24 +1,26 @@
-import React, { useEffect, useState, Suspense, useMemo } from "react";
-import { db } from "../lib/firebase";
+import React, { useEffect, useMemo, useState, Suspense } from "react";
 import { useAuth } from "../lib/auth";
+import { db } from "../lib/firebase";
 import {
   collection,
-  getDocs,
+  deleteDoc,
+  doc,
   getCountFromServer,
+  getDocs,
+  limit,
   orderBy,
   query,
-  where,
-  limit,
-  doc,
-  updateDoc,
-  deleteDoc,
   serverTimestamp,
   Timestamp,
+  updateDoc,
+  where,
 } from "firebase/firestore";
 
-const AdminUpload       = React.lazy(() => import("./AdminUpload"));
-const AdminBookings     = React.lazy(() => import("./AdminBookings"));
+const AdminUpload = React.lazy(() => import("./AdminUpload"));
+const AdminBookings = React.lazy(() => import("./AdminBookings"));
 const AdminMediaManager = React.lazy(() => import("./AdminMediaManager"));
+
+const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 async function safeCount(qy) {
   try {
@@ -28,55 +30,93 @@ async function safeCount(qy) {
     return 0;
   }
 }
-const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 export default function AdminDashboard() {
   const { ready, user, isAdmin, logout } = useAuth();
 
-  if (!ready) return <section className="container-site py-12">Loading…</section>;
-  if (!user) { window.location.hash = "#/admin/login"; return null; }
+  // Gate the page
+  if (!ready) {
+    return (
+      <section className="container-site py-16">
+        <div className="text-sm text-[color:var(--muted)]">Checking session…</div>
+      </section>
+    );
+  }
+  if (!user) {
+    // Hash router: use location hash to redirect
+    window.location.hash = "#/admin/login";
+    return null;
+  }
   if (!isAdmin) {
     return (
-      <section className="container-site py-12">
+      <section className="container-site py-16">
         <h2 className="text-xl font-semibold">Admins only</h2>
-        <p className="text-sm text-[color:var(--muted)] mt-2">This account is not on the admin allow-list.</p>
+        <p className="text-[color:var(--muted)] mt-2">
+          You’re signed in as <b>{user.email}</b> but this account isn’t on the
+          admin allow-list. Ask the owner to add your email in
+          <code className="ml-1">src/lib/auth.jsx</code>.
+        </p>
+        <button
+          onClick={logout}
+          className="btn btn-ghost mt-6"
+        >
+          Sign out
+        </button>
       </section>
     );
   }
 
+  // Page state
   const [stats, setStats] = useState(null);
-  const [upcoming, setUpcoming] = useState({ rows: [], loading: true, error: "" });
   const [loadingStats, setLoadingStats] = useState(true);
-  const [refIndex, setRefIndex] = useState({ rows: [], loading: true, error: "" });
+
+  const [upcoming, setUpcoming] = useState({
+    rows: [],
+    loading: true,
+    error: "",
+  });
+  const [refIndex, setRefIndex] = useState({
+    rows: [],
+    loading: true,
+    error: "",
+  });
   const [refSearch, setRefSearch] = useState("");
   const [savingStatus, setSavingStatus] = useState({});
 
   useEffect(() => {
     (async () => {
+      // Stats
       setLoadingStats(true);
-      const bookingsCol  = collection(db, "bookings");
+      const bookingsCol = collection(db, "bookings");
       const galleriesCol = collection(db, "galleries");
       const nowTs = Timestamp.fromDate(new Date());
 
       const totalBookings = await safeCount(query(bookingsCol));
-      const pending = await safeCount(query(bookingsCol, where("status", "==", "pending")));
+      const pending = await safeCount(
+        query(bookingsCol, where("status", "==", "pending"))
+      );
       const confirmedUpcoming = await safeCount(
-        query(bookingsCol, where("status", "==", "confirmed"), where("startAt", ">=", nowTs))
+        query(
+          bookingsCol,
+          where("status", "==", "confirmed"),
+          where("startAt", ">=", nowTs)
+        )
       );
       const galleries = await safeCount(query(galleriesCol));
+
       setStats({ totalBookings, pending, confirmedUpcoming, galleries });
       setLoadingStats(false);
 
       await refreshUpcoming();
       await loadRefIndex();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function refreshUpcoming() {
     try {
-      const bookingsCol = collection(db, "bookings");
       const qy = query(
-        bookingsCol,
+        collection(db, "bookings"),
         where("startAt", ">=", Timestamp.fromDate(new Date())),
         orderBy("startAt", "asc"),
         limit(6)
@@ -84,8 +124,12 @@ export default function AdminDashboard() {
       const snap = await getDocs(qy);
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setUpcoming({ rows, loading: false, error: "" });
-    } catch {
-      setUpcoming({ rows: [], loading: false, error: "Couldn’t load upcoming bookings." });
+    } catch (e) {
+      setUpcoming({
+        rows: [],
+        loading: false,
+        error: "Couldn’t load upcoming bookings.",
+      });
     }
   }
 
@@ -97,7 +141,9 @@ export default function AdminDashboard() {
       try {
         snap = await getDocs(query(col, orderBy("startAt", "desc"), limit(300)));
       } catch {
-        snap = await getDocs(query(col, orderBy("createdAt", "desc"), limit(300)));
+        snap = await getDocs(
+          query(col, orderBy("createdAt", "desc"), limit(300))
+        );
       }
       const rows = snap.docs.map((d) => {
         const data = d.data();
@@ -115,7 +161,11 @@ export default function AdminDashboard() {
       });
       setRefIndex({ rows, loading: false, error: "" });
     } catch {
-      setRefIndex({ rows: [], loading: false, error: "Couldn’t load references." });
+      setRefIndex({
+        rows: [],
+        loading: false,
+        error: "Couldn’t load references.",
+      });
     }
   }
 
@@ -124,7 +174,8 @@ export default function AdminDashboard() {
     const prev = (b.status || "").toLowerCase();
     const next = String(nextStatus || "").toLowerCase();
     if (!next || next === prev) return;
-    if (next === "canceled" && !window.confirm("Mark this booking as CANCELED?")) return;
+    if (next === "canceled" && !window.confirm("Mark this booking as CANCELED?"))
+      return;
 
     setSavingStatus((m) => ({ ...m, [id]: true }));
     try {
@@ -132,8 +183,8 @@ export default function AdminDashboard() {
         status: next,
         updatedAt: serverTimestamp(),
         ...(next === "confirmed" ? { confirmedAt: serverTimestamp() } : {}),
-        ...(next === "finished"  ? { finishedAt: serverTimestamp() }  : {}),
-        ...(next === "canceled"  ? { canceledAt: serverTimestamp() }  : {}),
+        ...(next === "finished" ? { finishedAt: serverTimestamp() } : {}),
+        ...(next === "canceled" ? { canceledAt: serverTimestamp() } : {}),
       });
 
       setUpcoming((p) => ({
@@ -172,7 +223,10 @@ export default function AdminDashboard() {
     if (!window.confirm("Permanently delete this canceled booking?")) return;
     try {
       await deleteDoc(doc(db, "bookings", id));
-      setUpcoming((p) => ({ ...p, rows: p.rows.filter((r) => r.id !== id) }));
+      setUpcoming((p) => ({
+        ...p,
+        rows: p.rows.filter((r) => r.id !== id),
+      }));
     } catch {
       alert("Could not delete.");
     }
@@ -181,10 +235,11 @@ export default function AdminDashboard() {
   const filteredRefs = useMemo(() => {
     const q = refSearch.trim().toLowerCase();
     if (!q) return refIndex.rows;
-    return refIndex.rows.filter((r) =>
-      r.reference.toLowerCase().includes(q) ||
-      r.name.toLowerCase().includes(q) ||
-      r.email.toLowerCase().includes(q)
+    return refIndex.rows.filter(
+      (r) =>
+        r.reference.toLowerCase().includes(q) ||
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q)
     );
   }, [refSearch, refIndex.rows]);
 
@@ -201,12 +256,18 @@ export default function AdminDashboard() {
     <section className="w-full py-10 md:py-14 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-3xl font-serif font-semibold text-burgundy">Admin Dashboard</h2>
-          <button onClick={handleSignOut} className="px-4 py-2 rounded-lg bg-rose text-white hover:bg-rose/80">
+          <h2 className="text-3xl font-serif font-semibold text-burgundy">
+            Admin Dashboard
+          </h2>
+          <button
+            onClick={handleSignOut}
+            className="px-4 py-2 rounded-lg bg-rose text-white hover:bg-rose/80"
+          >
             Sign Out
           </button>
         </div>
 
+        {/* Stats */}
         {loadingStats ? (
           <div>Loading stats...</div>
         ) : (
@@ -218,7 +279,10 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">Upcoming Bookings</h3>
+        {/* Upcoming */}
+        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">
+          Upcoming Bookings
+        </h3>
         {upcoming.loading ? (
           <div>Loading...</div>
         ) : upcoming.error ? (
@@ -240,22 +304,40 @@ export default function AdminDashboard() {
                   <td className="px-3 py-2">{b.reference}</td>
                   <td className="px-3 py-2">{b.details?.name}</td>
                   <td className="px-3 py-2">
-                    {b.startAt?.toDate?.().toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                    {b.startAt?.toDate?.().toLocaleString([], {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })}
                   </td>
                   <td className="px-3 py-2">
                     <StatusPill status={b.status} />
                   </td>
                   <td className="px-3 py-2 space-x-2">
-                    <button onClick={() => changeStatus(b, "confirmed")} className="text-emerald-700 hover:underline">
+                    <button
+                      onClick={() => changeStatus(b, "confirmed")}
+                      disabled={savingStatus[b.id]}
+                      className="text-emerald-700 hover:underline"
+                    >
                       Confirm
                     </button>
-                    <button onClick={() => changeStatus(b, "finished")} className="text-gold hover:underline">
+                    <button
+                      onClick={() => changeStatus(b, "finished")}
+                      disabled={savingStatus[b.id]}
+                      className="text-gold hover:underline"
+                    >
                       Finish
                     </button>
-                    <button onClick={() => cancelBooking(b.id)} className="text-wine hover:underline">
+                    <button
+                      onClick={() => cancelBooking(b.id)}
+                      disabled={savingStatus[b.id]}
+                      className="text-wine hover:underline"
+                    >
                       Cancel
                     </button>
-                    <button onClick={() => deleteBooking(b.id, b.status)} className="text-rose hover:underline">
+                    <button
+                      onClick={() => deleteBooking(b.id, b.status)}
+                      className="text-rose hover:underline"
+                    >
                       Delete
                     </button>
                   </td>
@@ -265,7 +347,10 @@ export default function AdminDashboard() {
           </table>
         )}
 
-        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">Booking References</h3>
+        {/* Reference index */}
+        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">
+          Booking References
+        </h3>
         <input
           type="text"
           placeholder="Search by reference, name, or email"
@@ -285,23 +370,22 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {refIndex.rows.length === 0 ? (
-                <tr><td className="px-3 py-8 text-center text-sm text-neutral-500" colSpan={5}>No bookings.</td></tr>
-              ) : (
-                filteredRefs.map((r) => (
-                  <tr key={r.id} className="border-t border-neutral-200/60">
-                    <td className="px-3 py-2">{r.reference}</td>
-                    <td className="px-3 py-2">{r.name}</td>
-                    <td className="px-3 py-2">{r.email}</td>
-                    <td className="px-3 py-2">{r.when}</td>
-                    <td className="px-3 py-2"><StatusPill status={r.status} /></td>
-                  </tr>
-                ))
-              )}
+              {filteredRefs.map((r) => (
+                <tr key={r.id} className="border-t border-neutral-200/60">
+                  <td className="px-3 py-2">{r.reference}</td>
+                  <td className="px-3 py-2">{r.name}</td>
+                  <td className="px-3 py-2">{r.email}</td>
+                  <td className="px-3 py-2">{r.when}</td>
+                  <td className="px-3 py-2">
+                    <StatusPill status={r.status} />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
+        {/* Tools */}
         <Suspense fallback={<div>Loading upload tools…</div>}>
           <AdminUpload />
           <div className="my-10" />
@@ -312,6 +396,7 @@ export default function AdminDashboard() {
   );
 }
 
+/* ---------- UI bits ---------- */
 function StatCard({ label, value }) {
   return (
     <div className="rounded-xl bg-white shadow-soft p-4 text-center ring-1 ring-neutral-200/70">
@@ -320,11 +405,32 @@ function StatCard({ label, value }) {
     </div>
   );
 }
+
 function StatusPill({ status }) {
   const s = (status || "").toLowerCase();
-  const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
-  if (s === "confirmed") return <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>Confirmed</span>;
-  if (s === "finished")  return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Finished</span>;
-  if (s === "canceled")  return <span className={cls(base, "bg-wine/15 text-wine ring-wine/30")}>Canceled</span>;
-  return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Pending</span>;
+  const base =
+    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
+  if (s === "confirmed")
+    return (
+      <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>
+        Confirmed
+      </span>
+    );
+  if (s === "finished")
+    return (
+      <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>
+        Finished
+      </span>
+    );
+  if (s === "canceled")
+    return (
+      <span className={cls(base, "bg-wine/15 text-wine ring-wine/30")}>
+        Canceled
+      </span>
+    );
+  return (
+    <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>
+      Pending
+    </span>
+  );
 }
