@@ -1,8 +1,6 @@
-// src/lib/auth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { auth } from "./firebase";
 import { onAuthStateChanged, getIdTokenResult } from "firebase/auth";
-import { Navigate, useLocation } from "react-router-dom";
 
 const AuthCtx = createContext({ ready: false, user: null, claims: null });
 
@@ -13,11 +11,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
+      setUser(u || null);
       if (u) {
         try {
-          const token = await getIdTokenResult(u, true);
-          setClaims(token.claims || null);
+          const t = await getIdTokenResult(u, true);
+          setClaims(t.claims || null);
         } catch {
           setClaims(null);
         }
@@ -35,12 +33,4 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   return useContext(AuthCtx);
-}
-
-export function ProtectedRoute({ children }) {
-  const { ready, user } = useAuth();
-  const location = useLocation();
-  if (!ready) return null; // splash could go here
-  if (!user) return <Navigate to="/admin/login" replace state={{ from: location }} />;
-  return children;
 }

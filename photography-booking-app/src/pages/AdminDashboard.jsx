@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useEffect, useState, Suspense, useMemo } from "react";
+import React, { useEffect, useMemo, useState, Suspense } from "react";
 import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
 import {
@@ -21,6 +21,8 @@ const AdminUpload       = React.lazy(() => import("./AdminUpload"));
 const AdminBookings     = React.lazy(() => import("./AdminBookings"));
 const AdminMediaManager = React.lazy(() => import("./AdminMediaManager"));
 
+/* ---------- utils ---------- */
+const cls = (...xs) => xs.filter(Boolean).join(" ");
 async function safeCount(qy) {
   try {
     const res = await getCountFromServer(qy);
@@ -29,15 +31,25 @@ async function safeCount(qy) {
     return 0;
   }
 }
-const cls = (...xs) => xs.filter(Boolean).join(" ");
 
+/* ---------- component ---------- */
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
 
   const [stats, setStats] = useState(null);
-  const [upcoming, setUpcoming] = useState({ rows: [], loading: true, error: "" });
   const [loadingStats, setLoadingStats] = useState(true);
-  const [refIndex, setRefIndex] = useState({ rows: [], loading: true, error: "" });
+
+  const [upcoming, setUpcoming] = useState({
+    rows: [],
+    loading: true,
+    error: "",
+  });
+
+  const [refIndex, setRefIndex] = useState({
+    rows: [],
+    loading: true,
+    error: "",
+  });
   const [refSearch, setRefSearch] = useState("");
   const [savingStatus, setSavingStatus] = useState({});
 
@@ -47,25 +59,24 @@ export default function AdminDashboard() {
       const bookingsCol  = collection(db, "bookings");
       const galleriesCol = collection(db, "galleries");
 
+      const now = Timestamp.fromDate(new Date());
+
       const totalBookings = await safeCount(query(bookingsCol));
       const pending = await safeCount(query(bookingsCol, where("status", "==", "pending")));
       const confirmedUpcoming = await safeCount(
-        query(
-          bookingsCol,
-          where("status", "==", "confirmed"),
-          where("startAt", ">=", Timestamp.fromDate(new Date()))
-        )
+        query(bookingsCol, where("status", "==", "confirmed"), where("startAt", ">=", now))
       );
       const galleries = await safeCount(query(galleriesCol));
+
       setStats({ totalBookings, pending, confirmedUpcoming, galleries });
       setLoadingStats(false);
 
-      await refreshUpcoming(setUpcoming);
+      await refreshUpcoming();
       await loadRefIndex();
     })();
   }, []);
 
-  async function refreshUpcoming(setter) {
+  async function refreshUpcoming() {
     try {
       const bookingsCol = collection(db, "bookings");
       const qy = query(
@@ -76,9 +87,9 @@ export default function AdminDashboard() {
       );
       const snap = await getDocs(qy);
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setter({ rows, loading: false, error: "" });
-    } catch (e) {
-      setter({ rows: [], loading: false, error: "Couldn’t load upcoming bookings." });
+      setUpcoming({ rows, loading: false, error: "" });
+    } catch {
+      setUpcoming({ rows: [], loading: false, error: "Couldn’t load upcoming bookings." });
     }
   }
 
@@ -107,7 +118,7 @@ export default function AdminDashboard() {
         };
       });
       setRefIndex({ rows, loading: false, error: "" });
-    } catch (e) {
+    } catch {
       setRefIndex({ rows: [], loading: false, error: "Couldn’t load references." });
     }
   }
@@ -186,10 +197,10 @@ export default function AdminDashboard() {
 
   const handleSignOut = async () => {
     try {
-      await logout();
+      await logout();                 // provided by useAuth()
       window.location.hash = "#/admin/login";
     } catch (err) {
-      alert("Sign out failed: " + err.message);
+      alert("Sign out failed: " + (err?.message || "Unknown error"));
     }
   };
 
@@ -197,9 +208,7 @@ export default function AdminDashboard() {
     <section className="w-full py-10 md:py-14 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-3xl font-serif font-semibold text-burgundy">
-            Admin Dashboard
-          </h2>
+          <h2 className="text-3xl font-serif font-semibold text-burgundy">Admin Dashboard</h2>
           <button
             onClick={handleSignOut}
             className="px-4 py-2 rounded-lg bg-rose text-white hover:bg-rose/80"
@@ -208,7 +217,7 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* --- Stats --- */}
+        {/* Stats */}
         {loadingStats ? (
           <div>Loading stats...</div>
         ) : (
@@ -220,10 +229,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* --- Upcoming Bookings --- */}
-        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">
-          Upcoming Bookings
-        </h3>
+        {/* Upcoming */}
+        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">Upcoming Bookings</h3>
         {upcoming.loading ? (
           <div>Loading...</div>
         ) : upcoming.error ? (
@@ -288,10 +295,8 @@ export default function AdminDashboard() {
           </table>
         )}
 
-        {/* --- Reference Index --- */}
-        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">
-          Booking References
-        </h3>
+        {/* Reference Index */}
+        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">Booking References</h3>
         <input
           type="text"
           placeholder="Search by reference, name, or email"

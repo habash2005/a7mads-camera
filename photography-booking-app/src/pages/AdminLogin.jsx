@@ -1,76 +1,88 @@
-// src/pages/AdminLogin.jsx
 import React, { useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../lib/auth";
+import { useNavigate, useLocation, Link } from "react-router-dom";
+import { auth } from "../lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+
+function prettyError(code) {
+  switch (code) {
+    case "auth/invalid-email": return "That email doesn’t look right.";
+    case "auth/user-not-found":
+    case "auth/wrong-password": return "Incorrect email or password.";
+    case "auth/too-many-requests": return "Too many attempts. Please wait and try again.";
+    case "auth/network-request-failed": return "Network error. Check your connection.";
+    default: return "Couldn’t sign in. Please try again.";
+  }
+}
 
 export default function AdminLogin() {
-  const { ready, user, isAdmin, login } = useAuth();
   const nav = useNavigate();
-  const location = useLocation();
-  const redirectTo = location.state?.from?.pathname || "/admin";
-
+  const { state } = useLocation();
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  if (ready && user && isAdmin) {
-    return <Navigate to={redirectTo} replace />;
-  }
-
-  async function submit(e) {
+  const onSubmit = async (e) => {
     e.preventDefault();
     setErr("");
-    setLoading(true);
+    setSubmitting(true);
     try {
-      await login(email.trim(), pass);
-      nav(redirectTo, { replace: true });
-    } catch (e2) {
-      setErr(e2?.message || "Login failed");
+      await signInWithEmailAndPassword(auth, email.trim(), pass);
+      const dest = state?.from?.pathname || "/admin";
+      nav(dest, { replace: true });
+    } catch (e) {
+      // If something else throws, Firebase errors have 'code'
+      setErr(prettyError(e?.code));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <section className="container-site py-12">
-      <div className="max-w-md mx-auto card p-6">
-        <h1 className="h2">Admin Login</h1>
-        <p className="text-sm text-[color:var(--muted)] mt-1">
-          Sign in with your admin email.
-        </p>
+    <section className="w-full py-10 md:py-16">
+      <div className="max-w-md mx-auto px-4">
+        <h2 className="text-2xl font-serif font-semibold mb-2">Admin Login</h2>
+        <p className="text-sm text-[color:var(--muted)] mb-6">Sign in with your admin email.</p>
 
-        <form onSubmit={submit} className="mt-6 space-y-4">
-          <div>
-            <label className="text-sm">Email</label>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <label className="block">
+            <div className="text-xs font-semibold mb-1">Email</div>
             <input
-              className="input mt-1 w-full"
               type="email"
+              className="input w-full"
               autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
               required
             />
-          </div>
-          <div>
-            <label className="text-sm">Password</label>
+          </label>
+
+          <label className="block">
+            <div className="text-xs font-semibold mb-1">Password</div>
             <input
-              className="input mt-1 w-full"
               type="password"
+              className="input w-full"
               autoComplete="current-password"
               value={pass}
               onChange={(e) => setPass(e.target.value)}
-              placeholder="••••••••"
               required
             />
-          </div>
-          {err && <p className="text-rose text-sm">{err}</p>}
+          </label>
 
-          <button className="btn btn-primary w-full" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
+          {err && <div className="text-sm text-wine">{err}</div>}
+
+          <button
+            type="submit"
+            className="btn btn-primary w-full"
+            disabled={submitting}
+          >
+            {submitting ? "Signing in…" : "Sign in"}
           </button>
         </form>
+
+        <div className="mt-6 text-xs text-[color:var(--muted)]">
+          <Link to="/">← Back to site</Link>
+        </div>
       </div>
     </section>
   );

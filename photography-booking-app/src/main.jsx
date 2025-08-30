@@ -1,8 +1,10 @@
-// src/main.jsx
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
+
+import { AuthProvider } from "./lib/auth.jsx";     // 👈 make sure path & extension are correct
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
 
 import App from "./App";
 import Home from "./pages/Home";
@@ -15,9 +17,6 @@ import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminBookings from "./pages/AdminBookings";
 
-import { AuthProvider, ProtectedRoute } from "./lib/auth";// ✅ make sure file is src/lib/auth.jsx
-import ErrorBoundary from "./components/ErrorBoundary";       // ✅ add this file if you haven’t yet
-
 const router = createHashRouter([
   {
     path: "/",
@@ -28,8 +27,9 @@ const router = createHashRouter([
       { path: "booking", element: <Booking /> },
       { path: "faq", element: <FAQ /> },
       { path: "client-gallery", element: <ClientGallery /> },
-      { path: "client-portal", element: <ClientPortal /> }, // client portal
-      { path: "admin/login", element: <AdminLogin /> },     // login first
+      { path: "client-portal", element: <ClientPortal /> },
+
+      { path: "admin/login", element: <AdminLogin /> },
       {
         path: "admin",
         element: (
@@ -54,9 +54,7 @@ createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <HelmetProvider>
       <AuthProvider>
-        <ErrorBoundary>
-          <RouterProvider router={router} />
-        </ErrorBoundary>
+        <RouterProvider router={router} />
       </AuthProvider>
     </HelmetProvider>
   </React.StrictMode>
