@@ -6,15 +6,10 @@ import {
   signOut as fbSignOut,
 } from "firebase/auth";
 
-/** ✅ Case-insensitive allow list */
+// ✅ case-insensitive allow-list
 const ADMIN_EMAILS = new Set([
   "ahmadhijaz325@gmail.com",
-  // "lamawafa13@gmail.com",
 ]);
-
-function isEmailAdmin(email) {
-  return !!email && ADMIN_EMAILS.has(String(email).toLowerCase());
-}
 
 const AuthCtx = createContext({
   ready: false,
@@ -30,13 +25,16 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
+      setUser(u);
       setReady(true);
     });
     return () => unsub();
   }, []);
 
-  const isAdmin = useMemo(() => isEmailAdmin(user?.email), [user]);
+  const isAdmin = useMemo(() => {
+    const email = (user?.email || "").toLowerCase();
+    return !!email && ADMIN_EMAILS.has(email);
+  }, [user]);
 
   const value = useMemo(
     () => ({
@@ -57,6 +55,6 @@ export function useAuth() {
 }
 
 export function useIsAdmin(u) {
-  const email = (u?.email) ?? useAuth().user?.email;
-  return isEmailAdmin(email);
+  const email = (u?.email || useAuth().user?.email || "").toLowerCase();
+  return !!email && ADMIN_EMAILS.has(email);
 }

@@ -17,7 +17,7 @@ const firebaseConfig = {
   authDomain:
     import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
   projectId: PROJECT_ID,
-  // You asked to keep this; SDK will use it as provided.
+  // ✅ you asked to keep this as firebasestorage.app
   storageBucket:
     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -27,33 +27,32 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 
-// ---------- App Check ----------
+// ---- App Check (quiet in dev, real in prod) ----
 if (typeof window !== "undefined") {
+  const isLocal =
+    location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1" ||
+    location.hostname.endsWith(".local");
   const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
 
-  if (import.meta.env.DEV) {
-    // Dev: use debug token, and SKIP initializing reCAPTCHA provider to avoid errors
-    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    // Do NOT call initializeAppCheck here; with enforcement OFF or debug token registered,
-    // local dev works without noisy recaptcha errors.
-    console.info("[firebase] App Check: DEV mode (debug token).");
-  } else if (siteKey) {
-    // Prod: real reCAPTCHA v3 provider
-    try {
+  try {
+    if (isLocal || !siteKey) {
+      // Don’t force reCAPTCHA on localhost — avoids “recaptcha-error” noise
+      // If enforcement is enabled, you can uncomment the debug token:
+      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      console.info("[firebase] App Check: skipped on dev (localhost) or missing site key.");
+    } else {
       initializeAppCheck(app, {
         provider: new ReCaptchaV3Provider(siteKey),
         isTokenAutoRefreshEnabled: true,
       });
-      console.info("[firebase] App Check initialized (prod).");
-    } catch (e) {
-      console.warn("[firebase] App Check init warning:", e?.message || e);
     }
-  } else {
-    console.warn("[firebase] App Check NOT initialized (missing VITE_RECAPTCHA_V3_SITE_KEY).");
+  } catch (e) {
+    console.warn("[firebase] App Check init warning:", e?.message || e);
   }
 }
 
-// ---------- Firestore ----------
+// ---- Firestore ----
 export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
   localCache: persistentLocalCache({
@@ -61,13 +60,13 @@ export const db = initializeFirestore(app, {
   }),
 });
 
-// ---------- Auth ----------
+// ---- Auth ----
 export const auth = getAuth(app);
 
-// ---------- Storage ----------
+// ---- Storage ----
 export const storage = getStorage(app);
 
-// ---------- Analytics (optional) ----------
+// ---- Analytics (optional) ----
 isSupported().then((ok) => {
   if (ok && firebaseConfig.measurementId) getAnalytics(app);
 });
