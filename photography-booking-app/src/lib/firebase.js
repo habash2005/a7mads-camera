@@ -49,6 +49,10 @@ if (import.meta.env.DEV) {
   console.log("[Firebase] env storageBucket:", import.meta.env.VITE_FIREBASE_STORAGE_BUCKET);
   console.log("[Firebase] SDK GS bucket:", GS_BUCKET);
 }
+if (typeof window !== "undefined") {
+  window.__fb = { app, auth, db, storage };
+}
+
 
 export { app };
 export default app;
