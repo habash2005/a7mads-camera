@@ -1,5 +1,5 @@
 // src/pages/AdminMediaManager.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
 import {
@@ -17,12 +17,9 @@ import { ref as sRef, deleteObject } from "firebase/storage";
 /* ———————————————————————————————
    ADMIN DETECTION (case-insensitive)
    ——————————————————————————————— */
-const ADMIN_EMAILS = new Set([
-  "ahmadhijaz325@gmail.com",
-].map((s) => s.toLowerCase()));
+const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"].map((s) => s.toLowerCase()));
 
 const CONCURRENCY = 5;
-
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 function storagePathOf(img) {
@@ -58,10 +55,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
   const [cDeleting, setCDeleting] = useState({}); // id -> 'pending' | 'ok' | 'err'
 
   /* auth */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setMe(u || null));
-    return () => unsub();
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, (u) => setMe(u || null)), []);
 
   /* load portfolio gallery + images */
   async function loadPortfolio() {
@@ -160,16 +154,14 @@ export default function AdminMediaManager({ selectedRef = "" }) {
     }
   }
 
-  /* legacy button handler (uses input field) */
   async function loadClientByRef() {
     await loadClientByRefWithCode(refCode);
   }
 
-  // 👂 react to external quick-pick (from AdminDashboard)
+  // react to external quick-pick
   useEffect(() => {
     const ext = String(selectedRef || "").trim().toUpperCase();
     if (!ext) return;
-    // Switch to client tab, set field, and load
     setTab("client");
     setRefCode(ext);
     loadClientByRefWithCode(ext);
@@ -192,7 +184,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
     }
   }
 
-  /** delete one image (Storage tolerant + Firestore doc) */
+  /** delete one image (Storage + Firestore) */
   async function deleteOne({ img, kind, galleryId, bookingId }) {
     const path = storagePathOf(img);
 
@@ -209,8 +201,6 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           }
           console.warn("Storage: already gone", path);
         }
-      } else {
-        console.warn("No storage path for", img);
       }
 
       const dref =
@@ -266,9 +256,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
       failed += results.filter((r) => !r.ok).length;
     }
 
-    alert(
-      `Deleted ${deleted}${failed ? ` — ${failed} failed${notAdmin ? " (not admin?)" : ""}` : " — done!"}`
-    );
+    alert(`Deleted ${deleted}${failed ? ` — ${failed} failed` : " — done!"}`);
 
     if (type === "p") await loadPortfolio();
     else await loadClientByRefWithCode(client?.reference || refCode);
@@ -305,7 +293,9 @@ export default function AdminMediaManager({ selectedRef = "" }) {
             notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
           )}
         >
-          {notAdmin ? `Not signed in as admin (${Array.from(ADMIN_EMAILS).join(", ")}) — deletes will fail.` : `Signed in as ${me?.email}`}
+          {notAdmin
+            ? `Not signed in as admin (${Array.from(ADMIN_EMAILS).join(", ")}) — deletes will fail.`
+            : `Signed in as ${me?.email}`}
         </div>
       </div>
 
@@ -408,7 +398,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           <ClientTab
             refCode={refCode}
             setRefCode={setRefCode}
-            loadClientByRef={loadClientByRef}
+            loadClientByRef={() => loadClientByRefWithCode(refCode)}
             cLoading={cLoading}
             client={client}
             cImgs={cImgs}
@@ -420,13 +410,13 @@ export default function AdminMediaManager({ selectedRef = "" }) {
             deleteSelected={() => deleteSelected({ type: "c" })}
             notAdmin={notAdmin}
           />
-      </div>
+        </div>
       )}
     </section>
   );
 }
 
-/* Small helper component for client tab UI (keeps file tidy) */
+/* Small helper component for client tab UI */
 function ClientTab({
   refCode, setRefCode, loadClientByRef, cLoading, client,
   cImgs, cSel, setCSel, cCount, cDeleting, cMsg, deleteSelected, notAdmin

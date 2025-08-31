@@ -1,3 +1,4 @@
+// src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, Suspense, useMemo } from "react";
 import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
@@ -17,18 +18,16 @@ import {
 } from "firebase/firestore";
 
 const AdminUpload       = React.lazy(() => import("./AdminUpload"));
-const AdminBookings     = React.lazy(() => import("./AdminBookings"));
 const AdminMediaManager = React.lazy(() => import("./AdminMediaManager"));
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
-// CHANGED: safeCount with graceful fallback (avoids failed-precondition without index)
+// Safe count (works even without index)
 async function safeCount(qy) {
   try {
     const res = await getCountFromServer(qy);
     return res.data().count || 0;
   } catch {
-    // Fallback: fetch (limited) and count client-side
     const snap = await getDocs(qy);
     return snap.size;
   }
@@ -51,14 +50,13 @@ export default function AdminDashboard() {
       const galleriesCol = collection(db, "galleries");
       const nowTs = Timestamp.fromDate(new Date());
 
-      // CHANGED: confirmedUpcoming fallback if index missing
+      // upcoming confirmed
       let confirmedUpcoming = 0;
       try {
         confirmedUpcoming = await safeCount(
           query(bookingsCol, where("status", "==", "confirmed"), where("startAt", ">=", nowTs))
         );
       } catch {
-        // ultra-safe fallback: fetch future, then filter status client-side
         const snap = await getDocs(query(bookingsCol, where("startAt", ">=", nowTs), limit(500)));
         confirmedUpcoming = snap.docs.filter(
           (d) => (d.data().status || "").toLowerCase() === "confirmed"
@@ -89,7 +87,7 @@ export default function AdminDashboard() {
       const snap = await getDocs(qy);
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setter({ rows, loading: false, error: "" });
-    } catch (e) {
+    } catch {
       setter({ rows: [], loading: false, error: "Couldn’t load upcoming bookings." });
     }
   }
@@ -119,7 +117,7 @@ export default function AdminDashboard() {
         };
       });
       setRefIndex({ rows, loading: false, error: "" });
-    } catch (e) {
+    } catch {
       setRefIndex({ rows: [], loading: false, error: "Couldn’t load references." });
     }
   }
@@ -209,9 +207,7 @@ export default function AdminDashboard() {
     <section className="w-full py-10 md:py-14 bg-cream">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-3xl font-serif font-semibold text-burgundy">
-            Admin Dashboard
-          </h2>
+          <h2 className="text-3xl font-serif font-semibold text-burgundy">Admin Dashboard</h2>
           <button
             onClick={handleSignOut}
             className="px-4 py-2 rounded-lg bg-rose text-white hover:bg-rose/80"
@@ -231,9 +227,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">
-          Upcoming Bookings
-        </h3>
+        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">Upcoming Bookings</h3>
         {upcoming.loading ? (
           <div>Loading...</div>
         ) : upcoming.error ? (
@@ -298,9 +292,7 @@ export default function AdminDashboard() {
           </table>
         )}
 
-        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">
-          Booking References
-        </h3>
+        <h3 className="text-xl font-serif font-semibold text-burgundy mb-3">Booking References</h3>
         <input
           type="text"
           placeholder="Search by reference, name, or email"
@@ -320,7 +312,7 @@ export default function AdminDashboard() {
               </tr>
             </thead>
             <tbody>
-              {refIndex.rows.map((r) => (
+              {filteredRefs.map((r) => (
                 <tr key={r.id} className="border-t border-neutral-200/60">
                   <td className="px-3 py-2">{r.reference}</td>
                   <td className="px-3 py-2">{r.name}</td>
@@ -356,9 +348,17 @@ function StatCard({ label, value }) {
 
 function StatusPill({ status }) {
   const s = (status || "").toLowerCase();
-  const base = "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
-  if (s === "confirmed") return <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>Confirmed</span>;
-  if (s === "finished")  return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Finished</span>;
-  if (s === "canceled")  return <span className={cls(base, "bg-wine/15 text-wine ring-wine/30")}>Canceled</span>;
+  const base =
+    "inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1";
+  if (s === "confirmed")
+    return (
+      <span className={cls(base, "bg-emerald-50 text-emerald-800 ring-emerald-200")}>
+        Confirmed
+      </span>
+    );
+  if (s === "finished")
+    return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Finished</span>;
+  if (s === "canceled")
+    return <span className={cls(base, "bg-wine/15 text-wine ring-wine/30")}>Canceled</span>;
   return <span className={cls(base, "bg-gold/15 text-charcoal ring-gold/40")}>Pending</span>;
 }

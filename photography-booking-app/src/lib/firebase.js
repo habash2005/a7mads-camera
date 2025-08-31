@@ -1,60 +1,58 @@
-/* global self */
-import { initializeApp } from "firebase/app";
+// src/lib/storage.js
 import { getAuth } from "firebase/auth";
-import {
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
-} from "firebase/firestore";
-import { getStorage } from "firebase/storage";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
-import { getAnalytics, isSupported } from "firebase/analytics";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
-const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || "ahmad-port";
+/**
+ * Uploads a file to one of the allowed paths per your Storage rules:
+ *  - portfolio/{slug}/{timestamp}_{safeName}
+ *  - clients/{ref}/{timestamp}_{safeName}
+ *
+ * @param {File} file
+ * @param {Object} opts
+ * @param {'portfolio'|'clients'} opts.bucket  which top-level folder to use
+ * @param {string} [opts.slug] slug/folder under portfolio (required if bucket='portfolio')
+ * @param {string} [opts.ref] client ref code/folder (required if bucket='clients')
+ * @param {(pct:number)=>void} [onProgress] optional progress callback
+ * @returns {Promise<{url:string,path:string}>}
+ */
+export function uploadImageAllowed(file, opts = {}, onProgress) {
+  const auth = getAuth();
+  const user = auth.currentUser;
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${PROJECT_ID}.firebaseapp.com`,
-  projectId: PROJECT_ID,
-  // ✅ keep your custom bucket name (not appspot)
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${PROJECT_ID}.firebasestorage.app`,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-};
+  if (!user) throw new Error("You must be signed in as admin to upload.");
 
-export const app = initializeApp(firebaseConfig);
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "-");
+  let base;
 
-// ---- App Check ----
-if (typeof window !== "undefined") {
-  if (import.meta.env.DEV) {
-    // allows localhost even if enforcement is ON
-    self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-    console.info("[firebase] App Check debug token enabled (dev).");
+  if (opts.bucket === "portfolio") {
+    if (!opts.slug) throw new Error("Missing portfolio slug.");
+    base = `portfolio/${opts.slug}`;
+  } else if (opts.bucket === "clients") {
+    if (!opts.ref) throw new Error("Missing client ref.");
+    base = `clients/${opts.ref}`;
+  } else {
+    throw new Error("bucket must be 'portfolio' or 'clients' to satisfy your Storage rules.");
   }
 
-  const siteKey = import.meta.env.VITE_RECAPTCHA_V3_SITE_KEY;
-  try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(siteKey || "missing-site-key"),
-      isTokenAutoRefreshEnabled: true,
-    });
-    console.info("[firebase] App Check enabled with reCAPTCHA v3.");
-  } catch (e) {
-    console.warn("[firebase] App Check init warning:", e?.message || e);
-  }
+  const path = `${base}/${Date.now()}_${safeName}`;
+  const storage = getStorage();
+  const storageRef = ref(storage, path);
+  const task = uploadBytesResumable(storageRef, file, { contentType: file.type });
+
+  return new Promise((resolve, reject) => {
+    task.on(
+      "state_changed",
+      (snap) => {
+        if (onProgress) {
+          const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+          onProgress(pct);
+        }
+      },
+      (err) => reject(err),
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref);
+        resolve({ url, path });
+      }
+    );
+  });
 }
-
-export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
-  }),
-});
-
-export const auth = getAuth(app);
-export const storage = getStorage(app);
-
-isSupported().then(ok => {
-  if (ok && firebaseConfig.measurementId) getAnalytics(app);
-});

@@ -13,14 +13,12 @@ import {
   setDoc,
   where,
 } from "firebase/firestore";
-import { ref as sRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { ref as sRef, uploadBytesResumable, getDownloadURL, deleteObject } from "firebase/storage";
 
 /* ———————————————————————————————
    ADMIN DETECTION (case-insensitive)
    ——————————————————————————————— */
-const ADMIN_EMAILS = new Set([
-  "ahmadhijaz325@gmail.com",
-].map((s) => s.toLowerCase()));
+const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"].map((s) => s.toLowerCase()));
 
 const MAX_SIZE = 25 * 1024 * 1024;
 const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "";
@@ -96,10 +94,7 @@ export default function AdminUpload() {
   const [busy, setBusy] = useState(false);
 
   /* auth */
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setMe(u || null));
-    return () => unsub();
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, (u) => setMe(u || null)), []);
 
   /* load bookings */
   useEffect(() => {
@@ -253,39 +248,26 @@ export default function AdminUpload() {
 
   /* ---------- Storage preflight: probe the SAME directory as the real upload ---------- */
   async function storagePreflight(currentMode, refCode) {
-    try {
-      const blob = new Blob(["ok"], { type: "text/plain" });
+    // Only write into paths your rules allow:
+    // - portfolio/** (public)
+    // - clients/{ref}/** (client deliveries)
+    const dir = currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+    const name = `__preflight_${Date.now()}.txt`;
+    const blob = new Blob(["ok"], { type: "text/plain" });
+    const testRef = sRef(storage, `${dir}/${name}`);
+    const task = uploadBytesResumable(testRef, blob, {
+      contentType: "text/plain",
+      cacheControl: "public,max-age=60",
+    });
 
-      const dir =
-        currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
+    // Await completion (will fail if not admin or wrong path)
+    await new Promise((resolve, reject) => {
+      task.on("state_changed", null, reject, resolve);
+    });
 
-      const testRef = sRef(storage, `${dir}/__preflight_${Date.now()}.txt`);
-      const task = uploadBytesResumable(testRef, blob, {
-        contentType: "text/plain",
-        cacheControl: "public,max-age=60",
-      });
-
-      await new Promise((resolve, reject) => {
-        task.on("state_changed", null, reject, resolve);
-      });
-
-      await getDownloadURL(testRef);
-    } catch (e) {
-      const msg = String(e?.message || e);
-      const m = msg.toLowerCase();
-      let hint = "";
-      if (m.includes("appcheck")) {
-        hint =
-          "App Check token missing/invalid. Confirm App Check is initialized and your site key allows this domain.";
-      } else if (m.includes("unauthorized") || m.includes("forbidden")) {
-        hint =
-          "Storage rules blocked the write. Ensure admin auth + rules allow writes to this path.";
-      } else if (m.includes("failed to fetch")) {
-        hint =
-          "CORS/preflight blocked. Verify the request URL hits your bucket domain and CORS is set correctly.";
-      }
-      throw new Error(hint ? `${msg}\n\n${hint}` : msg);
-    }
+    // cleanup the preflight file (optional)
+    try { await deleteObject(testRef); } catch {}
+    // read isn’t required; your rules allow read:true anyway
   }
 
   /* portfolio doc (optional) */
@@ -305,7 +287,7 @@ export default function AdminUpload() {
     return newRef;
   }
 
-  /* upload one */
+  /* upload one (only to allowed folders) */
   function uploadOne({ item, basePath, imagesCollectionPath, extraDocFields }) {
     return new Promise(async (resolve) => {
       const file = item.file;
@@ -354,20 +336,21 @@ export default function AdminUpload() {
             const url = await getDownloadURL(task.snapshot.ref);
             const { width, height } = await getImageDims(file);
 
+            // write Firestore doc to match your strict schemas
             if (imagesCollectionPath) {
               const imagesCol = collection(db, imagesCollectionPath);
-              const docId = path.replace(/\//g, "__");
+              const docId = path.replace(/\//g, "__"); // id can be anything; fields must match schema
               await setDoc(doc(imagesCol, docId), {
-                public_id: path,
-                format: extOf(file.name),
-                bytes: file.size,
-                width,
-                height,
-                secure_url: url,
-                original_filename: file.name,
-                version: 1,
-                createdAt: serverTimestamp(),
-                ...extraDocFields,
+                public_id: path,                     // string
+                format: extOf(file.name),            // string
+                bytes: file.size,                    // number
+                width,                               // number
+                height,                              // number
+                secure_url: url,                     // string
+                original_filename: file.name,        // string
+                version: 1,                          // number
+                createdAt: serverTimestamp(),        // timestamp
+                ...extraDocFields,                   // { ref } for bookings/*/images, { tag } for galleries/*/images
               });
             }
 
@@ -398,7 +381,7 @@ export default function AdminUpload() {
     if (queue.length === 0) return alert("Pick some image files first.");
     if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
-    // Preflight: probe the exact folder (and reflect failure in the UI rows)
+    // Preflight into EXACT folder your rules allow
     try {
       await storagePreflight(mode, selectedBooking?.reference);
     } catch (e) {
@@ -422,14 +405,18 @@ export default function AdminUpload() {
       let extraDocFields = {};
 
       if (mode === "client") {
+        // ✅ allowed by your Storage rules
         basePath = `clients/${selectedBooking.reference}`;
+        // ✅ Firestore schema for bookings/{id}/images/*
         imagesCollectionPath = `bookings/${selectedBooking.id}/images`;
-        extraDocFields = { ref: selectedBooking.reference };
+        extraDocFields = { ref: selectedBooking.reference }; // required by your rules
       } else {
+        // ✅ allowed by your Storage rules
         basePath = `portfolio`;
+        // ✅ Firestore schema for galleries/{id}/images/*
         const galRef = await getOrCreatePortfolioDoc();
         imagesCollectionPath = `galleries/${galRef.id}/images`;
-        extraDocFields = { tag: "portfolio" };
+        extraDocFields = { tag: "portfolio" }; // required by your rules
       }
 
       const itemsToUpload = queue.filter(
@@ -440,7 +427,7 @@ export default function AdminUpload() {
         return;
       }
 
-      // Clear previous error states to queued
+      // Clear previous error rows back to queued
       setQueue((q) =>
         q.map((it) =>
           it.status === "error" ? { ...it, status: "queued", progress: 0, error: "" } : it
