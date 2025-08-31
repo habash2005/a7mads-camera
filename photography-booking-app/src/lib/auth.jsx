@@ -3,8 +3,8 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { auth } from "./firebase";
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut as fbSignOut } from "firebase/auth";
 
-/** Case-insensitive admin allow-list (edit here only) */
-export const ADMIN_ALLOW_LIST = new Set(["ahmadhijaz325@gmail.com"]);
+/** Case-insensitive admin allow-list */
+export const ADMIN_ALLOW_LIST = new Set(["ahmadhijaz325@gmail.com"].map(e => e.toLowerCase()));
 
 function isAdminEmail(email) {
   return !!email && ADMIN_ALLOW_LIST.has(String(email).toLowerCase());
