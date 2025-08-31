@@ -248,26 +248,59 @@ export default function AdminUpload() {
 
   /* ---------- Storage preflight: probe the SAME directory as the real upload ---------- */
   async function storagePreflight(currentMode, refCode) {
-    // Only write into paths your rules allow:
-    // - portfolio/** (public)
-    // - clients/{ref}/** (client deliveries)
+    // Ensure signed-in before probing (rules rely on request.auth)
+    const u = auth.currentUser;
+    if (!u) {
+      throw new Error("Not signed in. Sign in as the admin and try again.");
+    }
+
+    // Helpful diagnostics: see exactly what rules will see
+    try {
+      const tok = await u.getIdTokenResult(true);
+      // These logs help you confirm admin email & appCheck if enforced
+      console.log("[Preflight] email:", u.email);
+      console.log("[Preflight] claims:", tok.claims); // includes email; if App Check, will include appCheck
+    } catch {}
+
     const dir = currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
     const name = `__preflight_${Date.now()}.txt`;
     const blob = new Blob(["ok"], { type: "text/plain" });
     const testRef = sRef(storage, `${dir}/${name}`);
+
     const task = uploadBytesResumable(testRef, blob, {
       contentType: "text/plain",
       cacheControl: "public,max-age=60",
     });
 
-    // Await completion (will fail if not admin or wrong path)
-    await new Promise((resolve, reject) => {
-      task.on("state_changed", null, reject, resolve);
-    });
+    try {
+      await new Promise((resolve, reject) => {
+        task.on("state_changed", null, reject, resolve);
+      });
+    } catch (e) {
+      const msg = String(e?.message || e);
+      const m = msg.toLowerCase();
+      let hint = "";
 
-    // cleanup the preflight file (optional)
-    try { await deleteObject(testRef); } catch {}
-    // read isn’t required; your rules allow read:true anyway
+      if (m.includes("appcheck")) {
+        hint =
+          "App Check is enforced for Storage. Initialize App Check in firebase.js or disable enforcement for testing.";
+      } else if (m.includes("unauthorized") || m.includes("forbidden")) {
+        hint = [
+          "Storage rules denied the write. Check all of these:",
+          " • Logged in as admin email exactly: ahmadhijaz325@gmail.com",
+          " • Rules deployed to the SAME project your app uses (project: ahmad-port)",
+          " • Upload path matches rules: portfolio/** or clients/{ref}/**",
+          " • If App Check enforced, the page has a valid App Check token",
+          " • Your site domain is in Firebase Auth → Authorized domains",
+        ].join("\n");
+      } else if (m.includes("failed to fetch")) {
+        hint = "Network/CORS hiccup. Verify connectivity to firebasestorage endpoints.";
+      }
+      throw new Error(hint ? `${msg}\n\n${hint}` : msg);
+    } finally {
+      // best-effort cleanup so these files don't linger
+      try { await deleteObject(testRef); } catch {}
+    }
   }
 
   /* portfolio doc (optional) */
@@ -336,21 +369,20 @@ export default function AdminUpload() {
             const url = await getDownloadURL(task.snapshot.ref);
             const { width, height } = await getImageDims(file);
 
-            // write Firestore doc to match your strict schemas
             if (imagesCollectionPath) {
               const imagesCol = collection(db, imagesCollectionPath);
-              const docId = path.replace(/\//g, "__"); // id can be anything; fields must match schema
+              const docId = path.replace(/\//g, "__");
               await setDoc(doc(imagesCol, docId), {
-                public_id: path,                     // string
-                format: extOf(file.name),            // string
-                bytes: file.size,                    // number
-                width,                               // number
-                height,                              // number
-                secure_url: url,                     // string
-                original_filename: file.name,        // string
-                version: 1,                          // number
-                createdAt: serverTimestamp(),        // timestamp
-                ...extraDocFields,                   // { ref } for bookings/*/images, { tag } for galleries/*/images
+                public_id: path,
+                format: extOf(file.name),
+                bytes: file.size,
+                width,
+                height,
+                secure_url: url,
+                original_filename: file.name,
+                version: 1,
+                createdAt: serverTimestamp(),
+                ...extraDocFields,
               });
             }
 
@@ -405,18 +437,14 @@ export default function AdminUpload() {
       let extraDocFields = {};
 
       if (mode === "client") {
-        // ✅ allowed by your Storage rules
         basePath = `clients/${selectedBooking.reference}`;
-        // ✅ Firestore schema for bookings/{id}/images/*
         imagesCollectionPath = `bookings/${selectedBooking.id}/images`;
-        extraDocFields = { ref: selectedBooking.reference }; // required by your rules
+        extraDocFields = { ref: selectedBooking.reference };
       } else {
-        // ✅ allowed by your Storage rules
         basePath = `portfolio`;
-        // ✅ Firestore schema for galleries/{id}/images/*
         const galRef = await getOrCreatePortfolioDoc();
         imagesCollectionPath = `galleries/${galRef.id}/images`;
-        extraDocFields = { tag: "portfolio" }; // required by your rules
+        extraDocFields = { tag: "portfolio" };
       }
 
       const itemsToUpload = queue.filter(
