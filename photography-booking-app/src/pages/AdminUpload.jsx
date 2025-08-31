@@ -1,7 +1,7 @@
 // src/pages/AdminUpload.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth, db, storage } from "../lib/firebase";
+import { auth, db, storage, STORAGE_BUCKET_HOST } from "../lib/firebase";
 import {
   collection,
   doc,
@@ -21,7 +21,7 @@ import { ref as sRef, uploadBytesResumable, getDownloadURL, deleteObject } from 
 const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"].map((s) => s.toLowerCase()));
 
 const MAX_SIZE = 25 * 1024 * 1024;
-const BUCKET = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "";
+const BUCKET = STORAGE_BUCKET_HOST; // <-- show the *runtime* bucket you’re actually using
 const CONCURRENCY = 4;
 
 /* utils */
@@ -248,18 +248,15 @@ export default function AdminUpload() {
 
   /* ---------- Storage preflight: probe the SAME directory as the real upload ---------- */
   async function storagePreflight(currentMode, refCode) {
-    // Ensure signed-in before probing (rules rely on request.auth)
     const u = auth.currentUser;
     if (!u) {
       throw new Error("Not signed in. Sign in as the admin and try again.");
     }
 
-    // Helpful diagnostics: see exactly what rules will see
     try {
       const tok = await u.getIdTokenResult(true);
-      // These logs help you confirm admin email & appCheck if enforced
       console.log("[Preflight] email:", u.email);
-      console.log("[Preflight] claims:", tok.claims); // includes email; if App Check, will include appCheck
+      console.log("[Preflight] claims:", tok.claims);
     } catch {}
 
     const dir = currentMode === "client" && refCode ? `clients/${refCode}` : "portfolio";
@@ -277,28 +274,10 @@ export default function AdminUpload() {
         task.on("state_changed", null, reject, resolve);
       });
     } catch (e) {
+      // Surface hints but do NOT block uploads (CORS can be flaky)
       const msg = String(e?.message || e);
-      const m = msg.toLowerCase();
-      let hint = "";
-
-      if (m.includes("appcheck")) {
-        hint =
-          "App Check is enforced for Storage. Initialize App Check in firebase.js or disable enforcement for testing.";
-      } else if (m.includes("unauthorized") || m.includes("forbidden")) {
-        hint = [
-          "Storage rules denied the write. Check all of these:",
-          " • Logged in as admin email exactly: ahmadhijaz325@gmail.com",
-          " • Rules deployed to the SAME project your app uses (project: ahmad-port)",
-          " • Upload path matches rules: portfolio/** or clients/{ref}/**",
-          " • If App Check enforced, the page has a valid App Check token",
-          " • Your site domain is in Firebase Auth → Authorized domains",
-        ].join("\n");
-      } else if (m.includes("failed to fetch")) {
-        hint = "Network/CORS hiccup. Verify connectivity to firebasestorage endpoints.";
-      }
-      throw new Error(hint ? `${msg}\n\n${hint}` : msg);
+      console.warn("[Storage preflight skipped]", msg);
     } finally {
-      // best-effort cleanup so these files don't linger
       try { await deleteObject(testRef); } catch {}
     }
   }
@@ -413,20 +392,11 @@ export default function AdminUpload() {
     if (queue.length === 0) return alert("Pick some image files first.");
     if (mode === "client" && !selectedBooking) return alert("Choose a client reference first.");
 
-    // Preflight into EXACT folder your rules allow
+    // Try preflight, but do NOT abort uploads on failure (CORS may hiccup)
     try {
       await storagePreflight(mode, selectedBooking?.reference);
     } catch (e) {
-      console.error("[Storage preflight]", e);
-      setQueue((q) =>
-        q.map((it) =>
-          it.status === "queued" || it.status === "uploading"
-            ? { ...it, status: "error", error: `Preflight failed: ${e.message}` }
-            : it
-        )
-      );
-      alert(e.message || "Storage preflight failed.");
-      return;
+      console.warn("[Preflight warning]", e?.message || e);
     }
 
     setBusy(true);

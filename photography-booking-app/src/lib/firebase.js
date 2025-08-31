@@ -1,25 +1,21 @@
 // src/lib/firebase.js
 import { initializeApp, getApps, getApp } from "firebase/app";
 
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID; // "ahmad-port"
+// ---- App init ----
+const app =
+  getApps().length
+    ? getApp()
+    : initializeApp({
+        apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+        authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+        projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        // keep whatever is in env; we hard-target Storage below anyway
+        storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "",
+        messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+      });
 
-// 🔒 Your actual bucket (you asked to lock this exact id)
-export const BUCKET_ID = "ahmad-port.firebasestorage.app";
-const GS_URI = `gs://${BUCKET_ID}`;
-
-// --- Core app ---
-const app = getApps().length
-  ? getApp()
-  : initializeApp({
-      apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId,
-      storageBucket:     BUCKET_ID, // keep options aligned with your real bucket
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId:             import.meta.env.VITE_FIREBASE_APP_ID,
-    });
-
-// --- App Check (optional) ---
+// ---- (Optional) App Check ----
 import {
   initializeAppCheck,
   ReCaptchaV3Provider,
@@ -37,37 +33,34 @@ if (!APPCHECK_DISABLED) {
       provider: new ReCaptchaV3Provider(v3Key),
       isTokenAutoRefreshEnabled: true,
     });
-    if (import.meta.env.DEV) getAppCheckToken(appCheck, true).catch(() => {});
+    if (import.meta.env.DEV) {
+      getAppCheckToken(appCheck, true).catch(() => {});
+    }
   }
 } else {
+  // eslint-disable-next-line no-console
   console.warn("[AppCheck] Disabled via VITE_APPCHECK_DISABLED=1");
 }
 
-// --- Other SDKs ---
+// ---- SDKs ----
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage, ref as sRef } from "firebase/storage";
+import { getStorage } from "firebase/storage";
 
-// ⛳️ Explicitly bind Storage to YOUR gs:// bucket
-export const auth    = getAuth(app);
-export const db      = getFirestore(app);
-export const storage = getStorage(app, GS_URI);
+// 🔒 Force Storage to your exact bucket (non-default host)
+const STORAGE_BUCKET_HOST = "ahmad-port.firebasestorage.app";
+const STORAGE_GS_URI = `gs://${STORAGE_BUCKET_HOST}`;
 
-// 🚨 Runtime guard: if anything points to the wrong bucket, log loudly
-try {
-  // ref(...).bucket returns the bucket id the instance is targeting
-  const bucketAtRuntime = sRef(storage).bucket;
-  if (bucketAtRuntime !== BUCKET_ID) {
-    console.error(
-      "[firebase] Storage bucket mismatch!",
-      "expected:", BUCKET_ID,
-      "actual:", bucketAtRuntime,
-      "→ Some code/path is still using a different Storage instance."
-    );
-  } else if (import.meta.env.DEV) {
-    console.log("[firebase] project:", projectId, "| storage:", `gs://${bucketAtRuntime}`);
-  }
-} catch { /* ignore */ }
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app, STORAGE_GS_URI);
 
-export { app, appCheck };
+// Export helpers so UI can display the *actual* target
+export { app, appCheck, STORAGE_BUCKET_HOST, STORAGE_GS_URI };
 export default app;
+
+// Dev hint (safe): confirm the bucket at runtime
+if (import.meta.env.DEV) {
+  // eslint-disable-next-line no-console
+  console.log("[firebase] storage ->", STORAGE_GS_URI);
+}
