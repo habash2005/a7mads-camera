@@ -1,67 +1,174 @@
 import React, { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
-const links = [
-  { to: "/portfolio", label: "Work" },
-  { to: "/booking", label: "Book" },
-  { to: "/client-portal", label: "Client" },
+const cls = (...xs) => xs.filter(Boolean).join(" ");
+
+const NAV = [
+  { to: "/portfolio", label: "Portfolio" },
+  { to: "/booking", label: "Booking" },
+  { to: "/client-portal", label: "Client Portal" },
   { to: "/faq", label: "FAQ" },
 ];
-
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function SiteHeader() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
-  useEffect(() => setOpen(false), [pathname]);
+  const [scrolled, setScrolled] = useState(false);
 
-  const item = ({ isActive }) =>
-    cls(
-      "relative px-2 py-1 text-sm font-medium transition-colors",
-      isActive ? "text-[hsl(var(--brand))]" : "text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]"
-    );
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 6);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[hsl(var(--border))] header-glass">
+    <header
+      className={cls(
+        "sticky top-0 z-50 transition-all",
+        "backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--bg))/0.72]",
+        "bg-[hsl(var(--bg))/0.92]",
+        scrolled ? "shadow-[0_6px_20px_rgba(0,0,0,0.06)] border-b border-[hsl(var(--border))]" : "border-b border-transparent"
+      )}
+    >
       <div className="container-pro h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 no-underline">
-          <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white ring-1 ring-[hsl(var(--border))] shadow-sm floaty">
-            <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--brand))]" />
-          </span>
+        {/* Brand */}
+        <Link to="/" className="flex items-center gap-3 no-underline">
+          <img src="/a7mads-wordmark.svg" alt="A7mads Camera" className="h-7" />
           <span className="sr-only">A7mads Camera</span>
-          <img src="/a7mads-wordmark.svg" alt="" className="h-6 md:h-7" />
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden md:flex items-center gap-6">
-          {links.map(l => (
-            <NavLink key={l.to} to={l.to} className={item}>{l.label}</NavLink>
-          ))}
-          <Link to="/booking" className="no-underline">
-            <button className="btn btn-rose">Start a Project</button>
+        <nav className="hidden md:flex items-center gap-2">
+          <div className="relative flex items-center gap-1.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-1.5 py-1">
+            {NAV.map((n) => (
+              <NavItem key={n.to} to={n.to}>
+                {n.label}
+              </NavItem>
+            ))}
+          </div>
+          <Link to="/booking" className="no-underline ml-3">
+            <CTA>Book Now</CTA>
           </Link>
         </nav>
 
         {/* Mobile toggle */}
-        <button className="md:hidden btn btn-ghost" onClick={() => setOpen(s => !s)} aria-label="Toggle menu">
-          {open ? "✕" : "☰"}
+        <button
+          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))]"
+          aria-label="Toggle menu"
+          aria-expanded={open}
+          onClick={() => setOpen((s) => !s)}
+        >
+          <Burger open={open} />
         </button>
       </div>
 
+      {/* Mobile menu */}
       {open && (
         <div className="md:hidden border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
-          <div className="container-pro py-3 flex flex-col gap-2">
-            {links.map(l => (
-              <NavLink key={l.to} to={l.to} className="py-2 no-underline text-[hsl(var(--text))]">
-                {l.label}
+          <div className="container-pro py-3 flex flex-col gap-1.5">
+            {NAV.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                className={({ isActive }) =>
+                  cls(
+                    "no-underline rounded-xl px-3 py-2 text-sm font-semibold",
+                    isActive
+                      ? "bg-[hsl(var(--accent-soft))] text-[hsl(var(--text))]"
+                      : "text-[hsl(var(--text))] hover:bg-[hsl(var(--accent-soft))]"
+                  )
+                }
+              >
+                {n.label}
               </NavLink>
             ))}
-            <Link to="/booking" className="no-underline">
-              <button className="btn btn-rose w-full">Start a Project</button>
+            <Link to="/booking" className="no-underline mt-2">
+              <CTA className="w-full justify-center">Book Now</CTA>
             </Link>
           </div>
         </div>
       )}
+
+      {/* local styles for the underline animation */}
+      <style>{`
+        .nav-pill { position: relative; }
+        .nav-pill::after {
+          content: "";
+          position: absolute; left: 12px; right: 12px; bottom: 6px;
+          height: 2px; border-radius: 2px;
+          background: hsl(var(--accent));
+          transform: scaleX(0); transform-origin: left;
+          transition: transform 300ms ease;
+        }
+        .nav-pill[data-active="true"]::after,
+        .nav-pill:hover::after { transform: scaleX(1); }
+      `}</style>
     </header>
+  );
+}
+
+function NavItem({ to, children }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cls(
+          "nav-pill no-underline relative rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors",
+          isActive
+            ? "text-[hsl(var(--text))] bg-[hsl(var(--card))]"
+            : "text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]"
+        )
+      }
+      children={({ isActive }) => (
+        <span className="nav-pill" data-active={isActive ? "true" : "false"}>
+          {children}
+        </span>
+      )}
+    />
+  );
+}
+
+function CTA({ children, className = "" }) {
+  return (
+    <span
+      className={cls(
+        "inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-semibold",
+        "bg-[hsl(var(--accent))] text-[#0b0e11] ring-1 ring-[hsl(var(--accent-600))]",
+        "shadow-[0_8px_22px_rgba(0,0,0,0.08)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.12)] transition",
+        className
+      )}
+    >
+      {children} <span aria-hidden>→</span>
+    </span>
+  );
+}
+
+function Burger({ open }) {
+  return (
+    <div className="relative h-4 w-5">
+      <span
+        className={cls(
+          "absolute left-0 right-0 h-0.5 bg-[hsl(var(--text))] transition-transform",
+          open ? "top-1/2 -translate-y-1/2 rotate-45" : "top-0"
+        )}
+      />
+      <span
+        className={cls(
+          "absolute left-0 right-0 h-0.5 bg-[hsl(var(--text))] transition-all",
+          open ? "top-1/2 opacity-0" : "top-1/2"
+        )}
+      />
+      <span
+        className={cls(
+          "absolute left-0 right-0 h-0.5 bg-[hsl(var(--text))] transition-transform",
+          open ? "top-1/2 -translate-y-1/2 -rotate-45" : "bottom-0"
+        )}
+      />
+    </div>
   );
 }
