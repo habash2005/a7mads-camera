@@ -1,4 +1,3 @@
-// src/pages/AdminUpload.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage, STORAGE_GS_URI } from "../lib/firebase";
@@ -427,8 +426,6 @@ export default function AdminUpload() {
     return totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
   }, [queue]);
 
-  const totalSize = useMemo(() => files.reduce((s, f) => s + (f.size || 0), 0), [files]);
-
   /* UI */
   return (
     <section className="p-4 md:p-5">
@@ -588,7 +585,9 @@ export default function AdminUpload() {
                 <p className="text-sm text-charcoal/80">
                   {files.length} file{files.length > 1 ? "s" : ""} selected
                 </p>
-                <p className="text-xs text-charcoal/50">Total ~ {formatBytes(files.reduce((s,f)=>s+(f.size||0),0))}</p>
+                <p className="text-xs text-charcoal/50">
+                  Total ~ {formatBytes(files.reduce((s,f)=>s+(f.size||0),0))}
+                </p>
               </div>
               <ul className="mt-2 max-h-40 overflow-auto space-y-1 text-sm">
                 {files.map((f, i) => (
@@ -656,37 +655,14 @@ export default function AdminUpload() {
         <div className="mt-6 rounded-xl bg-white ring-1 ring-rose/10 p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="text-sm text-charcoal/70">
-              Overall progress: <span className="font-semibold text-charcoal">
-                {(() => {
-                  const totals = queue.reduce(
-                    (acc, it) => {
-                      const tb = it.totalBytes || it.file?.size || 0;
-                      const bt = it.bytesTransferred || (it.status === "done" ? tb : 0);
-                      return { total: acc.total + tb, done: acc.done + bt };
-                    },
-                    { total: 0, done: 0 }
-                  );
-                  return totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
-                })()}%
-              </span>
+              Overall progress: <span className="font-semibold text-charcoal">{overall}%</span>
             </div>
             <div className="text-xs text-charcoal/50">
               {queue.filter(i => i.status === "done").length}/{queue.length} done
             </div>
           </div>
           <div className="h-2 w-full overflow-hidden rounded-full bg-blush/40">
-            <div className="h-full bg-rose transition-all"
-                 style={{ width: `${(() => {
-                   const totals = queue.reduce(
-                     (acc, it) => {
-                       const tb = it.totalBytes || it.file?.size || 0;
-                       const bt = it.bytesTransferred || (it.status === "done" ? tb : 0);
-                       return { total: acc.total + tb, done: acc.done + bt };
-                     },
-                     { total: 0, done: 0 }
-                   );
-                   return totals.total ? Math.round((totals.done / totals.total) * 100) : 0;
-                 })()}%` }} />
+            <div className="h-full bg-rose transition-all" style={{ width: `${overall}%` }} />
           </div>
 
           <ul className="mt-4 space-y-2">

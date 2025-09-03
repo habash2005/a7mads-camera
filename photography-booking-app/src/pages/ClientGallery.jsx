@@ -1,16 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+// src/pages/ClientGallery.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
+import { Helmet } from "react-helmet-async";
 
-import { Helmet } from "react-helmet-async"
+/* ---------- utils ---------- */
+const cls = (...xs) => xs.filter(Boolean).join(" ");
 
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
-
-/* ---------- shared helpers ---------- */
 function fileNameFrom(img) {
   const rawBase =
     img.original_filename ||
@@ -24,7 +24,7 @@ function fileNameFrom(img) {
   return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
 }
 
-/* ----------------- SelectableGallery (same look) ----------------- */
+/* ----------------- SelectableGallery ----------------- */
 function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
   if (layout === "masonry") {
     return (
@@ -41,9 +41,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               loading="lazy"
               className="w-full h-auto object-cover transition-transform duration-300 group-hover:scale-[1.01]"
             />
-
             <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-
             <label className="absolute top-2 left-2 inline-flex items-center">
               <input
                 type="checkbox"
@@ -58,25 +56,28 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
                     ? "bg-wine text-white ring-gold"
                     : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
                 )}
+                aria-hidden
               >
                 {selected[img.public_id] ? "✓" : "+"}
               </span>
             </label>
-
-            <a
-              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
-              href={img.secure_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Original
-            </a>
+            {img.secure_url && (
+              <a
+                className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+                href={img.secure_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Original
+              </a>
+            )}
           </figure>
         ))}
       </div>
     );
   }
 
+  // fallback: uniform grid
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {items.map((img) => (
@@ -93,7 +94,6 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
             />
           </div>
-
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <label className="absolute top-2 left-2 inline-flex items-center">
             <input
@@ -113,30 +113,24 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               {selected[img.public_id] ? "✓" : "+"}
             </span>
           </label>
-          <a
-            className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
-            href={img.secure_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Original
-          </a>
+          {img.secure_url && (
+            <a
+              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+              href={img.secure_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Original
+            </a>
+          )}
         </figure>
       ))}
     </div>
   );
 }
 
+/* ----------------- Page ----------------- */
 export default function ClientGallery() {
-
-  <Helmet>
-        <title>Lama Wafa | Raleigh, NC Photographer</title>
-        <meta
-          name="description"
-          content="Lama is a Palestinian photographer based in Raleigh, NC, specializing in events, milestones, and personal portraits." />
-        <link rel="canonical" href="https://lamawafa.com/" />
-      </Helmet>
-
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
@@ -145,10 +139,23 @@ export default function ClientGallery() {
   const [images, setImages] = useState([]);
 
   const [selected, setSelected] = useState({});
-  const someChecked = images.some((img) => !!selected[img.public_id]);
-  const allChecked  = images.length > 0 && images.every((img) => !!selected[img.public_id]);
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
+
+  const someChecked = images.some((img) => !!selected[img.public_id]);
+  const allChecked = images.length > 0 && images.every((img) => !!selected[img.public_id]);
+
+  const allRef = useRef(null);
+  useEffect(() => {
+    if (!allRef.current) return;
+    allRef.current.indeterminate = !allChecked && someChecked;
+  }, [allChecked, someChecked]);
+
+  const headerTitle = useMemo(() => {
+    if (!booking) return "Client Gallery";
+    const name = booking?.details?.name || "Client";
+    return `${name} — ${booking.reference}`;
+  }, [booking]);
 
   const toggleOne = (pid) => setSelected((s) => ({ ...s, [pid]: !s[pid] }));
   const toggleAll = (checked) => {
@@ -179,16 +186,18 @@ export default function ClientGallery() {
         setLoading(false);
         return;
       }
-      const doc = snap.docs[0];
-      const data = doc.data();
-      const bookingObj = { id: doc.id, ...data };
-      setBooking(bookingObj);
 
-      const imgsSnap = await getDocs(collection(db, `bookings/${doc.id}/images`));
+      const docRef = snap.docs[0];
+      const data = docRef.data();
+      setBooking({ id: docRef.id, ...data });
+
+      // load images
+      const imgsSnap = await getDocs(collection(db, `bookings/${docRef.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
+      // pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -210,7 +219,7 @@ export default function ClientGallery() {
     setErr("");
   }
 
-  // Zip using saved signed URLs
+  // ZIP by fetching the signed URLs in docs (no Storage SDK needed here)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -218,9 +227,8 @@ export default function ClientGallery() {
     }
 
     const TOTAL_LIMIT_MB = 500;
-    let approx = 0;
-    for (const f of files) approx += (f.bytes || 5_000_000);
-    if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
+    const approxBytes = files.reduce((sum, f) => sum + (f.bytes || 5_000_000), 0);
+    if (approxBytes / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
     }
@@ -235,11 +243,15 @@ export default function ClientGallery() {
         const url = img.secure_url;
         if (!url) continue;
 
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Download failed: ${res.status}`);
-        const blob = await res.blob();
+        try {
+          const res = await fetch(url, { credentials: "omit" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const blob = await res.blob();
+          zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+        } catch (e) {
+          console.warn("Skipping file due to fetch error:", url, e);
+        }
 
-        zip.file(fileNameFrom(img), blob, { compression: "STORE" });
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
 
@@ -258,22 +270,21 @@ export default function ClientGallery() {
     }
   }
 
-  async function downloadSelectedZip() {
-    const files = images.filter((i) => !!selected[i.public_id]);
-    await zipAndDownload(files, "selected-images.zip");
-  }
-  async function downloadAllZip() {
-    await zipAndDownload(images, "all-images.zip");
-  }
-
-  const headerTitle = useMemo(() => {
-    if (!booking) return "Client Gallery";
-    const name = booking?.details?.name || "Client";
-    return `${name} — ${booking.reference}`;
-  }, [booking]);
+  const downloadSelectedZip = () =>
+    zipAndDownload(images.filter((i) => !!selected[i.public_id]), "selected-images.zip");
+  const downloadAllZip = () => zipAndDownload(images, "all-images.zip");
 
   return (
     <section className="w-full py-16 md:py-24 bg-cream">
+      <Helmet>
+        <title>Client Gallery | A7mad’s Camera</title>
+        <meta
+          name="description"
+          content="Enter your access code to view and download your photos."
+        />
+        <link rel="canonical" href="https://a7madscamera.com/client-gallery" />
+      </Helmet>
+
       <div className="max-w-7xl mx-auto px-4">
         <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
           {headerTitle}
@@ -292,6 +303,8 @@ export default function ClientGallery() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !loading && code.trim()) checkCode();
               }}
+              aria-label="Access code"
+              autoComplete="one-time-code"
             />
             <button
               onClick={checkCode}
@@ -318,17 +331,18 @@ export default function ClientGallery() {
                   {booking?.details?.name || "Client"} ({booking.reference})
                 </h3>
                 <div className="text-xs text-charcoal/60">
-                  {booking.date} {booking.time} • {booking.package?.name}
+                  {[booking.date, booking.time, booking.package?.name].filter(Boolean).join(" • ")}
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input
+                    ref={allRef}
                     type="checkbox"
                     checked={!!allChecked}
-                    ref={(el) => el && (el.indeterminate = !allChecked && someChecked)}
                     onChange={(e) => toggleAll(e.target.checked)}
+                    aria-checked={allChecked ? "true" : someChecked ? "mixed" : "false"}
                   />
                   Select all
                 </label>
@@ -370,10 +384,10 @@ export default function ClientGallery() {
             {images.length > 0 ? (
               <div className="mt-6">
                 <SelectableGallery
-                  layout="masonry"   // 👈 Lens-style masonry
+                  layout="masonry"
                   items={images}
                   selected={selected}
-                  onToggle={(pid) => setSelected((s) => ({ ...s, [pid]: !s[pid] }))}
+                  onToggle={toggleOne}
                 />
               </div>
             ) : (

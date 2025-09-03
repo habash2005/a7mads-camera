@@ -11,10 +11,11 @@ import {
   query,
   serverTimestamp,
   updateDoc,
+  where,
   Timestamp,
 } from "firebase/firestore";
 
-const ADMIN_EMAIL = "Ahmadhijaz325@gmail.com";
+const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"]); // case-insensitive check below
 const PAGE_LIMIT = 200;
 const STATUSES = ["pending", "confirmed", "finished"];
 
@@ -26,81 +27,111 @@ const fmt = (ts) =>
 
 export default function AdminBookings() {
   const [me, setMe] = useState(null);
-  const isAdmin = !!me && me.email === ADMIN_EMAIL;
+  const isAdmin = !!me && ADMIN_EMAILS.has(String(me.email || "").toLowerCase());
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState({}); // id -> boolean
   const [filter, setFilter] = useState("upcoming"); // 'upcoming' | 'all' | 'finished'
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => setMe(u || null));
-    return () => unsub();
-  }, []);
+  useEffect(() => onAuthStateChanged(auth, (u) => setMe(u || null)), []);
 
   async function load() {
     setLoading(true);
     try {
+      const col = collection(db, "bookings");
+      const nowTs = Timestamp.fromDate(new Date());
       let snap;
-      // Prefer startAt (your newer schema), fall back to createdAt
-      try {
-        snap = await getDocs(
-          query(collection(db, "bookings"), orderBy("startAt", "asc"), limit(PAGE_LIMIT))
-        );
-      } catch {
-        snap = await getDocs(
-          query(collection(db, "bookings"), orderBy("createdAt", "desc"), limit(PAGE_LIMIT))
-        );
+
+      // Prefer a scoped query for "upcoming" to reduce reads
+      if (filter === "upcoming") {
+        try {
+          snap = await getDocs(
+            query(col, where("startAt", ">=", nowTs), orderBy("startAt", "asc"), limit(PAGE_LIMIT))
+          );
+        } catch {
+          // Fallback if no composite index: grab recent by createdAt and filter client-side
+          snap = await getDocs(query(col, orderBy("createdAt", "desc"), limit(PAGE_LIMIT)));
+        }
+      } else if (filter === "finished") {
+        // Light server-side filter when possible
+        try {
+          snap = await getDocs(
+            query(col, where("status", "==", "finished"), orderBy("startAt", "desc"), limit(PAGE_LIMIT))
+          );
+        } catch {
+          snap = await getDocs(query(col, orderBy("createdAt", "desc"), limit(PAGE_LIMIT)));
+        }
+      } else {
+        // 'all' – show upcoming first by startAt; fallback to createdAt
+        try {
+          snap = await getDocs(query(col, orderBy("startAt", "asc"), limit(PAGE_LIMIT)));
+        } catch {
+          snap = await getDocs(query(col, orderBy("createdAt", "desc"), limit(PAGE_LIMIT)));
+        }
       }
 
-      const now = new Date();
       const items = snap.docs.map((d) => {
-        const data = d.data();
+        const data = d.data() || {};
         const start = data.startAt?.toDate?.() || null;
         return {
           id: d.id,
           reference: data.reference || "",
-          status: (data.status || "").toLowerCase(),
+          status: String(data.status || "pending").toLowerCase(),
           package: data.package?.name || data.package?.id || "",
           price: data.package?.price ?? null,
           details: data.details || {},
           start,
-          // nice fallbacks for older rows:
+          // fallbacks for older rows:
           date: data.date || "",
           time: data.time || "",
           createdAt: data.createdAt?.toDate?.() || null,
         };
       });
 
-      // Sort: earliest start first; if no startAt, push to bottom by createdAt desc
-      items.sort((a, b) => {
-        if (a.start && b.start) return a.start - b.start;
-        if (a.start && !b.start) return -1;
-        if (!a.start && b.start) return 1;
-        const ac = a.createdAt ? a.createdAt.getTime() : 0;
-        const bc = b.createdAt ? b.createdAt.getTime() : 0;
-        return bc - ac;
+      // Client-side refine according to filter (in case we used fallbacks)
+      const now = new Date();
+      const refined = items.filter((r) => {
+        if (filter === "all") return true;
+        if (filter === "finished") return r.status === "finished";
+        // upcoming = not finished and (future or unknown start)
+        if (r.status === "finished") return false;
+        if (!r.start) return true;
+        return r.start >= now;
       });
 
-      setRows(items);
+      // Sort:
+      // - upcoming: soonest first
+      // - finished: most recent first
+      // - all: soonest first, then by createdAt desc for those without startAt
+      refined.sort((a, b) => {
+        const bothHaveStart = a.start && b.start;
+        if (filter === "finished") {
+          if (bothHaveStart) return b.start - a.start;
+          if (a.start && !b.start) return -1;
+          if (!a.start && b.start) return 1;
+          const ac = a.createdAt ? a.createdAt.getTime() : 0;
+          const bc = b.createdAt ? b.createdAt.getTime() : 0;
+          return bc - ac;
+        } else {
+          if (bothHaveStart) return a.start - b.start;
+          if (a.start && !b.start) return -1;
+          if (!a.start && b.start) return 1;
+          const ac = a.createdAt ? a.createdAt.getTime() : 0;
+          const bc = b.createdAt ? b.createdAt.getTime() : 0;
+          return bc - ac;
+        }
+      });
+
+      setRows(refined);
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [filter]);
 
-  const filtered = useMemo(() => {
-    const now = new Date();
-    return rows.filter((r) => {
-      if (filter === "all") return true;
-      if (filter === "finished") return r.status === "finished";
-      // 'upcoming' = not finished, with startAt in the future (or unknown)
-      if (r.status === "finished") return false;
-      if (!r.start) return true;
-      return r.start >= now;
-    });
-  }, [rows, filter]);
+  const filtered = useMemo(() => rows, [rows]); // already refined in load()
 
   async function setStatus(row, newStatus) {
     if (!isAdmin) return alert("Sign in as the admin to edit status.");
@@ -111,13 +142,12 @@ export default function AdminBookings() {
       await updateDoc(doc(db, "bookings", row.id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
-        ...(newStatus === "finished" ? { finishedAt: serverTimestamp() } : {}),
+        ...(newStatus === "confirmed" ? { confirmedAt: serverTimestamp() } : {}),
+        ...(newStatus === "finished"  ? { finishedAt: serverTimestamp() }  : {}),
       });
 
       // Optimistic local update
-      setRows((rs) =>
-        rs.map((r) => (r.id === row.id ? { ...r, status: newStatus } : r))
-      );
+      setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, status: newStatus } : r)));
     } catch (e) {
       console.error("update status failed", e);
       alert("Couldn't update the status. Check rules / connection and try again.");
@@ -149,7 +179,7 @@ export default function AdminBookings() {
   return (
     <section className="p-4 md:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-xl md:text-2xl font-semibold text-charcoal">Upcoming bookings</h1>
+        <h1 className="text-xl md:text-2xl font-semibold text-charcoal">Bookings</h1>
 
         <div
           className={cls(
@@ -157,45 +187,24 @@ export default function AdminBookings() {
             isAdmin ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-800"
           )}
         >
-          {isAdmin ? `Signed in as ${me?.email}` : "Not signed in as admin"}
+          {me?.email ? (isAdmin ? `Signed in as ${me.email}` : `Signed in as ${me.email} (not admin)`) : "Not signed in"}
         </div>
       </div>
 
       {/* Filters */}
       <div className="mb-3 flex items-center gap-2">
-        <button
-          className={cls(
-            "px-3 py-1.5 rounded-full text-sm",
-            filter === "upcoming"
-              ? "bg-rose text-ivory"
-              : "bg-white border border-rose/30 text-charcoal"
-          )}
-          onClick={() => setFilter("upcoming")}
-        >
-          Upcoming
-        </button>
-        <button
-          className={cls(
-            "px-3 py-1.5 rounded-full text-sm",
-            filter === "finished"
-              ? "bg-rose text-ivory"
-              : "bg-white border border-rose/30 text-charcoal"
-          )}
-          onClick={() => setFilter("finished")}
-        >
-          Finished
-        </button>
-        <button
-          className={cls(
-            "px-3 py-1.5 rounded-full text-sm",
-            filter === "all"
-              ? "bg-rose text-ivory"
-              : "bg-white border border-rose/30 text-charcoal"
-          )}
-          onClick={() => setFilter("all")}
-        >
-          All
-        </button>
+        {["upcoming", "finished", "all"].map((f) => (
+          <button
+            key={f}
+            className={cls(
+              "px-3 py-1.5 rounded-full text-sm",
+              filter === f ? "bg-rose text-ivory" : "bg-white border border-rose/30 text-charcoal"
+            )}
+            onClick={() => setFilter(f)}
+          >
+            {f[0].toUpperCase() + f.slice(1)}
+          </button>
+        ))}
 
         <div className="ml-auto">
           <button
@@ -228,9 +237,7 @@ export default function AdminBookings() {
           </thead>
           <tbody>
             {filtered.map((b) => {
-              const when = b.start
-                ? fmt(b.start)
-                : [b.date, b.time].filter(Boolean).join(" ");
+              const when = b.start ? fmt(b.start) : [b.date, b.time].filter(Boolean).join(" ");
               const savingRow = !!saving[b.id];
 
               return (
@@ -244,7 +251,7 @@ export default function AdminBookings() {
                       ) : null}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{b.reference}</td>
+                  <td className="px-4 py-3 font-mono">{b.reference}</td>
                   <td className="px-4 py-3">{b.package || "—"}</td>
                   <td className="px-4 py-3">
                     <StatusPill status={b.status} />
@@ -261,9 +268,7 @@ export default function AdminBookings() {
                         )}
                       >
                         {STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
+                          <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
 
@@ -300,7 +305,7 @@ export default function AdminBookings() {
 
       <p className="mt-3 text-xs text-charcoal/50">
         Tip: “Next →” cycles pending → confirmed → finished. Saving writes <code>status</code>,
-        <code>updatedAt</code>, and <code>finishedAt</code> (when applicable).
+        <code>updatedAt</code>, and <code>confirmedAt/finishedAt</code> when applicable.
       </p>
     </section>
   );

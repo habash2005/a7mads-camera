@@ -1,5 +1,5 @@
 // src/pages/ClientPortal.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
@@ -11,8 +11,9 @@ import { ref as sref, getBlob } from "firebase/storage";
 import { Helmet } from "react-helmet-async";
 
 /* ---------- helpers ---------- */
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
-function upRef(s = "") { return String(s).trim().toUpperCase(); }
+const cls = (...xs) => xs.filter(Boolean).join(" ");
+const upRef = (s = "") => String(s).trim().toUpperCase();
+
 function fileNameFrom(img) {
   const rawBase =
     img.original_filename ||
@@ -27,11 +28,13 @@ function fileNameFrom(img) {
     "jpg";
   return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
 }
+
 function storagePathOf(img) {
   if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
   const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
   return m ? decodeURIComponent(m[1]) : (img.public_id || null);
 }
+
 function parseRefFromUrl() {
   try {
     const search = window.location.search || "";
@@ -179,6 +182,13 @@ export default function ClientPortal() {
     setSelected(next);
   };
 
+  // ensure “Select all” shows indeterminate state reliably
+  const allRef = useRef(null);
+  useEffect(() => {
+    if (!allRef.current) return;
+    allRef.current.indeterminate = !allChecked && someChecked;
+  }, [allChecked, someChecked]);
+
   useEffect(() => {
     const urlRef = parseRefFromUrl();
     const saved = localStorage.getItem("clientRef") || "";
@@ -245,7 +255,7 @@ export default function ClientPortal() {
     }
     const TOTAL_LIMIT_MB = 500;
     let approx = 0;
-    for (const f of files) approx += f.size || 5_000_000;
+    for (const f of files) approx += f.size || 5_000_000; // fallback estimate
     if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
@@ -258,8 +268,13 @@ export default function ClientPortal() {
         const img = files[i];
         const path = storagePathOf(img);
         if (!path) continue;
-        const blob = await getBlob(sref(storage, path));
-        zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+        try {
+          const blob = await getBlob(sref(storage, path));
+          zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+        } catch (e) {
+          // Skip unreadable files but keep going
+          console.warn("Skipping file due to read error:", path, e);
+        }
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
       const zipBlob = await zip.generateAsync(
@@ -296,16 +311,17 @@ export default function ClientPortal() {
   return (
     <section className="w-full py-16 md:py-24 bg-cream">
       <Helmet>
-        <title>Client Portal | A7mads Camera</title>
+        <title>Client Portal | A7mad’s Camera</title>
         <meta
           name="description"
           content="Access your gallery using your reference code. Download selected photos or your full set."
         />
+        <link rel="canonical" href="https://a7madscamera.com/client" />
       </Helmet>
 
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-2xl md:3xl font-serif font-semibold text-burgundy">Client Portal</h2>
+          <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">Client Portal</h2>
           {booking && (
             <button
               onClick={signOut}
@@ -364,10 +380,13 @@ export default function ClientPortal() {
               <div className="flex items-center gap-3">
                 <label className="flex items-center gap-2 text-sm">
                   <input
+                    ref={allRef}
                     type="checkbox"
                     checked={!!allChecked}
-                    ref={(el) => el && (el.indeterminate = !allChecked && someChecked)}
                     onChange={(e) => toggleAll(e.target.checked)}
+                    aria-checked={
+                      allChecked ? "true" : someChecked ? "mixed" : "false"
+                    }
                   />
                   Select all
                 </label>

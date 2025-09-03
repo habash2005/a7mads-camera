@@ -5,10 +5,10 @@ import { Helmet } from "react-helmet-async";
 
 /* -------------------------------- Services -------------------------------- */
 const SERVICES = [
-  { id: "events",   name: "Events",              duration: "2 hours",   desc: "Concerts, celebrations, and gatherings" },
-  { id: "branding", name: "Branding",            duration: "60 min",    desc: "Photo sets for websites, social, and launches" },
-  { id: "portraits",name: "Portraits + Milestones", duration: "45–60 min", desc: "Seniors, milestones, personal portraits" },
-  { id: "couples",  name: "Couples",             duration: "60 min",    desc: "Celebrate your story with a modern look" },
+  { id: "events",    name: "Events",                  duration: "2 hours",   desc: "Concerts, celebrations, and gatherings" },
+  { id: "branding",  name: "Branding",                duration: "60 min",    desc: "Photo sets for websites, social, and launches" },
+  { id: "portraits", name: "Portraits + Milestones",  duration: "45–60 min", desc: "Seniors, milestones, personal portraits" },
+  { id: "couples",   name: "Couples",                 duration: "60 min",    desc: "Celebrate your story with a modern look" },
 ];
 
 /* ----------------------------- Time utilities ----------------------------- */
@@ -29,6 +29,13 @@ function to12h(hhmm) {
   const ampm = h >= 12 ? "PM" : "AM";
   const hour = ((h + 11) % 12) + 1;
   return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
@@ -70,7 +77,7 @@ export default function Booking() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [checking, setChecking] = useState(false);
-  const [availability, setAvailability] = useState(null);
+  const [availability, setAvailability] = useState(null); // true | false | null
   const [err, setErr] = useState("");
 
   // Core + extras
@@ -114,15 +121,35 @@ export default function Booking() {
     setErr("");
     setAvailability(null);
     if (!date || !time) return;
+
+    // Prevent checking a past datetime (simple guard)
+    const now = new Date();
+    const sel = new Date(`${date}T${time}:00`);
+    if (isNaN(sel.getTime())) {
+      setErr("Choose a valid date & time.");
+      return;
+    }
+    if (sel < now) {
+      setErr("Please pick a future date & time.");
+      return;
+    }
+
     setChecking(true);
-    const res = await checkAvailability({
-      date,
-      time,
-      pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
-    });
-    setAvailability(res.available);
-    if (!res.available && res.reason) setErr(res.reason);
-    setChecking(false);
+    try {
+      const res = await checkAvailability({
+        date,
+        time,
+        pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
+      });
+      setAvailability(!!res.available);
+      if (!res.available && res.reason) setErr(res.reason);
+    } catch (e) {
+      console.error(e);
+      setErr("We couldn’t check that slot right now. Please try again.");
+      setAvailability(null);
+    } finally {
+      setChecking(false);
+    }
   }
 
   /* ----------------------------- Submit flow ----------------------------- */
@@ -259,6 +286,7 @@ export default function Booking() {
                             ? "border-[color:var(--accent-600)] bg-[color:var(--accent-soft)] shadow-soft"
                             : "border-[color:var(--border)] hover:border-[color:var(--accent-600)] hover:bg-[color:var(--accent-soft)]"
                         )}
+                        aria-pressed={active}
                       >
                         <div className="flex items-center justify-between">
                           <div className="text-lg font-semibold">{s.name}</div>
@@ -311,8 +339,9 @@ export default function Booking() {
                     <input
                       type="date"
                       value={date}
-                      onChange={(e) => setDate(e.target.value)}
+                      onChange={(e) => { setDate(e.target.value); setAvailability(null); setErr(""); }}
                       className="input mt-2 w-full"
+                      min={todayISO()}
                     />
                   </div>
 
@@ -320,7 +349,7 @@ export default function Booking() {
                     <label className="text-sm font-medium">Time</label>
                     <select
                       value={time}
-                      onChange={(e) => setTime(e.target.value)}
+                      onChange={(e) => { setTime(e.target.value); setAvailability(null); setErr(""); }}
                       className="input mt-2 w-full"
                     >
                       <option value="">— Select time —</option>
@@ -345,8 +374,9 @@ export default function Booking() {
                   </div>
                 </div>
 
-                {availability === true && <p className="mt-3 text-sm text-emerald-400">✅ Slot available. You can proceed.</p>}
+                {availability === true && <p className="mt-3 text-sm text-emerald-500">✅ Slot available. You can proceed.</p>}
                 {availability === false && <p className="mt-3 text-sm text-red-400">❌ That time conflicts. Try a different one.</p>}
+                {!!err && availability === null && <p className="mt-3 text-sm text-red-400">{err}</p>}
 
                 <div className="mt-6 flex justify-between">
                   <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(0)}>← Back</button>

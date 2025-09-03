@@ -1,5 +1,5 @@
 // src/pages/AdminMediaManager.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db, storage } from "../lib/firebase";
 import {
@@ -22,12 +22,24 @@ const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"].map((s) => s.toLowerCas
 const CONCURRENCY = 5;
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
+// Try to normalize a Storage path from various shapes
 function storagePathOf(img) {
-  if (img.public_id || img.path || img.storagePath || img.fullPath) {
-    return img.public_id || img.path || img.storagePath || img.fullPath;
+  if (!img) return null;
+  const direct = img.public_id || img.path || img.storagePath || img.fullPath;
+  if (direct) return direct;
+
+  // Handle download URLs (`.../o/<ENCODED_PATH>?alt=media...`)
+  const u = String(img.secure_url || "");
+  const m = u.match(/\/o\/([^?]+)/);
+  if (m) return decodeURIComponent(m[1]);
+
+  // Handle gs://<bucket>/<path>
+  if (u.startsWith("gs://")) {
+    const cut = u.replace(/^gs:\/\/[^/]+\//, "");
+    return cut || null;
   }
-  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+
+  return null;
 }
 
 export default function AdminMediaManager({ selectedRef = "" }) {
@@ -57,8 +69,15 @@ export default function AdminMediaManager({ selectedRef = "" }) {
   /* auth */
   useEffect(() => onAuthStateChanged(auth, (u) => setMe(u || null)), []);
 
+  /* auto-load portfolio on mount */
+  useEffect(() => {
+    // don’t auto-refresh if we came here with a selectedRef (we’ll switch to Client tab)
+    if (!selectedRef) loadPortfolio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   /* load portfolio gallery + images */
-  async function loadPortfolio() {
+  const loadPortfolio = useCallback(async () => {
     setPMsg("");
     setPLoading(true);
     setPImgs([]);
@@ -98,65 +117,72 @@ export default function AdminMediaManager({ selectedRef = "" }) {
       setPSel(s);
     } catch (e) {
       console.error("[AdminMediaManager] portfolio load", e);
-      setPMsg("Failed to load portfolio images (rules/App Check?).");
+      setPMsg(
+        "Failed to load portfolio images. Check Firestore rules/App Check and that this site is an Authorized Domain."
+      );
     } finally {
       setPLoading(false);
     }
-  }
+  }, [db]);
 
   /* load client gallery by explicit code */
-  async function loadClientByRefWithCode(code) {
-    const ref = String(code || "").trim().toUpperCase();
-    if (!ref) return;
+  const loadClientByRefWithCode = useCallback(
+    async (code) => {
+      const ref = String(code || "").trim().toUpperCase();
+      if (!ref) return;
 
-    setCMsg("");
-    setCLoading(true);
-    setClient(null);
-    setCImgs([]);
-    setCSel({});
-    setCDeleting({});
-    try {
-      const bSnap = await getDocs(
-        query(collection(db, "bookings"), where("reference", "==", ref), limit(1))
-      );
-      if (bSnap.empty) {
-        setCMsg("No booking found for that reference.");
-        return;
-      }
-      const b = { id: bSnap.docs[0].id, ...bSnap.docs[0].data() };
-      setClient(b);
-
-      let imgsSnap;
+      setCMsg("");
+      setCLoading(true);
+      setClient(null);
+      setCImgs([]);
+      setCSel({});
+      setCDeleting({});
       try {
-        imgsSnap = await getDocs(
-          query(
-            collection(db, `bookings/${b.id}/images`),
-            orderBy("createdAt", "desc"),
-            limit(500)
-          )
+        const bSnap = await getDocs(
+          query(collection(db, "bookings"), where("reference", "==", ref), limit(1))
         );
-      } catch {
-        imgsSnap = await getDocs(collection(db, `bookings/${b.id}/images`));
+        if (bSnap.empty) {
+          setCMsg("No booking found for that reference.");
+          return;
+        }
+        const b = { id: bSnap.docs[0].id, ...bSnap.docs[0].data() };
+        setClient(b);
+
+        let imgsSnap;
+        try {
+          imgsSnap = await getDocs(
+            query(
+              collection(db, `bookings/${b.id}/images`),
+              orderBy("createdAt", "desc"),
+              limit(500)
+            )
+          );
+        } catch {
+          imgsSnap = await getDocs(collection(db, `bookings/${b.id}/images`));
+        }
+
+        const rows = imgsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        setCImgs(rows);
+
+        const s = {};
+        rows.forEach((r) => (s[r.id] = false));
+        setCSel(s);
+      } catch (e) {
+        console.error("[AdminMediaManager] client load", e);
+        setCMsg(
+          "Failed to load client images. Check Firestore rules/App Check and that this site is an Authorized Domain."
+        );
+      } finally {
+        setCLoading(false);
       }
+    },
+    [db]
+  );
 
-      const rows = imgsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setCImgs(rows);
-
-      const s = {};
-      rows.forEach((r) => (s[r.id] = false));
-      setCSel(s);
-    } catch (e) {
-      console.error("[AdminMediaManager] client load", e);
-      setCMsg("Failed to load client images (rules/App Check?).");
-    } finally {
-      setCLoading(false);
-    }
-  }
-
-  async function loadClientByRef() {
+  const loadClientByRef = useCallback(async () => {
     await loadClientByRefWithCode(refCode);
-  }
+  }, [loadClientByRefWithCode, refCode]);
 
   // react to external quick-pick
   useEffect(() => {
@@ -165,8 +191,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
     setTab("client");
     setRefCode(ext);
     loadClientByRefWithCode(ext);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRef]);
+  }, [selectedRef, loadClientByRefWithCode]);
 
   /* selection helpers */
   const pCount = useMemo(() => Object.values(pSel).filter(Boolean).length, [pSel]);
@@ -276,7 +301,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           >
             Portfolio
           </button>
-          <button
+        <button
             className={cls(
               "px-3 py-1.5 rounded-full text-sm font-semibold",
               tab === "client" ? "bg-rose text-ivory" : "bg-white border border-rose/30 text-charcoal"
@@ -304,7 +329,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
         <div className="rounded-2xl border border-rose/30 bg-white p-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-charcoal/70">
-              {portfolioId ? <>Gallery ID: <code>{portfolioId}</code></> : "Load portfolio images"}
+              {portfolioId ? <>Gallery ID: <code>{portfolioId}</code></> : "Portfolio"}
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -398,7 +423,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
           <ClientTab
             refCode={refCode}
             setRefCode={setRefCode}
-            loadClientByRef={() => loadClientByRefWithCode(refCode)}
+            loadClientByRef={loadClientByRef}
             cLoading={cLoading}
             client={client}
             cImgs={cImgs}
