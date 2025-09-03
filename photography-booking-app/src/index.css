@@ -2,21 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===============================
+   Theme tokens (multi-theme)
+   =============================== */
 
-/* ===== Theme tokens (Slate Noir) ===== */
+/* --- Luxe Light (default) --- */
 :root,
+html[data-theme="light"]{
+  --bg:#ffffff;
+  --surface:#fafafa;
+  --elev:#ffffff;
+  --text:#0d1218;
+  --muted:#6b7280;
+  --border:rgba(10,16,24,.10);
+  --accent:#0ea5e9;      /* sky-500 */
+  --accent-600:#0284c7;  /* sky-600 */
+  --accent-soft:rgba(14,165,233,.14);
+}
+
+/* --- Slate Noir (Dark) --- */
 html[data-theme="dark"]{
-  --bg:#0d0f12;           /* page */
-  --surface:#101318;      /* cards/nav */
-  --elev:#141922;         /* elevated */
-  --text:#eef1f4;         /* primary text */
-  --muted:#9aa4b2;        /* secondary */
+  --bg:#0d0f12;          /* page */
+  --surface:#101318;     /* cards/nav */
+  --elev:#141922;        /* elevated */
+  --text:#eef1f4;        /* primary text */
+  --muted:#9aa4b2;       /* secondary */
   --border:rgba(255,255,255,.08);
-  --accent:#4ea8ff;       /* azure */
-  --accent-600:#2f7ed1;   /* hover/pressed */
+  --accent:#4ea8ff;      /* azure */
+  --accent-600:#2f7ed1;  /* hover/pressed */
   --accent-soft:rgba(78,168,255,.14);
 }
 
+/* --- Sunset Rose --- */
+html[data-theme="sunset"]{
+  --bg:#fff7f6;
+  --surface:#fff1ef;
+  --elev:#ffffff;
+  --text:#291a1a;
+  --muted:#7a5a5a;
+  --border:rgba(41,26,26,.12);
+  --accent:#ef476f;      /* rose */
+  --accent-600:#cf2f55;
+  --accent-soft:rgba(239,71,111,.16);
+}
+
+/* --- Emerald Mist --- */
+html[data-theme="emerald"]{
+  --bg:#f4fbf7;
+  --surface:#ecf8f1;
+  --elev:#ffffff;
+  --text:#0d1512;
+  --muted:#567064;
+  --border:rgba(13,21,18,.10);
+  --accent:#10b981;      /* emerald-500 */
+  --accent-600:#059669;  /* emerald-600 */
+  --accent-soft:rgba(16,185,129,.16);
+}
+
+/* Global layout */
 html,body,#root{height:100%}
 html,body{
   background:var(--bg);
@@ -26,20 +69,22 @@ html,body{
   text-rendering:optimizeLegibility;
 }
 
+/* Container */
 :root{--container:1280px}
 .container-site{@apply mx-auto px-6 sm:px-8; max-width:var(--container)}
 
-/* Headings use a slightly different feel */
+/* Headings */
 .h1,.h2,.h3{font-family:"Plus Jakarta Sans", Inter, ui-sans-serif}
 .h1{font-weight:800; letter-spacing:.2px}
 .h2{font-weight:800}
 .h3{font-weight:700}
 
+/* Card surface */
 .card{
-  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent) ;
+  background:linear-gradient(180deg, rgba(255,255,255,.02), transparent);
   border:1px solid var(--border);
   border-radius:1rem;
-  box-shadow:var(--shadow,0 18px 40px -20px rgba(0,0,0,.55));
+  box-shadow:var(--shadow,0 18px 40px -20px rgba(0,0,0,.18));
   backdrop-filter:blur(8px);
 }
 
@@ -49,7 +94,7 @@ html,body{
   background:var(--accent); color:#0b0e11;
   padding:.65rem 1rem; border-radius:14px;
 }
-.btn-primary:hover{background:var(--accent-600); box-shadow:0 18px 36px -18px rgba(47,126,209,.6)}
+.btn-primary:hover{background:var(--accent-600); box-shadow:0 18px 36px -18px var(--accent-600)}
 .btn-ghost{
   color:var(--text); border:1px solid var(--border);
   padding:.60rem .95rem; border-radius:14px; background:transparent;
@@ -64,7 +109,7 @@ html,body{
 .input:focus{box-shadow:0 0 0 2px var(--accent-soft); border-color:var(--accent-600)}
 
 /* Images */
-.img-tile{border:1px solid var(--border); border-radius:16px; overflow:hidden; box-shadow:0 16px 30px -18px rgba(0,0,0,.6)}
+.img-tile{border:1px solid var(--border); border-radius:16px; overflow:hidden; box-shadow:0 16px 30px -18px rgba(0,0,0,.12); animation:soft-fade .4s ease both}
 .img-tile img{transition:transform .35s ease}
 .img-tile:hover img{transform:scale(1.025)}
 
@@ -76,3 +121,9 @@ html,body{
 *::-webkit-scrollbar-thumb{background:#8c96a3;border-radius:999px}
 *::-webkit-scrollbar-thumb:hover{background:#7a8492}
 *::-webkit-scrollbar-track{background:transparent}
+
+/* Micro-motions */
+@keyframes soft-fade{from{opacity:0}to{opacity:1}}
+@keyframes rise-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.animate-soft-fade{animation:soft-fade .4s ease both}
+.animate-rise-in{animation:rise-in .45s ease both}
