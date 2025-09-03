@@ -1,219 +1,224 @@
 // src/pages/Booking.jsx
-import React, { useMemo, useState } from "react";
-import { checkAvailability, submitBooking } from "../lib/api";
+import React, { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
+import { checkAvailability, submitBooking } from "../lib/api";
 
-/* -------------------------------- Services -------------------------------- */
+/* ----------------------------- Content data ----------------------------- */
 const SERVICES = [
-  { id: "events",    name: "Events",                  duration: "2 hours",   desc: "Concerts, celebrations, and gatherings" },
-  { id: "branding",  name: "Branding",                duration: "60 min",    desc: "Photo sets for websites, social, and launches" },
-  { id: "portraits", name: "Portraits + Milestones",  duration: "45–60 min", desc: "Seniors, milestones, personal portraits" },
-  { id: "couples",   name: "Couples",                 duration: "60 min",    desc: "Celebrate your story with a modern look" },
+  {
+    id: "portraits",
+    name: "Portraits",
+    duration: "45–60 min",
+    desc: "Clean, modern portraits for seniors and creatives.",
+    image: "/home/portrait.jpg",
+  },
+  {
+    id: "couples",
+    name: "Couples",
+    duration: "60 min",
+    desc: "Celebrate your story with a relaxed session.",
+    image: "/home/couples.jpg",
+  },
+  {
+    id: "events",
+    name: "Events",
+    duration: "2 hours",
+    desc: "Gatherings and concerts captured with clarity.",
+    image: "/home/events.jpg",
+  },
+  {
+    id: "branding",
+    name: "Branding",
+    duration: "60–90 min",
+    desc: "Images for websites, products, and launches.",
+    image: "/home/branding.jpg",
+  },
 ];
 
-/* ----------------------------- Time utilities ----------------------------- */
-const OPEN_MIN = 9 * 60 + 30;   // 09:30
-const CLOSE_MIN = 21 * 60 + 30; // 21:30
-function buildTimes() {
+/* ------------------------------- Utilities ------------------------------ */
+const cls = (...xs) => xs.filter(Boolean).join(" ");
+const OPEN_MIN = 9 * 60 + 30;
+const CLOSE_MIN = 21 * 60 + 30;
+const SLOTS = (() => {
   const out = [];
   for (let m = OPEN_MIN; m <= CLOSE_MIN; m += 30) {
-    const hh = String(Math.floor(m / 60)).padStart(2, "0");
+    const h = Math.floor(m / 60);
     const mm = String(m % 60).padStart(2, "0");
-    out.push(`${hh}:${mm}`);
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hr12 = ((h + 11) % 12) + 1;
+    out.push({ v: `${String(h).padStart(2, "0")}:${mm}`, label: `${hr12}:${mm} ${ampm}` });
   }
   return out;
-}
-const TIME_OPTS = buildTimes();
-function to12h(hhmm) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const hour = ((h + 11) % 12) + 1;
-  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
-}
-function todayISO() {
+})();
+const todayISO = () => {
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function cls(...xs) { return xs.filter(Boolean).join(" "); }
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
-/* ----------------------------- Small UI helpers --------------------------- */
-function ChipBtn({ children, onClick, active }) {
+/* ----------------------------- Small widgets ---------------------------- */
+function StepBullet({ n, label, active, done }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className={cls(
+          "mt-0.5 grid h-7 w-7 place-items-center rounded-full text-[12px] font-bold",
+          done
+            ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]"
+            : active
+            ? "bg-[hsl(var(--accent))]/80 text-[hsl(var(--accent-foreground))]"
+            : "bg-[hsl(var(--surface))] text-[hsl(var(--muted))] border border-[hsl(var(--border))]"
+        )}
+      >
+        {n}
+      </div>
+      <div>
+        <div className={cls("text-sm font-semibold", active ? "text-[hsl(var(--text))]" : "text-[hsl(var(--muted))]")}>
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PrimaryBtn({ children, disabled, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={cls(
-        "rounded-pill px-3 py-1 text-xs font-semibold transition-all border",
-        active
-          ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/15 text-[hsl(var(--text))]"
-          : "border-[hsl(var(--border))] text-[hsl(var(--muted))] hover:bg-[hsl(var(--accent))]/12"
+        "rounded-full px-5 py-3 text-sm font-semibold shadow-sm",
+        "bg-[hsl(var(--accent))] text-[#0b0e11] ring-1 ring-[hsl(var(--accent-600))]",
+        disabled ? "opacity-50 cursor-not-allowed" : "hover:shadow-md transition"
       )}
     >
       {children}
     </button>
   );
 }
-function SectionTitle({ children, sub }) {
+function GhostBtn({ children, onClick, disabled, className = "" }) {
   return (
-    <div className="mb-2">
-      <h4 className="text-lg font-semibold text-[hsl(var(--text))]">{children}</h4>
-      {sub && <p className="text-xs text-[hsl(var(--muted))] mt-1">{sub}</p>}
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={cls(
+        "rounded-full px-4 py-2 text-sm font-semibold border",
+        "border-[hsl(var(--border))] bg-[hsl(var(--card))]",
+        disabled && "opacity-50 cursor-not-allowed",
+        className
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
-/* --------------------------------- Page ----------------------------------- */
+function Field({ label, children, hint }) {
+  return (
+    <label className="block">
+      <div className="text-sm font-medium">{label}</div>
+      <div className="mt-2">{children}</div>
+      {hint && <div className="mt-1 text-[11px] text-[hsl(var(--muted))]">{hint}</div>}
+    </label>
+  );
+}
+
+/* --------------------------------- Page ---------------------------------- */
 export default function Booking() {
   const [step, setStep] = useState(0);
 
-  // Selected service (price hidden in UI; 0 passed to API to satisfy validator)
-  const [selected, setSelected] = useState({ ...SERVICES[0], price: 0 });
+  // selection
+  const [service, setService] = useState({ ...SERVICES[0], price: 0 });
 
-  // Date & time + availability
+  // time
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [checking, setChecking] = useState(false);
-  const [availability, setAvailability] = useState(null); // true | false | null
-  const [err, setErr] = useState("");
+  const [available, setAvailable] = useState(null);
+  const [avErr, setAvErr] = useState("");
 
-  // Core + extras
-  const [details, setDetails] = useState({
-    name: "", email: "", phone: "", location: "Studio",
-    shootFor: "", locationNotes: "", notes: "",
-    contactPref: "", bestContactTime: "", instagram: "", howHeard: "",
-    peopleCount: "", organization: "", venueName: "", venueAddress: "",
-    city: "", state: "", zip: "", indoorOutdoor: "", rainPlan: "",
-    accessibility: "", shotList: "", moodboard: "", deadline: "",
-    deliverables: "", usage: "", serviceOccasion: "",
+  // details
+  const [d, setD] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    location: "Studio",
+    instagram: "",
+    notes: "",
   });
 
-  // Submit
+  // submit
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
-  const canNext0 = !!selected?.id;
-  const canNext1 = !!date && !!time && availability === true;
-  const canNext2 =
-    details.name.trim() &&
-    details.email.trim() &&
-    details.phone.trim() &&
-    details.location.trim();
-
-  const shootForSuggestions = useMemo(() => {
-    switch (selected.id) {
-      case "branding":
-        return ["Website refresh", "Social content", "Team headshots", "Product launch"];
-      case "events":
-        return ["Birthday", "Engagement party", "Corporate mixer", "Baby shower"];
-      case "couples":
-        return ["Anniversary", "Proposal", "Save-the-date", "Casual session"];
-      default:
-        return ["Senior portraits", "Personal portraits", "Creative concept", "Portfolio update"];
+  // smooth scroll to top on step change
+  useEffect(() => {
+    if (typeof window !== "undefined" && document) {
+      const top = document.getElementById("booking-top");
+      top?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [selected.id]);
+  }, [step]);
 
-  /* ------------------------- Availability check -------------------------- */
-  async function doCheck() {
-    setErr("");
-    setAvailability(null);
+  const canStep1 = !!service?.id;
+  const canStep2 = !!date && !!time && available === true;
+  const canStep3 = d.name.trim() && d.email.trim() && d.phone.trim() && d.location.trim();
+
+  /* ----------------------------- Availability ---------------------------- */
+  async function runCheck() {
+    setAvErr("");
+    setAvailable(null);
     if (!date || !time) return;
-
-    // Prevent checking a past datetime (simple guard)
-    const now = new Date();
     const sel = new Date(`${date}T${time}:00`);
-    if (isNaN(sel.getTime())) {
-      setErr("Choose a valid date & time.");
+    if (Number.isNaN(sel.getTime())) {
+      setAvErr("Choose a valid date & time.");
       return;
     }
-    if (sel < now) {
-      setErr("Please pick a future date & time.");
+    if (sel.getTime() < Date.now()) {
+      setAvErr("Please pick a future time.");
       return;
     }
-
     setChecking(true);
     try {
       const res = await checkAvailability({
         date,
         time,
-        pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
+        pkg: { id: service.id, name: service.name, price: 0, duration: service.duration },
       });
-      setAvailability(!!res.available);
-      if (!res.available && res.reason) setErr(res.reason);
+      setAvailable(!!res?.available);
+      if (!res?.available && res?.reason) setAvErr(res.reason);
     } catch (e) {
-      console.error(e);
-      setErr("We couldn’t check that slot right now. Please try again.");
-      setAvailability(null);
+      setAvailable(null);
+      setAvErr("We couldn’t check that slot. Try again.");
     } finally {
       setChecking(false);
     }
   }
 
-  /* ----------------------------- Submit flow ----------------------------- */
-  function mergedNotesPayload(d) {
-    const lines = [];
-    if (d.contactPref)     lines.push(`Preferred contact: ${d.contactPref}`);
-    if (d.bestContactTime) lines.push(`Best time to reach: ${d.bestContactTime}`);
-    if (d.instagram)       lines.push(`Instagram: ${d.instagram}`);
-    if (d.howHeard)        lines.push(`How they heard: ${d.howHeard}`);
-    if (d.serviceOccasion) lines.push(`Occasion: ${d.serviceOccasion}`);
-    if (d.organization)    lines.push(`Organization/School: ${d.organization}`);
-    if (d.peopleCount)     lines.push(`People/Guests: ${d.peopleCount}`);
-    const locBits = [];
-    if (d.venueName)    locBits.push(`Venue: ${d.venueName}`);
-    if (d.venueAddress) locBits.push(`Address: ${d.venueAddress}`);
-    const cityStateZip = [d.city, d.state, d.zip].filter(Boolean).join(", ");
-    if (cityStateZip)   locBits.push(`City/State/Zip: ${cityStateZip}`);
-    if (d.indoorOutdoor)locBits.push(`Indoor/Outdoor: ${d.indoorOutdoor}`);
-    if (d.rainPlan)     locBits.push(`Rain backup: ${d.rainPlan}`);
-    if (d.accessibility)locBits.push(`Accessibility: ${d.accessibility}`);
-    if (locBits.length) lines.push(locBits.join(" | "));
-    if (d.shotList)  lines.push(`Shot list: ${d.shotList}`);
-    if (d.moodboard) lines.push(`Mood board: ${d.moodboard}`);
-    if (d.deadline)  lines.push(`Deadline/Needed by: ${d.deadline}`);
-    if (d.deliverables) lines.push(`Deliverables: ${d.deliverables}`);
-    if (d.usage)       lines.push(`Usage (branding): ${d.usage}`);
-    if (d.notes) lines.push(`Notes: ${d.notes}`);
-    return lines.join("\n");
-  }
-
+  /* -------------------------------- Submit ------------------------------- */
   async function confirm() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      const { name, email, phone, location, shootFor } = details;
-
-      const locNoteLines = [];
-      if (details.venueName)    locNoteLines.push(`Venue: ${details.venueName}`);
-      if (details.venueAddress) locNoteLines.push(`Address: ${details.venueAddress}`);
-      if (details.city || details.state || details.zip) {
-        locNoteLines.push(`City/State/Zip: ${[details.city, details.state, details.zip].filter(Boolean).join(", ")}`);
-      }
-      if (details.indoorOutdoor) locNoteLines.push(`Indoor/Outdoor: ${details.indoorOutdoor}`);
-      if (details.rainPlan)      locNoteLines.push(`Rain backup: ${details.rainPlan}`);
-      if (details.accessibility) locNoteLines.push(`Accessibility: ${details.accessibility}`);
-
-      const sendDetails = {
-        name, email, phone, location,
-        shootFor: shootFor || selected.name,
-        locationNotes: [details.locationNotes || "", ...locNoteLines].filter(Boolean).join("\n"),
-        notes: mergedNotesPayload(details),
+      const send = {
+        pkg: { id: service.id, name: service.name, price: 0, duration: service.duration },
+        date,
+        time,
+        details: {
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          location: d.location,
+          shootFor: service.name,
+          notes: ["Instagram: " + (d.instagram || "—"), d.notes].filter(Boolean).join("\n"),
+        },
       };
-
-      const res = await submitBooking({
-        pkg: { id: selected.id, name: selected.name, price: 0, duration: selected.duration },
-        date, time, details: sendDetails,
-      });
-
-      if (!res?.ok) throw new Error(res?.error || "Failed to submit booking");
-
+      const res = await submitBooking(send);
+      if (!res?.ok) throw new Error(res?.error || "Failed to submit booking.");
       if (res.reference) localStorage.setItem("clientRef", res.reference);
       setResult(res);
     } catch (e) {
-      console.error(e);
-      alert(e.message || "We couldn’t submit your request. Please try again.");
+      alert(e.message || "Could not submit. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -221,429 +226,364 @@ export default function Booking() {
 
   function reset() {
     setStep(0);
-    setSelected({ ...SERVICES[0], price: 0 });
+    setService({ ...SERVICES[0], price: 0 });
     setDate("");
     setTime("");
-    setAvailability(null);
-    setDetails({
-      name: "", email: "", phone: "", location: "Studio",
-      shootFor: "", locationNotes: "", notes: "",
-      contactPref: "", bestContactTime: "", instagram: "", howHeard: "",
-      peopleCount: "", organization: "", venueName: "", venueAddress: "",
-      city: "", state: "", zip: "", indoorOutdoor: "", rainPlan: "",
-      accessibility: "", shotList: "", moodboard: "", deadline: "",
-      deliverables: "", usage: "", serviceOccasion: "",
-    });
+    setAvailable(null);
+    setAvErr("");
+    setD({ name: "", email: "", phone: "", location: "Studio", instagram: "", notes: "" });
     setSubmitting(false);
     setResult(null);
-    setErr("");
   }
 
-  /* -------------------------------- Render -------------------------------- */
+  /* ------------------------------ UI Layout ------------------------------ */
   return (
     <>
       <Helmet>
-        <title>A7mads Camera — Book a Session</title>
+        <title>Book a Session — A7mads Camera</title>
         <meta
           name="description"
-          content="Book portraits, branding, or event photography with A7mads Camera. Clean light. Sharp detail. Consistent results."
+          content="Choose a service, pick a time, and share a few details. Clean light, honest moments, consistent results."
         />
-        <link rel="canonical" href="https://a7madscamera.com/#/booking" />
       </Helmet>
 
-      <section id="booking" className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
-        <div className="container-pro py-16 md:py-24">
-          {/* Header */}
-          <div className="flex items-end justify-between gap-4 mb-6">
+      <div id="booking-top" />
+      <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--bg))]">
+        {/* header */}
+        <div className="container-pro py-10 md:py-14">
+          <div className="flex items-start justify-between gap-6">
             <div>
-              <h2 className="text-2xl md:text-3xl font-semibold">Book a Session</h2>
-              <p className="text-sm text-[hsl(var(--muted))] mt-1">
-                Choose a service, pick a time, and share a few details. I’ll confirm by email.
+              <h1 className="text-3xl md:text-4xl font-serif tracking-tight">Book a Session</h1>
+              <p className="mt-2 text-[hsl(var(--muted))]">
+                Sessions are relaxed and intentional—most dates confirm within 24 hours.
               </p>
             </div>
-            <SimpleStepper step={step} />
-          </div>
-
-          {/* Card */}
-          <div className="card p-5 md:p-6">
-            {/* Step 0: Service selection */}
-            {step === 0 && (
-              <div>
-                <h3 className="text-xl font-semibold">Choose a service</h3>
-
-                <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {SERVICES.map((s) => {
-                    const active = s.id === selected.id;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setSelected({ ...s, price: 0 })}
-                        className={cls(
-                          "text-left rounded-xl2 border p-4 transition-all focus:outline-none",
-                          active
-                            ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/15 shadow-soft"
-                            : "border-[hsl(var(--border))] hover:border-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10"
-                        )}
-                        aria-pressed={active}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="text-lg font-semibold">{s.name}</div>
-                          <span
-                            className={cls(
-                              "text-[11px] font-semibold rounded-pill px-2 py-0.5 ring-1",
-                              active
-                                ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] ring-[hsl(var(--accent))]"
-                                : "bg-[hsl(var(--surface))] text-[hsl(var(--text))] ring-[hsl(var(--border))]"
-                            )}
-                          >
-                            {s.duration}
-                          </span>
-                        </div>
-
-                        {s.desc && (
-                          <p className="mt-2 text-sm text-[hsl(var(--muted))]">
-                            {s.desc}
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={() => setStep(1)}
-                    disabled={!canNext0}
-                    className={cls(
-                      "btn btn-primary rounded-pill",
-                      !canNext0 && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 1: Date & Time */}
-            {step === 1 && (
-              <div>
-                <h3 className="text-xl font-semibold">Pick date &amp; time</h3>
-                <p className="text-sm text-[hsl(var(--muted))] mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
-
-                <div className="mt-4 grid md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Date</label>
-                    <input
-                      type="date"
-                      value={date}
-                      onChange={(e) => { setDate(e.target.value); setAvailability(null); setErr(""); }}
-                      className="input mt-2 w-full"
-                      min={todayISO()}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">Time</label>
-                    <select
-                      value={time}
-                      onChange={(e) => { setTime(e.target.value); setAvailability(null); setErr(""); }}
-                      className="input mt-2 w-full"
-                    >
-                      <option value="">— Select time —</option>
-                      {TIME_OPTS.map((t) => (
-                        <option key={t} value={t}>{to12h(t)}</option>
-                      ))}
-                    </select>
-                    {err && availability === false && <div className="text-xs text-red-600 mt-1">{err}</div>}
-                  </div>
-
-                  <div className="flex items-end">
-                    <button
-                      onClick={doCheck}
-                      disabled={!date || !time || checking}
-                      className={cls(
-                        "btn btn-ghost w-full",
-                        (!date || !time || checking) && "opacity-50 cursor-not-allowed"
-                      )}
-                    >
-                      {checking ? "Checking..." : "Check Availability"}
-                    </button>
-                  </div>
-                </div>
-
-                {availability === true && <p className="mt-3 text-sm text-green-600">✅ Slot available. You can proceed.</p>}
-                {availability === false && <p className="mt-3 text-sm text-red-600">❌ That time conflicts. Try a different one.</p>}
-                {!!err && availability === null && <p className="mt-3 text-sm text-red-600">{err}</p>}
-
-                <div className="mt-6 flex justify-between">
-                  <button className="text-sm underline text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]" onClick={() => setStep(0)}>← Back</button>
-                  <button
-                    onClick={() => setStep(2)}
-                    disabled={!canNext1}
-                    className={cls(
-                      "btn btn-primary rounded-pill",
-                      !canNext1 && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 2: Details (Simplified) */}
-            {step === 2 && (
-              <div>
-                <h3 className="text-xl font-semibold">Your details</h3>
-
-                {/* Contact basics */}
-                <div className="mt-4 grid md:grid-cols-2 gap-4">
-                  <FormInput label="Full name" value={details.name} onChange={(v)=>setDetails({...details, name:v})} placeholder="Your name" />
-                  <FormInput label="Email" value={details.email} onChange={(v)=>setDetails({...details, email:v})} placeholder="you@example.com" />
-                  <FormInput label="Phone" value={details.phone} onChange={(v)=>setDetails({...details, phone:v})} placeholder="(555) 123-4567" />
-                  <FormSelect label="Preferred contact" value={details.contactPref} onChange={(v)=>setDetails({...details, contactPref:v})} options={["Email","Text","Call"]} />
-                  <FormInput label="Best time to reach you" value={details.bestContactTime} onChange={(v)=>setDetails({...details, bestContactTime:v})} placeholder="e.g., Weekdays after 5pm" />
-                  <FormInput label="Instagram (optional)" value={details.instagram} onChange={(v)=>setDetails({...details, instagram:v})} placeholder="@yourhandle" />
-
-                  <div className="md:col-span-2">
-                    <label className="text-sm font-medium">How did you hear about me?</label>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {["Instagram", "TikTok", "Google", "Friend/Family", "Other"].map((opt) => (
-                        <ChipBtn
-                          key={opt}
-                          active={details.howHeard === opt}
-                          onClick={() => setDetails((d) => ({ ...d, howHeard: opt }))}
-                        >
-                          {opt}
-                        </ChipBtn>
-                      ))}
-                    </div>
-                    <input
-                      className="input mt-2 w-full"
-                      value={details.howHeard}
-                      onChange={(e) => setDetails({ ...details, howHeard: e.target.value })}
-                      placeholder="Tell me more (optional)"
-                    />
-                  </div>
-                </div>
-
-                {/* Location & logistics */}
-                <div className="mt-8">
-                  <SectionTitle sub="If unsure, you can leave these blank for now.">Location & logistics</SectionTitle>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <FormSelect label="Location" value={details.location} onChange={(v)=>setDetails({...details, location:v})} options={["Studio","Client Location","Outdoors"]} />
-                    <FormInput label="Venue name (optional)" value={details.venueName} onChange={(v)=>setDetails({...details, venueName:v})} placeholder="Venue, campus, park, etc." />
-                    <div className="md:col-span-2">
-                      <FormInput label="Address (optional)" value={details.venueAddress} onChange={(v)=>setDetails({...details, venueAddress:v})} placeholder="Street address" />
-                    </div>
-                    <FormInput label="City" value={details.city} onChange={(v)=>setDetails({...details, city:v})}/>
-                    <FormInput label="State" value={details.state} onChange={(v)=>setDetails({...details, state:v})}/>
-                    <FormInput label="Zip" value={details.zip} onChange={(v)=>setDetails({...details, zip:v})}/>
-                    <FormSelect label="Indoor or Outdoor?" value={details.indoorOutdoor} onChange={(v)=>setDetails({...details, indoorOutdoor:v})} options={["Indoor","Outdoor","Both"]} />
-                    <div className="md:col-span-2">
-                      <FormInput label="Rain/weather plan (optional)" value={details.rainPlan} onChange={(v)=>setDetails({...details, rainPlan:v})} placeholder="Backup date, alternate indoor space, etc." />
-                    </div>
-                    <div className="md:col-span-2">
-                      <FormText label="Accessibility needs (optional)" rows={2} value={details.accessibility} onChange={(v)=>setDetails({...details, accessibility:v})} placeholder="Parking, mobility access, sensory considerations, etc." />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Creative inputs */}
-                <div className="mt-8">
-                  <SectionTitle>Creative preferences</SectionTitle>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div className="md:col-span-2">
-                      <FormText label="Must-have shots (optional)" rows={3} value={details.shotList} onChange={(v)=>setDetails({...details, shotList:v})} placeholder="List key people/moments, product angles, groupings, etc." />
-                    </div>
-                    <div className="md:col-span-2">
-                      <FormInput label="Mood board / inspiration link" value={details.moodboard} onChange={(v)=>setDetails({...details, moodboard:v})} placeholder="Pinterest/Drive/Notion link" />
-                    </div>
-                    <div className="md:col-span-2">
-                      <FormText label="Anything else to share?" rows={3} value={details.notes} onChange={(v)=>setDetails({...details, notes:v})} placeholder="Wardrobe ideas, sensitivities, specific requests, etc." />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 flex justify-between">
-                  <button className="text-sm underline text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]" onClick={() => setStep(1)}>
-                    ← Back
-                  </button>
-                  <button
-                    onClick={() => setStep(3)}
-                    disabled={!canNext2}
-                    className={cls(
-                      "btn btn-primary rounded-pill",
-                      !canNext2 && "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: Review & Confirm */}
-            {step === 3 && (
-              <div>
-                <h3 className="text-xl font-semibold">Review &amp; confirm</h3>
-
-                <div className="mt-4 grid md:grid-cols-2 gap-6">
-                  <div className="card p-4">
-                    <h4 className="font-semibold">Summary</h4>
-                    <ul className="mt-2 text-sm text-[hsl(var(--muted))] space-y-1">
-                      <li>Service: <span className="font-medium text-[hsl(var(--text))]">{selected.name}</span></li>
-                      <li>Date &amp; Time: <span className="font-medium text-[hsl(var(--text))]">{date || "—"} {time ? to12h(time) : ""}</span></li>
-                      <li>Estimated duration: {selected.duration}</li>
-                      <li>Location: {details.location}</li>
-                    </ul>
-                  </div>
-
-                  <div className="card p-4">
-                    <h4 className="font-semibold">Contact &amp; brief</h4>
-                    <ul className="mt-2 text-sm text-[hsl(var(--muted))] space-y-1">
-                      <li>Name: {details.name || "—"}</li>
-                      <li>Email: {details.email || "—"}</li>
-                      <li>Phone: {details.phone || "—"}</li>
-                      {details.shootFor && <li>Shoot: {details.shootFor}</li>}
-                      {(details.locationNotes || details.venueName || details.venueAddress || details.city || details.state || details.zip) && (
-                        <li>Location notes will be included.</li>
-                      )}
-                      {(details.notes || details.shotList || details.moodboard || details.deadline || details.deliverables) && (
-                        <li>Creative preferences will be included.</li>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-
-                {!result ? (
-                  <div className="mt-6 flex justify-between">
-                    <button className="text-sm underline text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]" onClick={() => setStep(2)}>
-                      ← Back
-                    </button>
-                    <button
-                      onClick={confirm}
-                      disabled={submitting}
-                      className={cls(
-                        "btn btn-primary rounded-pill",
-                        submitting && "opacity-70"
-                      )}
-                    >
-                      {submitting ? "Submitting..." : "Confirm Booking"}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-6 card p-4">
-                    <p className="font-semibold">🎉 Booking requested!</p>
-                    <p className="text-sm text-[hsl(var(--muted))] mt-1">
-                      Your reference: <span className="font-mono text-[hsl(var(--text))]">{result.reference}</span>.
-                    </p>
-                    <div className="mt-4 flex gap-3">
-                      <button
-                        onClick={() => navigator.clipboard?.writeText(result.reference)}
-                        className="btn btn-ghost text-xs"
-                      >
-                        Copy reference
-                      </button>
-                      <button
-                        onClick={reset}
-                        className="btn btn-primary"
-                      >
-                        Book Another
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* subtle accent strip */}
+        {/* body */}
+        <div className="container-pro pb-16">
+          <div className="grid lg:grid-cols-12 gap-6">
+            {/* sidebar */}
+            <aside className="lg:col-span-3">
+              <div className="sticky top-20 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-4">
+                <nav className="space-y-4">
+                  <StepBullet n={1} label="Service" active={step === 0} done={step > 0} />
+                  <StepBullet n={2} label="Date & time" active={step === 1} done={step > 1} />
+                  <StepBullet n={3} label="Details" active={step === 2} done={step > 2} />
+                  <StepBullet n={4} label="Review" active={step === 3} done={step > 3} />
+                </nav>
+
+                {/* mini summary */}
+                <div className="mt-6 text-xs rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3">
+                  <div className="font-semibold">Summary</div>
+                  <ul className="mt-1 space-y-1 text-[hsl(var(--muted))]">
+                    <li>
+                      Service: <span className="text-[hsl(var(--text))]">{service.name}</span>
+                    </li>
+                    <li>
+                      When:{" "}
+                      <span className="text-[hsl(var(--text))]">
+                        {date || "—"} {time || ""}
+                      </span>
+                    </li>
+                    <li>Location: {d.location || "—"}</li>
+                  </ul>
+                </div>
+              </div>
+            </aside>
+
+            {/* content */}
+            <div className="lg:col-span-9">
+              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5 md:p-6">
+                {/* Step 0: Service */}
+                {step === 0 && (
+                  <div>
+                    <h3 className="text-xl font-semibold">Choose a service</h3>
+                    <div className="mt-5 grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {SERVICES.map((s) => {
+                        const active = service.id === s.id;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setService({ ...s, price: 0 })}
+                            className={cls(
+                              "group text-left overflow-hidden rounded-2xl border transition shadow-[0_10px_30px_rgba(0,0,0,0.05)]",
+                              active
+                                ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))]"
+                                : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:border-[hsl(var(--accent))]"
+                            )}
+                          >
+                            <div className="aspect-[4/3] overflow-hidden">
+                              <img
+                                src={s.image}
+                                alt=""
+                                loading="lazy"
+                                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                              />
+                            </div>
+                            <div className="p-4">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-lg font-semibold">{s.name}</h4>
+                                <span className="rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-0.5 text-[11px] font-semibold">
+                                  {s.duration}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-sm text-[hsl(var(--muted))]">{s.desc}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-6 flex justify-end gap-3">
+                      <PrimaryBtn onClick={() => setStep(1)} disabled={!canStep1}>
+                        Continue →
+                      </PrimaryBtn>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 1: Date & time */}
+                {step === 1 && (
+                  <div>
+                    <h3 className="text-xl font-semibold">Pick a date & time</h3>
+                    <p className="mt-1 text-sm text-[hsl(var(--muted))]">
+                      Availability runs from 9:30 AM to 9:30 PM.
+                    </p>
+
+                    <div className="mt-4 grid md:grid-cols-3 gap-4">
+                      <Field label="Date">
+                        <input
+                          type="date"
+                          className="input w-full"
+                          value={date}
+                          onChange={(e) => {
+                            setDate(e.target.value);
+                            setAvailable(null);
+                            setAvErr("");
+                          }}
+                          min={todayISO()}
+                        />
+                      </Field>
+
+                      <Field label="Time">
+                        <div className="grid grid-cols-2 gap-2">
+                          <select
+                            className="input col-span-2 sm:col-span-1"
+                            value={time}
+                            onChange={(e) => {
+                              setTime(e.target.value);
+                              setAvailable(null);
+                              setAvErr("");
+                            }}
+                          >
+                            <option value="">— Select —</option>
+                            {SLOTS.map((s) => (
+                              <option key={s.v} value={s.v}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          {/* quick chips */}
+                          <div className="hidden sm:flex flex-wrap gap-2">
+                            {["10:00", "13:30", "16:00", "18:30"].map((t) => (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => {
+                                  setTime(t);
+                                  setAvailable(null);
+                                  setAvErr("");
+                                }}
+                                className={cls(
+                                  "rounded-full border px-2.5 py-1 text-[12px] font-semibold",
+                                  time === t
+                                    ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent-soft))]"
+                                    : "border-[hsl(var(--border))] bg-[hsl(var(--card))] hover:bg-[hsl(var(--accent-soft))]"
+                                )}
+                              >
+                                {(() => {
+                                  const [h, m] = t.split(":").map(Number);
+                                  const ampm = h >= 12 ? "PM" : "AM";
+                                  const hour = ((h + 11) % 12) + 1;
+                                  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+                                })()}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </Field>
+
+                      <Field label=" " hint="">
+                        <GhostBtn onClick={runCheck} disabled={!date || !time || checking} className="w-full">
+                          {checking ? "Checking…" : "Check availability"}
+                        </GhostBtn>
+                      </Field>
+                    </div>
+
+                    {available === true && (
+                      <div className="mt-3 text-sm text-emerald-700">✓ Slot available. You can continue.</div>
+                    )}
+                    {available === false && (
+                      <div className="mt-3 text-sm text-rose-700">✕ That time conflicts. Try another.</div>
+                    )}
+                    {avErr && available === null && <div className="mt-3 text-sm text-rose-700">{avErr}</div>}
+
+                    <div className="mt-6 flex justify-between">
+                      <GhostBtn onClick={() => setStep(0)}>← Back</GhostBtn>
+                      <PrimaryBtn onClick={() => setStep(2)} disabled={!canStep2}>
+                        Continue →
+                      </PrimaryBtn>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 2: Details */}
+                {step === 2 && (
+                  <div>
+                    <h3 className="text-xl font-semibold">Your details</h3>
+
+                    <div className="mt-4 grid md:grid-cols-2 gap-4">
+                      <Field label="Full name">
+                        <input
+                          className="input w-full"
+                          value={d.name}
+                          onChange={(e) => setD({ ...d, name: e.target.value })}
+                          placeholder="Your name"
+                        />
+                      </Field>
+                      <Field label="Email">
+                        <input
+                          className="input w-full"
+                          value={d.email}
+                          onChange={(e) => setD({ ...d, email: e.target.value })}
+                          placeholder="you@example.com"
+                        />
+                      </Field>
+                      <Field label="Phone">
+                        <input
+                          className="input w-full"
+                          value={d.phone}
+                          onChange={(e) => setD({ ...d, phone: e.target.value })}
+                          placeholder="(555) 123-4567"
+                        />
+                      </Field>
+                      <Field label="Location">
+                        <select
+                          className="input w-full"
+                          value={d.location}
+                          onChange={(e) => setD({ ...d, location: e.target.value })}
+                        >
+                          <option>Studio</option>
+                          <option>Client Location</option>
+                          <option>Outdoors</option>
+                        </select>
+                      </Field>
+
+                      <Field label="Instagram (optional)">
+                        <input
+                          className="input w-full"
+                          value={d.instagram}
+                          onChange={(e) => setD({ ...d, instagram: e.target.value })}
+                          placeholder="@yourhandle"
+                        />
+                      </Field>
+                      <div className="md:col-span-2">
+                        <Field label="Notes (optional)">
+                          <textarea
+                            rows={4}
+                            className="input w-full h-auto py-2"
+                            value={d.notes}
+                            onChange={(e) => setD({ ...d, notes: e.target.value })}
+                            placeholder="Wardrobe ideas, access needs, references, etc."
+                          />
+                        </Field>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-between">
+                      <GhostBtn onClick={() => setStep(1)}>← Back</GhostBtn>
+                      <PrimaryBtn onClick={() => setStep(3)} disabled={!canStep3}>
+                        Continue →
+                      </PrimaryBtn>
+                    </div>
+                  </div>
+                )}
+
+                {/* Step 3: Review */}
+                {step === 3 && (
+                  <div>
+                    <h3 className="text-xl font-semibold">Review & confirm</h3>
+
+                    <div className="mt-4 grid md:grid-cols-2 gap-6">
+                      <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4">
+                        <div className="text-sm text-[hsl(var(--muted))]">Service</div>
+                        <div className="mt-1 text-lg font-semibold">{service.name}</div>
+                        <div className="text-sm text-[hsl(var(--muted))]">{service.duration}</div>
+                        <div className="mt-4 text-sm">
+                          <span className="text-[hsl(var(--muted))]">Date & time: </span>
+                          <span className="font-semibold">
+                            {date} • {time}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-sm">
+                          <span className="text-[hsl(var(--muted))]">Location: </span>
+                          <span className="font-semibold">{d.location}</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4">
+                        <div className="text-sm text-[hsl(var(--muted))]">Contact</div>
+                        <ul className="mt-2 text-sm space-y-1">
+                          <li>Name: {d.name || "—"}</li>
+                          <li>Email: {d.email || "—"}</li>
+                          <li>Phone: {d.phone || "—"}</li>
+                          {d.instagram && <li>Instagram: {d.instagram}</li>}
+                        </ul>
+                        {d.notes && (
+                          <>
+                            <div className="mt-4 text-sm text-[hsl(var(--muted))]">Notes</div>
+                            <p className="mt-1 text-sm whitespace-pre-wrap">{d.notes}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {!result ? (
+                      <div className="mt-6 flex justify-between">
+                        <GhostBtn onClick={() => setStep(2)}>← Back</GhostBtn>
+                        <PrimaryBtn onClick={confirm} disabled={submitting}>
+                          {submitting ? "Submitting…" : "Confirm booking"}
+                        </PrimaryBtn>
+                      </div>
+                    ) : (
+                      <div className="mt-6 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4">
+                        <p className="font-semibold">🎉 Booking requested!</p>
+                        <p className="text-sm text-[hsl(var(--muted))] mt-1">
+                          Your reference:{" "}
+                          <span className="font-mono text-[hsl(var(--text))]">{result.reference}</span>
+                        </p>
+                        <div className="mt-4 flex gap-3">
+                          <GhostBtn onClick={() => navigator.clipboard?.writeText(result.reference)}>
+                            Copy reference
+                          </GhostBtn>
+                          <PrimaryBtn onClick={reset}>Book another</PrimaryBtn>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* accent strip */}
         <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
       </section>
     </>
-  );
-}
-
-/* ---------------------------- Reusable fields ----------------------------- */
-function FormInput({ label, value, onChange, placeholder }) {
-  return (
-    <div>
-      <label className="text-sm font-medium">{label}</label>
-      <input
-        className="input mt-2 w-full"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-    </div>
-  );
-}
-function FormText({ label, value, onChange, placeholder, rows = 3 }) {
-  return (
-    <div>
-      <label className="text-sm font-medium">{label}</label>
-      <textarea
-        rows={rows}
-        className="input mt-2 w-full h-auto py-2"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-      />
-    </div>
-  );
-}
-function FormSelect({ label, value, onChange, options = [] }) {
-  return (
-    <div>
-      <label className="text-sm font-medium">{label}</label>
-      <select
-        className="input mt-2 w-full"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">— Select —</option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>{opt}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-/* -------------------------------- Stepper --------------------------------- */
-function SimpleStepper({ step }) {
-  const items = ["Service", "Date & Time", "Details", "Review"];
-  return (
-    <div className="hidden md:flex items-center gap-2 text-xs">
-      {items.map((label, i) => {
-        const done = step > i;
-        const active = step === i;
-        return (
-          <div key={label} className="flex items-center gap-2">
-            <div
-              className={cls(
-                "w-6 h-6 rounded-full grid place-items-center font-semibold",
-                done   ? "bg-[hsl(var(--accent))]  text-[hsl(var(--accent-foreground))]"
-              : active ? "bg-[hsl(var(--accent))]/80 text-[hsl(var(--accent-foreground))]"
-              : "bg-[hsl(var(--surface))] text-[hsl(var(--muted))] border border-[hsl(var(--border))]"
-              )}
-              title={label}
-            >
-              {i + 1}
-            </div>
-            <span className={cls("uppercase tracking-wide",
-              active ? "text-[hsl(var(--text))] font-semibold" : "text-[hsl(var(--muted))]"
-            )}>
-              {label}
-            </span>
-            {i < items.length - 1 && <span className="w-8 h-px bg-[hsl(var(--border))] mx-1" />}
-          </div>
-        );
-      })}
-    </div>
   );
 }
