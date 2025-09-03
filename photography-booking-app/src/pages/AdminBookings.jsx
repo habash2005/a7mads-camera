@@ -1,4 +1,3 @@
-// src/pages/AdminBookings.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "../lib/firebase";

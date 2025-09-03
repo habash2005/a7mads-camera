@@ -1,4 +1,3 @@
-// src/components/GalleryGrid.jsx
 import React from "react";
 import SmartImg from "./SmartImg";
 

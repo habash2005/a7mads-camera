@@ -65,30 +65,38 @@ export default function FAQ() {
         <script type="application/ld+json">{JSON.stringify(faqJsonLd)}</script>
       </Helmet>
 
-      <section id="faq" className="w-full py-16 md:py-24 bg-cream">
-        <div className="max-w-7xl mx-auto px-4">
-          <h1 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
+      <section id="faq" className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <div className="container-pro py-16 md:py-24">
+          <div className="badge mb-4">Good to know</div>
+          <h1 className="text-2xl md:text-3xl font-semibold">
             Frequently Asked Questions
           </h1>
+          <p className="mt-2 text-[hsl(var(--muted))] max-w-prose">
+            Quick answers about sessions, rescheduling, travel, and more.
+          </p>
 
           <div className="mt-8 grid md:grid-cols-2 gap-6">
             {items.map((item, i) => (
               <details
                 key={i}
-                className="group rounded-2xl border border-burgundy/15 bg-white shadow-soft open:shadow-lg transition-all"
+                className="group card overflow-hidden open:shadow-lg transition-shadow"
               >
-                <summary className="cursor-pointer select-none p-6 flex items-start justify-between gap-4">
-                  <span className="font-semibold text-maroon">{item.q}</span>
-                  <span className="mt-1 text-gold transition-transform group-open:rotate-45">
+                <summary className="cursor-pointer select-none px-6 py-5 flex items-start justify-between gap-4">
+                  <span className="font-semibold">{item.q}</span>
+                  {/* plus icon that rotates to an “x” when open */}
+                  <span
+                    className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-pill border border-[hsl(var(--border))] text-sm transition-transform group-open:rotate-45"
+                    aria-hidden="true"
+                  >
                     +
                   </span>
                 </summary>
 
-                <div className="px-6 pb-6 text-charcoal/80 text-sm leading-relaxed">
+                <div className="px-6 pb-6 text-sm leading-relaxed text-[hsl(var(--muted))]">
                   {item.list ? (
                     <>
                       <p>{item.a[0]}</p>
-                      <ul className="list-disc ml-5 mt-2 space-y-1">
+                      <ul className="list-disc ms-5 mt-2 space-y-1">
                         {item.a.slice(1).map((li, j) => (
                           <li key={j}>{li}</li>
                         ))}
@@ -105,7 +113,19 @@ export default function FAQ() {
               </details>
             ))}
           </div>
+
+          <div className="mt-10 card p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <p className="text-sm text-[hsl(var(--muted))]">
+              Didn’t see your question? I’m happy to help—reach out any time.
+            </p>
+            <a href="mailto:hello@a7mads.com" className="btn btn-primary">
+              Email me
+            </a>
+          </div>
         </div>
+
+        {/* subtle accent strip */}
+        <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
       </section>
     </>
   );

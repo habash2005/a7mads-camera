@@ -51,6 +51,7 @@ export default function AdminMediaManager({ selectedRef = "" }) {
 
   // ---- Portfolio state ----
   const [portfolioId, setPortfolioId] = useState("");
+  the
   const [pImgs, setPImgs] = useState([]);
   const [pSel, setPSel] = useState({});
   const [pLoading, setPLoading] = useState(false);
@@ -288,155 +289,163 @@ export default function AdminMediaManager({ selectedRef = "" }) {
   }
 
   return (
-    <section className="w-full">
-      {/* Top bar */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
+    <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+      <div className="container-pro py-8 md:py-12">
+        {/* Top bar */}
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              className={cls(
+                "px-3 py-1.5 rounded-full text-sm font-semibold transition-colors",
+                tab === "portfolio" ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]" : "btn btn-ghost"
+              )}
+              onClick={() => setTab("portfolio")}
+            >
+              Portfolio
+            </button>
+            <button
+              className={cls(
+                "px-3 py-1.5 rounded-full text-sm font-semibold transition-colors",
+                tab === "client" ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]" : "btn btn-ghost"
+              )}
+              onClick={() => setTab("client")}
+            >
+              Client
+            </button>
+          </div>
+
+          <div
             className={cls(
-              "px-3 py-1.5 rounded-full text-sm font-semibold",
-              tab === "portfolio" ? "bg-rose text-ivory" : "bg-white border border-rose/30 text-charcoal"
+              "text-xs rounded-pill px-3 py-1.5 ring-1",
+              notAdmin ? "bg-red-50 text-red-700 ring-red-200" : "bg-emerald-50 text-emerald-700 ring-emerald-200"
             )}
-            onClick={() => setTab("portfolio")}
           >
-            Portfolio
-          </button>
-        <button
-            className={cls(
-              "px-3 py-1.5 rounded-full text-sm font-semibold",
-              tab === "client" ? "bg-rose text-ivory" : "bg-white border border-rose/30 text-charcoal"
-            )}
-            onClick={() => setTab("client")}
-          >
-            Client
-          </button>
+            {notAdmin
+              ? `Not signed in as admin (${Array.from(ADMIN_EMAILS).join(", ")}) — deletes will fail.`
+              : `Signed in as ${me?.email}`}
+          </div>
         </div>
 
-        <div
-          className={cls(
-            "text-xs rounded-lg px-3 py-2",
-            notAdmin ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-700"
-          )}
-        >
-          {notAdmin
-            ? `Not signed in as admin (${Array.from(ADMIN_EMAILS).join(", ")}) — deletes will fail.`
-            : `Signed in as ${me?.email}`}
-        </div>
+        {/* Portfolio tab */}
+        {tab === "portfolio" && (
+          <div className="card p-3 md:p-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-sm text-[hsl(var(--muted))]">
+                {portfolioId ? (
+                  <>
+                    Gallery ID: <code className="text-[hsl(var(--text))]">{portfolioId}</code>
+                  </>
+                ) : (
+                  "Portfolio"
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadPortfolio}
+                  disabled={pLoading}
+                  className={cls("btn", pLoading ? "btn-ghost opacity-60" : "btn-primary")}
+                >
+                  {pLoading ? "Loading…" : "Refresh"}
+                </button>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={pImgs.length > 0 && pCount === pImgs.length}
+                    ref={(el) => el && (el.indeterminate = pCount > 0 && pCount < pImgs.length)}
+                    onChange={(e) => toggleAll("p", e.target.checked)}
+                  />
+                  Select all
+                </label>
+                <button
+                  onClick={() => deleteSelected({ type: "p" })}
+                  disabled={pCount === 0 || pLoading || notAdmin}
+                  className={cls(
+                    "px-4 py-2 text-sm font-semibold rounded-pill transition-colors",
+                    pCount === 0 || pLoading || notAdmin
+                      ? "btn-ghost opacity-60"
+                      : "bg-red-600 text-white hover:bg-red-700"
+                  )}
+                >
+                  Delete selected ({pCount})
+                </button>
+              </div>
+            </div>
+
+            {pMsg && <div className="mt-3 text-sm text-red-600">{pMsg}</div>}
+
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+              {pImgs.map((img) => {
+                const status = pDeleting[img.id];
+                return (
+                  <figure
+                    key={img.id}
+                    className="relative group overflow-hidden rounded-xl2 border border-[hsl(var(--border))] bg-white"
+                    title={img.public_id}
+                  >
+                    <img
+                      src={img.secure_url}
+                      alt={img.original_filename || img.public_id}
+                      className="w-full aspect-square object-cover"
+                      loading="lazy"
+                    />
+                    <label className="absolute top-2 left-2 bg-white/90 rounded-pill px-2 py-1 text-[11px] flex items-center gap-2 shadow-soft ring-1 ring-[hsl(var(--border))]">
+                      <input
+                        type="checkbox"
+                        checked={!!pSel[img.id]}
+                        onChange={() => setPSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
+                        disabled={status === "pending"}
+                      />
+                      {img.original_filename || "image"}
+                    </label>
+                    {status && (
+                      <div
+                        className={cls(
+                          "absolute bottom-2 right-2 text-[11px] rounded-pill px-2 py-1 shadow-soft ring-1",
+                          status === "pending"
+                            ? "bg-amber-50 text-amber-800 ring-amber-200"
+                            : status === "ok"
+                            ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                            : "bg-red-50 text-red-700 ring-red-200"
+                        )}
+                      >
+                        {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
+                      </div>
+                    )}
+                  </figure>
+                );
+              })}
+            </div>
+
+            {!pLoading && pImgs.length === 0 && (
+              <div className="mt-3 text-sm text-[hsl(var(--muted))]">No images.</div>
+            )}
+          </div>
+        )}
+
+        {/* Client tab */}
+        {tab === "client" && (
+          <div className="card p-3 md:p-4">
+            <ClientTab
+              refCode={refCode}
+              setRefCode={setRefCode}
+              loadClientByRef={loadClientByRef}
+              cLoading={cLoading}
+              client={client}
+              cImgs={cImgs}
+              cSel={cSel}
+              setCSel={setCSel}
+              cCount={cCount}
+              cDeleting={cDeleting}
+              cMsg={cMsg}
+              deleteSelected={() => deleteSelected({ type: "c" })}
+              notAdmin={notAdmin}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Portfolio tab */}
-      {tab === "portfolio" && (
-        <div className="rounded-2xl border border-rose/30 bg-white p-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="text-sm text-charcoal/70">
-              {portfolioId ? <>Gallery ID: <code>{portfolioId}</code></> : "Portfolio"}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadPortfolio}
-                disabled={pLoading}
-                className={cls(
-                  "rounded-full px-4 py-2 text-sm font-semibold",
-                  pLoading ? "bg-blush text-charcoal/50" : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-                )}
-              >
-                {pLoading ? "Loading…" : "Refresh"}
-              </button>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={pImgs.length > 0 && pCount === pImgs.length}
-                  ref={(el) => el && (el.indeterminate = pCount > 0 && pCount < pImgs.length)}
-                  onChange={(e) => toggleAll("p", e.target.checked)}
-                />
-                Select all
-              </label>
-              <button
-                onClick={() => deleteSelected({ type: "p" })}
-                disabled={pCount === 0 || pLoading || notAdmin}
-                className={cls(
-                  "rounded-full px-4 py-2 text-sm font-semibold",
-                  pCount === 0 || pLoading || notAdmin
-                    ? "bg-blush text-charcoal/50"
-                    : "bg-red-600 text-white hover:bg-red-700"
-                )}
-              >
-                Delete selected ({pCount})
-              </button>
-            </div>
-          </div>
-
-          {pMsg && <div className="mt-3 text-sm text-rose-700">{pMsg}</div>}
-
-          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {pImgs.map((img) => {
-              const status = pDeleting[img.id];
-              return (
-                <figure
-                  key={img.id}
-                  className="relative group overflow-hidden rounded-xl border border-rose/20"
-                  title={img.public_id}
-                >
-                  <img
-                    src={img.secure_url}
-                    alt={img.original_filename || img.public_id}
-                    className="w-full aspect-square object-cover"
-                    loading="lazy"
-                  />
-                  <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
-                    <input
-                      type="checkbox"
-                      checked={!!pSel[img.id]}
-                      onChange={() => setPSel((s) => ({ ...s, [img.id]: !s[img.id] }))}
-                      disabled={status === "pending"}
-                    />
-                    {img.original_filename || "image"}
-                  </label>
-                  {status && (
-                    <div
-                      className={cls(
-                        "absolute bottom-2 right-2 text-[11px] rounded-md px-2 py-1 shadow",
-                        status === "pending"
-                          ? "bg-amber-100 text-amber-800"
-                          : status === "ok"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-rose-100 text-rose-800"
-                      )}
-                    >
-                      {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
-                    </div>
-                  )}
-                </figure>
-              );
-            })}
-          </div>
-
-          {!pLoading && pImgs.length === 0 && (
-            <div className="mt-3 text-sm text-charcoal/60">No images.</div>
-          )}
-        </div>
-      )}
-
-      {/* Client tab */}
-      {tab === "client" && (
-        <div className="rounded-2xl border border-rose/30 bg-white p-3">
-          <ClientTab
-            refCode={refCode}
-            setRefCode={setRefCode}
-            loadClientByRef={loadClientByRef}
-            cLoading={cLoading}
-            client={client}
-            cImgs={cImgs}
-            cSel={cSel}
-            setCSel={setCSel}
-            cCount={cCount}
-            cDeleting={cDeleting}
-            cMsg={cMsg}
-            deleteSelected={() => deleteSelected({ type: "c" })}
-            notAdmin={notAdmin}
-          />
-        </div>
-      )}
+      {/* subtle accent strip */}
+      <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
 }
@@ -455,17 +464,12 @@ function ClientTab({
             value={refCode}
             onChange={(e) => setRefCode(e.target.value)}
             placeholder="Enter client reference (e.g., ABC123)"
-            className="rounded-xl border border-rose/30 px-3 py-2 text-sm bg-white"
+            className="input w-56"
           />
           <button
             onClick={loadClientByRef}
             disabled={cLoading || !refCode.trim()}
-            className={cls(
-              "rounded-full px-4 py-2 text-sm font-semibold",
-              cLoading || !refCode.trim()
-                ? "bg-blush text-charcoal/50"
-                : "bg-rose text-ivory hover:bg-gold hover:text-charcoal"
-            )}
+            className={cls("btn", cLoading || !refCode.trim() ? "btn-ghost opacity-60" : "btn-primary")}
           >
             {cLoading ? "Loading…" : "Load"}
           </button>
@@ -473,8 +477,8 @@ function ClientTab({
 
         <div className="flex items-center gap-2">
           {client && (
-            <div className="text-xs text-charcoal/70">
-              Loaded: <code>{client.reference}</code> — {client.details?.name || "Client"}
+            <div className="text-xs text-[hsl(var(--muted))]">
+              Loaded: <code className="text-[hsl(var(--text))]">{client.reference}</code> — {client.details?.name || "Client"}
             </div>
           )}
           <label className="flex items-center gap-2 text-sm">
@@ -494,9 +498,9 @@ function ClientTab({
             onClick={deleteSelected}
             disabled={cCount === 0 || cLoading || notAdmin || !client}
             className={cls(
-              "rounded-full px-4 py-2 text-sm font-semibold",
+              "px-4 py-2 text-sm font-semibold rounded-pill transition-colors",
               cCount === 0 || cLoading || notAdmin || !client
-                ? "bg-blush text-charcoal/50"
+                ? "btn-ghost opacity-60"
                 : "bg-red-600 text-white hover:bg-red-700"
             )}
           >
@@ -505,7 +509,7 @@ function ClientTab({
         </div>
       </div>
 
-      {cMsg && <div className="mt-3 text-sm text-rose-700">{cMsg}</div>}
+      {cMsg && <div className="mt-3 text-sm text-red-600">{cMsg}</div>}
 
       <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
         {cImgs.map((img) => {
@@ -513,7 +517,7 @@ function ClientTab({
           return (
             <figure
               key={img.id}
-              className="relative group overflow-hidden rounded-xl border border-rose/20"
+              className="relative group overflow-hidden rounded-xl2 border border-[hsl(var(--border))] bg-white"
               title={img.public_id}
             >
               <img
@@ -522,7 +526,7 @@ function ClientTab({
                 className="w-full aspect-square object-cover"
                 loading="lazy"
               />
-              <label className="absolute top-2 left-2 bg-white/90 rounded-md px-2 py-1 text-xs flex items-center gap-2 shadow">
+              <label className="absolute top-2 left-2 bg-white/90 rounded-pill px-2 py-1 text-[11px] flex items-center gap-2 shadow-soft ring-1 ring-[hsl(var(--border))]">
                 <input
                   type="checkbox"
                   checked={!!cSel[img.id]}
@@ -534,12 +538,12 @@ function ClientTab({
               {status && (
                 <div
                   className={cls(
-                    "absolute bottom-2 right-2 text-[11px] rounded-md px-2 py-1 shadow",
+                    "absolute bottom-2 right-2 text-[11px] rounded-pill px-2 py-1 shadow-soft ring-1",
                     status === "pending"
-                      ? "bg-amber-100 text-amber-800"
+                      ? "bg-amber-50 text-amber-800 ring-amber-200"
                       : status === "ok"
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-rose-100 text-rose-800"
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                      : "bg-red-50 text-red-700 ring-red-200"
                   )}
                 >
                   {status === "pending" ? "Deleting…" : status === "ok" ? "Deleted" : "Error"}
@@ -551,7 +555,7 @@ function ClientTab({
       </div>
 
       {!cLoading && client && cImgs.length === 0 && (
-        <div className="mt-3 text-sm text-charcoal/60">No images for this client.</div>
+        <div className="mt-3 text-sm text-[hsl(var(--muted))]">No images for this client.</div>
       )}
     </>
   );

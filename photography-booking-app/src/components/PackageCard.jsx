@@ -1,4 +1,3 @@
-// src/components/PackageCard.jsx
 import React from "react";
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }

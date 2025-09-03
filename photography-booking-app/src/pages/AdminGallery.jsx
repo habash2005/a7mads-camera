@@ -12,9 +12,9 @@ import {
 } from "firebase/firestore";
 
 /* --------------------------- small utils --------------------------- */
-const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"].map(s => s.toLowerCase()));
+const ADMIN_EMAILS = new Set(["ahmadhijaz325@gmail.com"].map((s) => s.toLowerCase()));
 const cls = (...xs) => xs.filter(Boolean).join(" ");
-const toSlug = (s="") =>
+const toSlug = (s = "") =>
   String(s)
     .toLowerCase()
     .trim()
@@ -54,12 +54,16 @@ export default function AdminGallery() {
     if (!name) return;
     const s = toSlug(name);
     if (!slug) setSlug(s);
-  }, [name]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name]);
 
   const tag = useMemo(() => (slug ? `gal-${slug}` : "gal-your-slug"), [slug]);
 
   async function createOrUpdateGallery() {
-    if (!isAdmin) { setMsg("You must be signed in as admin."); return; }
+    if (!isAdmin) {
+      setMsg("You must be signed in as admin.");
+      return;
+    }
     if (!name.trim() || !slug.trim() || !code.trim()) {
       setMsg("Fill all fields.");
       return;
@@ -82,15 +86,13 @@ export default function AdminGallery() {
         slug: cleanSlug,
         tag: `gal-${cleanSlug}`,
         codeHash,
-        // createdAt allowed on create; updatedAt allowed on update
         ...(snap.exists() ? { updatedAt: now } : { createdAt: now }),
       };
 
       await setDoc(dref, payload, { merge: false });
 
       setMsg(
-        `${snap.exists() ? "✅ Updated" : "✅ Created"} “${name.trim()}”. ` +
-        `Upload photos with tag: ${`gal-${cleanSlug}`}`
+        `${snap.exists() ? "✅ Updated" : "✅ Created"} “${name.trim()}”. Upload photos with tag: gal-${cleanSlug}`
       );
       // keep fields so you can copy after save
     } catch (e) {
@@ -112,6 +114,8 @@ export default function AdminGallery() {
     );
   }
 
+  const canSave = isAdmin && !!name.trim() && !!slug.trim() && !!code.trim() && !busy;
+
   return (
     <>
       <Helmet>
@@ -119,27 +123,29 @@ export default function AdminGallery() {
         <meta name="robots" content="noindex,nofollow" />
       </Helmet>
 
-      <section className="w-full py-16 md:py-24 bg-ivory">
-        <div className="container-site">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-charcoal">
-              Create / Update Client Gallery
-            </h2>
+      <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <div className="container-pro py-12 md:py-16">
+          {/* Header */}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="h2 text-2xl md:text-3xl">Create / Update Client Gallery</h2>
             <div
               className={cls(
-                "text-xs rounded-lg px-3 py-2",
-                isAdmin ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-800"
+                "text-xs rounded-pill px-3 py-1.5 ring-1",
+                isAdmin
+                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                  : "bg-red-50 text-red-700 ring-red-200"
               )}
             >
               {isAdmin ? `Signed in as ${me?.email}` : "Not signed in as admin"}
             </div>
           </div>
 
-          <div className="max-w-2xl bg-white/70 backdrop-blur rounded-2xl p-6 ring-1 ring-rose/20 shadow-soft">
+          {/* Card */}
+          <div className="mx-auto max-w-2xl card p-6 md:p-7 shadow-soft">
             <div className="grid gap-4">
               {/* Name */}
               <label className="block">
-                <div className="text-sm font-medium text-charcoal">Gallery name</div>
+                <div className="text-sm font-medium">Gallery name</div>
                 <input
                   className="mt-1 input w-full"
                   value={name}
@@ -150,21 +156,23 @@ export default function AdminGallery() {
 
               {/* Slug */}
               <label className="block">
-                <div className="text-sm font-medium text-charcoal">
-                  Slug <span className="text-[color:var(--muted)]">(letters & numbers)</span>
+                <div className="text-sm font-medium">
+                  Slug <span className="text-[hsl(var(--muted))]">(letters &amp; numbers)</span>
                 </div>
                 <input
                   className="mt-1 input w-full font-mono"
                   value={slug}
-                  onChange={(e) => setSlug(e.target.value.replace(/[^a-z0-9-]/gi, "").toLowerCase())}
+                  onChange={(e) =>
+                    setSlug(e.target.value.replace(/[^a-z0-9-]/gi, "").toLowerCase())
+                  }
                   placeholder="aliyah-sam"
                 />
-                <div className="text-xs text-charcoal/60 mt-1">
-                  Uploads should use Cloudinary/Firebase tag: <code>{tag}</code>{" "}
+                <div className="text-xs text-[hsl(var(--muted))] mt-1">
+                  Uploads should use tag: <code> {tag} </code>
                   <button
                     type="button"
                     onClick={() => copy(tag)}
-                    className="ml-2 text-[11px] underline text-burgundy hover:text-rose"
+                    className="ml-2 text-[11px] underline hover:opacity-80"
                   >
                     Copy
                   </button>
@@ -173,8 +181,9 @@ export default function AdminGallery() {
 
               {/* Access code */}
               <label className="block">
-                <div className="text-sm font-medium text-charcoal">
-                  Access code <span className="text-[color:var(--muted)]">(send this to client)</span>
+                <div className="text-sm font-medium">
+                  Access code{" "}
+                  <span className="text-[hsl(var(--muted))]">(send this to client)</span>
                 </div>
                 <div className="mt-1 flex gap-2">
                   <input
@@ -192,25 +201,29 @@ export default function AdminGallery() {
                     Generate
                   </button>
                 </div>
-                <div className="text-[11px] text-charcoal/60 mt-1">
+                <div className="text-[11px] text-[hsl(var(--muted))] mt-1">
                   We store only a SHA-256 hash of this code.
                 </div>
               </label>
 
-              {/* Quick client link (if you use a route like /#/client-gallery?code=XXXX) */}
-              <div className="text-xs text-charcoal/70">
+              {/* Quick client link */}
+              <div className="text-xs text-[hsl(var(--muted))]">
                 Client URL (example):{" "}
                 <code>
-                  {`${window.location.origin}${window.location.pathname}#/client-gallery?code=${encodeURIComponent(code || "YOURCODE")}`}
+                  {`${window.location.origin}${window.location.pathname}#/client-gallery?code=${encodeURIComponent(
+                    code || "YOURCODE"
+                  )}`}
                 </code>
                 <button
                   type="button"
                   onClick={() =>
                     copy(
-                      `${window.location.origin}${window.location.pathname}#/client-gallery?code=${encodeURIComponent(code || "")}`
+                      `${window.location.origin}${window.location.pathname}#/client-gallery?code=${encodeURIComponent(
+                        code || ""
+                      )}`
                     )
                   }
-                  className="ml-2 text-[11px] underline text-burgundy hover:text-rose"
+                  className="ml-2 text-[11px] underline hover:opacity-80"
                 >
                   Copy link
                 </button>
@@ -233,42 +246,42 @@ export default function AdminGallery() {
                 <button
                   type="button"
                   onClick={createOrUpdateGallery}
-                  disabled={busy || !name.trim() || !slug.trim() || !code.trim() || !isAdmin}
-                  className={cls(
-                    "btn btn-primary",
-                    (busy || !name.trim() || !slug.trim() || !code.trim() || !isAdmin) &&
-                      "opacity-60 cursor-not-allowed"
-                  )}
+                  disabled={!canSave}
+                  className={cls("btn btn-primary", !canSave && "opacity-60 cursor-not-allowed")}
                 >
                   {busy ? "Saving…" : "Save Gallery"}
                 </button>
               </div>
 
               {msg && (
-                <div className="text-sm mt-1">
-                  {msg}
-                </div>
+                <div className="text-sm mt-1 text-[hsl(var(--text))]">{msg}</div>
               )}
             </div>
           </div>
 
           {/* Notes card */}
-          <div className="max-w-2xl mt-6 text-[11px] text-[color:var(--muted)]">
+          <div className="mx-auto max-w-2xl mt-6 text-[11px] text-[hsl(var(--muted))]">
             <ul className="list-disc pl-4 space-y-1">
               <li>
-                Firestore rules already allow these fields on <code>galleries/&lt;id&gt;</code>:
+                Firestore rules already allow these fields on{" "}
+                <code>galleries/&lt;id&gt;</code>:
                 <code> name, slug, tag, codeHash, createdAt, updatedAt</code>.
               </li>
               <li>
-                This page uses the <code>slug</code> as the document ID, so re-saving the same slug will update the gallery (idempotent).
+                This page uses the <code>slug</code> as the document ID, so re-saving
+                the same slug will update the gallery (idempotent).
               </li>
               <li>
-                Only admins can save from this UI. Ensure your Auth domain is authorized and that your account email matches:
+                Only admins can save from this UI. Ensure your Auth domain is authorized
+                and that your account email matches:
                 <code> {Array.from(ADMIN_EMAILS).join(", ")} </code>
               </li>
             </ul>
           </div>
         </div>
+
+        {/* subtle accent strip */}
+        <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
       </section>
     </>
   );

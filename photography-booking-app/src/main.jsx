@@ -2,24 +2,30 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { createHashRouter, RouterProvider } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
-import { AuthProvider } from "./lib/auth";
+import "./index.css";
 
-import App from "./App";
-import Home from "./pages/Home";
-import Portfolio from "./pages/Portfolio";
-import Booking from "./pages/Booking";
-import FAQ from "./pages/FAQ";
-import ClientGallery from "./pages/ClientGallery";
-import ClientPortal from "./pages/ClientPortal";
-import AdminLogin from "./pages/AdminLogin";
-import AdminDashboard from "./pages/AdminDashboard";
-import AdminBookings from "./pages/AdminBookings";
-import AdminRoute from "./routes/AdminRoute";
+import App from "./App.jsx";
+
+/* Pages */
+import Home from "./pages/Home.jsx";
+import Portfolio from "./pages/Portfolio.jsx";
+import Booking from "./pages/Booking.jsx";
+import FAQ from "./pages/FAQ.jsx";
+import ClientGallery from "./pages/ClientGallery.jsx";
+import ClientPortal from "./pages/ClientPortal.jsx";
+
+/* Admin */
+import AdminLogin from "./pages/AdminLogin.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+import AdminBookings from "./pages/AdminBookings.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import ErrorPage from "./pages/ErrorPage.jsx"; // optional friendly fallback (add if you created it)
 
 const router = createHashRouter([
   {
     path: "/",
     element: <App />,
+    errorElement: <ErrorPage />, // if you kept the optional error page
     children: [
       { index: true, element: <Home /> },
       { path: "portfolio", element: <Portfolio /> },
@@ -28,33 +34,32 @@ const router = createHashRouter([
       { path: "client-gallery", element: <ClientGallery /> },
       { path: "client-portal", element: <ClientPortal /> },
 
+      /* Admin routes */
       { path: "admin/login", element: <AdminLogin /> },
       {
         path: "admin",
         element: (
-          <AdminRoute>
+          <ProtectedRoute>
             <AdminDashboard />
-          </AdminRoute>
-        ),
+          </ProtectedRoute>
+        )
       },
       {
         path: "admin/bookings",
         element: (
-          <AdminRoute>
+          <ProtectedRoute>
             <AdminBookings />
-          </AdminRoute>
-        ),
-      },
-    ],
-  },
+          </ProtectedRoute>
+        )
+      }
+    ]
+  }
 ]);
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <HelmetProvider>
-      <AuthProvider>
-        <RouterProvider router={router} />
-      </AuthProvider>
+      <RouterProvider router={router} />
     </HelmetProvider>
   </React.StrictMode>
 );

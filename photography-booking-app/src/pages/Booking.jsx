@@ -46,11 +46,10 @@ function ChipBtn({ children, onClick, active }) {
       type="button"
       onClick={onClick}
       className={cls(
-        "rounded-pill px-3 py-1 text-xs font-semibold transition-all",
-        "border",
+        "rounded-pill px-3 py-1 text-xs font-semibold transition-all border",
         active
-          ? "border-[color:var(--accent-600)] bg-[color:var(--accent-soft)] text-[color:var(--text)]"
-          : "border-[color:var(--border)] text-[color:var(--muted)] hover:bg-[color:var(--accent-soft)]"
+          ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/15 text-[hsl(var(--text))]"
+          : "border-[hsl(var(--border))] text-[hsl(var(--muted))] hover:bg-[hsl(var(--accent))]/12"
       )}
     >
       {children}
@@ -60,8 +59,8 @@ function ChipBtn({ children, onClick, active }) {
 function SectionTitle({ children, sub }) {
   return (
     <div className="mb-2">
-      <h4 className="h3 text-[color:var(--text)]">{children}</h4>
-      {sub && <p className="text-xs text-[color:var(--muted)] mt-1">{sub}</p>}
+      <h4 className="text-lg font-semibold text-[hsl(var(--text))]">{children}</h4>
+      {sub && <p className="text-xs text-[hsl(var(--muted))] mt-1">{sub}</p>}
     </div>
   );
 }
@@ -252,13 +251,13 @@ export default function Booking() {
         <link rel="canonical" href="https://a7madscamera.com/#/booking" />
       </Helmet>
 
-      <section id="booking" className="w-full py-16 md:py-24">
-        <div className="container-site">
+      <section id="booking" className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <div className="container-pro py-16 md:py-24">
           {/* Header */}
           <div className="flex items-end justify-between gap-4 mb-6">
             <div>
-              <h2 className="h2 text-2xl md:text-3xl">Book a Session</h2>
-              <p className="text-sm text-[color:var(--muted)] mt-1">
+              <h2 className="text-2xl md:text-3xl font-semibold">Book a Session</h2>
+              <p className="text-sm text-[hsl(var(--muted))] mt-1">
                 Choose a service, pick a time, and share a few details. I’ll confirm by email.
               </p>
             </div>
@@ -270,7 +269,7 @@ export default function Booking() {
             {/* Step 0: Service selection */}
             {step === 0 && (
               <div>
-                <h3 className="h3 text-xl">Choose a service</h3>
+                <h3 className="text-xl font-semibold">Choose a service</h3>
 
                 <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {SERVICES.map((s) => {
@@ -283,8 +282,8 @@ export default function Booking() {
                         className={cls(
                           "text-left rounded-xl2 border p-4 transition-all focus:outline-none",
                           active
-                            ? "border-[color:var(--accent-600)] bg-[color:var(--accent-soft)] shadow-soft"
-                            : "border-[color:var(--border)] hover:border-[color:var(--accent-600)] hover:bg-[color:var(--accent-soft)]"
+                            ? "border-[hsl(var(--accent))] bg-[hsl(var(--accent))]/15 shadow-soft"
+                            : "border-[hsl(var(--border))] hover:border-[hsl(var(--accent))] hover:bg-[hsl(var(--accent))]/10"
                         )}
                         aria-pressed={active}
                       >
@@ -294,8 +293,8 @@ export default function Booking() {
                             className={cls(
                               "text-[11px] font-semibold rounded-pill px-2 py-0.5 ring-1",
                               active
-                                ? "bg-[color:var(--accent)] text-[#0b0e11] ring-[color:var(--accent-600)]"
-                                : "bg-[color:var(--accent-soft)] text-[color:var(--text)] ring-[color:var(--border)]"
+                                ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] ring-[hsl(var(--accent))]"
+                                : "bg-[hsl(var(--surface))] text-[hsl(var(--text))] ring-[hsl(var(--border))]"
                             )}
                           >
                             {s.duration}
@@ -303,7 +302,7 @@ export default function Booking() {
                         </div>
 
                         {s.desc && (
-                          <p className="mt-2 text-sm text-[color:var(--muted)]">
+                          <p className="mt-2 text-sm text-[hsl(var(--muted))]">
                             {s.desc}
                           </p>
                         )}
@@ -330,8 +329,8 @@ export default function Booking() {
             {/* Step 1: Date & Time */}
             {step === 1 && (
               <div>
-                <h3 className="h3 text-xl">Pick date &amp; time</h3>
-                <p className="text-sm text-[color:var(--muted)] mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
+                <h3 className="text-xl font-semibold">Pick date &amp; time</h3>
+                <p className="text-sm text-[hsl(var(--muted))] mt-1">Sessions run between 9:30 AM and 9:30 PM.</p>
 
                 <div className="mt-4 grid md:grid-cols-3 gap-4">
                   <div>
@@ -357,7 +356,7 @@ export default function Booking() {
                         <option key={t} value={t}>{to12h(t)}</option>
                       ))}
                     </select>
-                    {err && availability === false && <div className="text-xs text-red-400 mt-1">{err}</div>}
+                    {err && availability === false && <div className="text-xs text-red-600 mt-1">{err}</div>}
                   </div>
 
                   <div className="flex items-end">
@@ -374,12 +373,12 @@ export default function Booking() {
                   </div>
                 </div>
 
-                {availability === true && <p className="mt-3 text-sm text-emerald-500">✅ Slot available. You can proceed.</p>}
-                {availability === false && <p className="mt-3 text-sm text-red-400">❌ That time conflicts. Try a different one.</p>}
-                {!!err && availability === null && <p className="mt-3 text-sm text-red-400">{err}</p>}
+                {availability === true && <p className="mt-3 text-sm text-green-600">✅ Slot available. You can proceed.</p>}
+                {availability === false && <p className="mt-3 text-sm text-red-600">❌ That time conflicts. Try a different one.</p>}
+                {!!err && availability === null && <p className="mt-3 text-sm text-red-600">{err}</p>}
 
                 <div className="mt-6 flex justify-between">
-                  <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(0)}>← Back</button>
+                  <button className="text-sm underline text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]" onClick={() => setStep(0)}>← Back</button>
                   <button
                     onClick={() => setStep(2)}
                     disabled={!canNext1}
@@ -397,7 +396,7 @@ export default function Booking() {
             {/* Step 2: Details (Simplified) */}
             {step === 2 && (
               <div>
-                <h3 className="h3 text-xl">Your details</h3>
+                <h3 className="text-xl font-semibold">Your details</h3>
 
                 {/* Contact basics */}
                 <div className="mt-4 grid md:grid-cols-2 gap-4">
@@ -469,7 +468,7 @@ export default function Booking() {
                 </div>
 
                 <div className="mt-6 flex justify-between">
-                  <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(1)}>
+                  <button className="text-sm underline text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]" onClick={() => setStep(1)}>
                     ← Back
                   </button>
                   <button
@@ -489,14 +488,14 @@ export default function Booking() {
             {/* Step 3: Review & Confirm */}
             {step === 3 && (
               <div>
-                <h3 className="h3 text-xl">Review &amp; confirm</h3>
+                <h3 className="text-xl font-semibold">Review &amp; confirm</h3>
 
                 <div className="mt-4 grid md:grid-cols-2 gap-6">
                   <div className="card p-4">
                     <h4 className="font-semibold">Summary</h4>
-                    <ul className="mt-2 text-sm text-[color:var(--muted)] space-y-1">
-                      <li>Service: <span className="font-medium text-[color:var(--text)]">{selected.name}</span></li>
-                      <li>Date &amp; Time: <span className="font-medium text-[color:var(--text)]">{date || "—"} {time ? to12h(time) : ""}</span></li>
+                    <ul className="mt-2 text-sm text-[hsl(var(--muted))] space-y-1">
+                      <li>Service: <span className="font-medium text-[hsl(var(--text))]">{selected.name}</span></li>
+                      <li>Date &amp; Time: <span className="font-medium text-[hsl(var(--text))]">{date || "—"} {time ? to12h(time) : ""}</span></li>
                       <li>Estimated duration: {selected.duration}</li>
                       <li>Location: {details.location}</li>
                     </ul>
@@ -504,7 +503,7 @@ export default function Booking() {
 
                   <div className="card p-4">
                     <h4 className="font-semibold">Contact &amp; brief</h4>
-                    <ul className="mt-2 text-sm text-[color:var(--muted)] space-y-1">
+                    <ul className="mt-2 text-sm text-[hsl(var(--muted))] space-y-1">
                       <li>Name: {details.name || "—"}</li>
                       <li>Email: {details.email || "—"}</li>
                       <li>Phone: {details.phone || "—"}</li>
@@ -521,7 +520,7 @@ export default function Booking() {
 
                 {!result ? (
                   <div className="mt-6 flex justify-between">
-                    <button className="text-sm underline text-[color:var(--muted)] hover:text-[color:var(--text)]" onClick={() => setStep(2)}>
+                    <button className="text-sm underline text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]" onClick={() => setStep(2)}>
                       ← Back
                     </button>
                     <button
@@ -538,8 +537,8 @@ export default function Booking() {
                 ) : (
                   <div className="mt-6 card p-4">
                     <p className="font-semibold">🎉 Booking requested!</p>
-                    <p className="text-sm text-[color:var(--muted)] mt-1">
-                      Your reference: <span className="font-mono text-[color:var(--text)]">{result.reference}</span>.
+                    <p className="text-sm text-[hsl(var(--muted))] mt-1">
+                      Your reference: <span className="font-mono text-[hsl(var(--text))]">{result.reference}</span>.
                     </p>
                     <div className="mt-4 flex gap-3">
                       <button
@@ -561,6 +560,9 @@ export default function Booking() {
             )}
           </div>
         </div>
+
+        {/* subtle accent strip */}
+        <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
       </section>
     </>
   );
@@ -625,20 +627,20 @@ function SimpleStepper({ step }) {
             <div
               className={cls(
                 "w-6 h-6 rounded-full grid place-items-center font-semibold",
-                done   ? "bg-[color:var(--accent)]  text-[#0b0e11]"
-              : active ? "bg-[color:var(--accent-600)] text-white"
-              : "bg-[color:var(--accent-soft)] text-[color:var(--muted)]"
+                done   ? "bg-[hsl(var(--accent))]  text-[hsl(var(--accent-foreground))]"
+              : active ? "bg-[hsl(var(--accent))]/80 text-[hsl(var(--accent-foreground))]"
+              : "bg-[hsl(var(--surface))] text-[hsl(var(--muted))] border border-[hsl(var(--border))]"
               )}
               title={label}
             >
               {i + 1}
             </div>
             <span className={cls("uppercase tracking-wide",
-              active ? "text-[color:var(--text)] font-semibold" : "text-[color:var(--muted)]"
+              active ? "text-[hsl(var(--text))] font-semibold" : "text-[hsl(var(--muted))]"
             )}>
               {label}
             </span>
-            {i < items.length - 1 && <span className="w-8 h-px bg-[color:var(--border)] mx-1" />}
+            {i < items.length - 1 && <span className="w-8 h-px bg-[hsl(var(--border))] mx-1" />}
           </div>
         );
       })}

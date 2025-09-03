@@ -1,16 +1,15 @@
+import React from "react";
 import { Outlet } from "react-router-dom";
-import { HelmetProvider } from "react-helmet-async";
-import Header from "./components/SiteHeader";
-import Footer from "./components/Footer";
-import "./index.css";
+import Header from "./components/SiteHeader.jsx";
+import Footer from "./components/Footer.jsx";
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-dvh flex flex-col">
       <Header />
-      <div className="flex-1">
+      <main className="flex-1">
         <Outlet />
-      </div>
+      </main>
       <Footer />
     </div>
   );

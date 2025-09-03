@@ -53,6 +53,8 @@ export default function AdminLogin() {
     }
   }
 
+  const canSubmit = !!email.trim() && !!pw && !busy;
+
   return (
     <>
       <Helmet>
@@ -60,77 +62,89 @@ export default function AdminLogin() {
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
 
-      <section className="container-site py-12 md:py-16">
-        <div className="max-w-md mx-auto bg-white/70 backdrop-blur rounded-2xl p-6 md:p-7 ring-1 ring-[color:var(--border)] shadow-soft">
-          <h1 className="text-2xl font-semibold tracking-tight">Admin Login</h1>
-          <p className="text-sm text-[color:var(--muted)] mt-1">
-            Sign in with your admin email to manage uploads & galleries.
-          </p>
+      <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+        <div className="container-pro py-12 md:py-16">
+          <div className="mx-auto max-w-md card p-6 md:p-7 shadow-soft">
+            <h1 className="text-2xl font-semibold tracking-tight">Admin Login</h1>
+            <p className="text-sm text-[hsl(var(--muted))] mt-1">
+              Sign in with your admin email to manage uploads &amp; galleries.
+            </p>
 
-          {/* Helpful env hint (only really useful during setup) */}
-          <div className="mt-4 rounded-lg bg-[color:var(--accent-soft)]/40 text-[11px] p-3 ring-1 ring-[color:var(--border)]">
-            Make sure this site’s domain is in <b>Firebase Auth → Authorized domains</b>.
-          </div>
+            {/* Helpful env hint (only really useful during setup) */}
+            <div className="mt-4 text-[11px] rounded-xl p-3 ring-1 ring-[hsl(var(--border))] bg-[hsl(var(--accent))]/10">
+              Make sure this site’s domain is in <b>Firebase Auth → Authorized domains</b>.
+            </div>
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
-            <label className="block">
-              <span className="text-sm font-medium">Email</span>
-              <input
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !busy && pw && email && onSubmit(e)}
-                className="mt-1 input w-full"
-                placeholder="you@domain.com"
-                required
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-medium">Password</span>
-              <div className="mt-1 relative">
+            <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
+              <label className="block">
+                <span className="text-sm font-medium">Email</span>
                 <input
-                  type={showPw ? "text" : "password"}
-                  autoComplete="current-password"
-                  value={pw}
-                  onChange={(e) => setPw(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && !busy && pw && email && onSubmit(e)}
-                  className="input w-full pr-24"
-                  placeholder="••••••••"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && canSubmit && onSubmit(e)}
+                  className="mt-1 input w-full"
+                  placeholder="you@domain.com"
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPw((s) => !s)}
-                  className="absolute inset-y-0 right-2 my-1 rounded-md px-2 text-xs bg-[color:var(--surface)] hover:bg-[color:var(--accent-soft)]"
-                  tabIndex={-1}
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium">Password</span>
+                <div className="mt-1 relative">
+                  <input
+                    type={showPw ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={pw}
+                    onChange={(e) => setPw(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && canSubmit && onSubmit(e)}
+                    className="input w-full pr-24"
+                    placeholder="••••••••"
+                    required
+                    aria-describedby={err ? "login-error" : undefined}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPw((s) => !s)}
+                    className="absolute inset-y-0 right-2 my-1 rounded-md px-2 text-xs bg-[hsl(var(--surface))] hover:bg-[hsl(var(--accent))]/15"
+                    tabIndex={-1}
+                    aria-pressed={showPw}
+                    aria-label={showPw ? "Hide password" : "Show password"}
+                  >
+                    {showPw ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </label>
+
+              {err && (
+                <div
+                  id="login-error"
+                  className="text-sm rounded-md px-3 py-2 ring-1 ring-red-200 bg-red-50 text-red-700"
+                  role="alert"
                 >
-                  {showPw ? "Hide" : "Show"}
-                </button>
-              </div>
-            </label>
+                  {err}
+                </div>
+              )}
 
-            {err && (
-              <div className="text-sm text-wine bg-wine/10 rounded-md px-3 py-2 ring-1 ring-wine/30">
-                {err}
-              </div>
-            )}
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                className={cls("btn btn-primary w-full", !canSubmit && "opacity-60 cursor-not-allowed")}
+              >
+                {busy ? "Signing in…" : "Sign in"}
+              </button>
+            </form>
 
-            <button
-              type="submit"
-              disabled={busy || !email.trim() || !pw}
-              className={cls("btn btn-primary w-full", (busy || !email.trim() || !pw) && "opacity-60 cursor-not-allowed")}
-            >
-              {busy ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
-
-          <p className="text-[11px] text-[color:var(--muted)] mt-4">
-            Issues signing in? Check your network, disable content blockers on this page, and verify App Check isn’t blocking Auth.
-          </p>
+            <p className="text-[11px] text-[hsl(var(--muted))] mt-4">
+              Issues signing in? Check your network, disable content blockers on this page, and verify App Check isn’t blocking Auth.
+            </p>
+          </div>
         </div>
+
+        {/* subtle accent strip */}
+        <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
       </section>
     </>
   );

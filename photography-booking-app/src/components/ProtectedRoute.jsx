@@ -1,18 +1,24 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { useAuthState } from "react-firebase-hooks/auth";
+import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../lib/firebase";
 
+const ADMIN_EMAIL = "Ahmadhijaz325@gmail.com";
+
 export default function ProtectedRoute({ children }) {
-  const [user, loading] = useAuthState(auth);
+  const [ready, setReady] = useState(false);
+  const [ok, setOk] = useState(false);
 
-  if (loading) {
-    return <div className="p-8 text-center">Loading...</div>;
-  }
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      const pass = !!user && user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      setOk(pass);
+      setReady(true);
+    });
+    return () => unsub();
+  }, []);
 
-  if (!user) {
-    return <Navigate to="/admin-login" replace />;
-  }
-
+  if (!ready) return <div className="container-pro py-20">Checking access…</div>;
+  if (!ok) return <Navigate to="/admin/login" replace />;
   return children;
 }

@@ -1,4 +1,3 @@
-// src/components/MasonryGrid.jsx
 import React from "react";
 
 export default function MasonryGrid({ items = [], className = "" }) {

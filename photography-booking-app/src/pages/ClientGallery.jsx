@@ -32,7 +32,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
         {items.map((img) => (
           <figure
             key={img.public_id}
-            className="group relative mb-5 break-inside-avoid overflow-hidden rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-burgundy/10 transition-shadow hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
+            className="group relative mb-5 break-inside-avoid overflow-hidden rounded-xl2 bg-[hsl(var(--card))] shadow-soft border border-[hsl(var(--border))] transition-shadow hover:shadow-lg"
             title={img.original_filename || img.public_id}
           >
             <img
@@ -53,8 +53,8 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
                 className={cls(
                   "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
                   selected[img.public_id]
-                    ? "bg-wine text-white ring-gold"
-                    : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
+                    ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] ring-[hsl(var(--accent))]"
+                    : "bg-[hsl(var(--card))] text-[hsl(var(--text))] ring-[hsl(var(--border))] hover:bg-[hsl(var(--accent))]/15"
                 )}
                 aria-hidden
               >
@@ -63,7 +63,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
             </label>
             {img.secure_url && (
               <a
-                className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
                 href={img.secure_url}
                 target="_blank"
                 rel="noreferrer"
@@ -83,7 +83,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
       {items.map((img) => (
         <figure
           key={img.public_id}
-          className="group relative overflow-hidden rounded-2xl bg-white/80 backdrop-blur-sm shadow-[0_10px_30px_rgba(0,0,0,0.06)] ring-1 ring-burgundy/10 transition-shadow hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
+          className="group relative overflow-hidden rounded-xl2 bg-[hsl(var(--card))] shadow-soft border border-[hsl(var(--border))] transition-shadow hover:shadow-lg"
           title={img.original_filename || img.public_id}
         >
           <div className="aspect-square w-full">
@@ -106,8 +106,8 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               className={cls(
                 "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
                 selected[img.public_id]
-                  ? "bg-wine text-white ring-gold"
-                  : "bg-white/95 text-charcoal ring-burgundy/20 hover:bg-gold/20"
+                  ? "bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))] ring-[hsl(var(--accent))]"
+                  : "bg-[hsl(var(--card))] text-[hsl(var(--text))] ring-[hsl(var(--border))] hover:bg-[hsl(var(--accent))]/15"
               )}
             >
               {selected[img.public_id] ? "✓" : "+"}
@@ -115,7 +115,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
           </label>
           {img.secure_url && (
             <a
-              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-gold opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
               href={img.secure_url}
               target="_blank"
               rel="noreferrer"
@@ -275,7 +275,7 @@ export default function ClientGallery() {
   const downloadAllZip = () => zipAndDownload(images, "all-images.zip");
 
   return (
-    <section className="w-full py-16 md:py-24 bg-cream">
+    <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
       <Helmet>
         <title>Client Gallery | A7mad’s Camera</title>
         <meta
@@ -285,21 +285,21 @@ export default function ClientGallery() {
         <link rel="canonical" href="https://a7madscamera.com/client-gallery" />
       </Helmet>
 
-      <div className="max-w-7xl mx-auto px-4">
-        <h2 className="text-2xl md:text-3xl font-serif font-semibold text-burgundy">
+      <div className="container-pro py-16 md:py-24">
+        <h2 className="text-2xl md:text-3xl font-semibold">
           {headerTitle}
         </h2>
 
         {/* Step 1: Access form */}
         {!booking && (
           <div className="mt-6 max-w-md space-y-3">
-            <p className="text-charcoal/70">Enter your access code to view your photos.</p>
+            <p className="text-[hsl(var(--muted))]">Enter your access code to view your photos.</p>
             <input
               type="password"
               value={code}
               onChange={(e) => setCode(e.target.value)}
               placeholder="Access code"
-              className="w-full rounded-xl border border-burgundy/20 px-3 py-2 bg-white focus:border-burgundy focus:ring-gold/40"
+              className="input"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !loading && code.trim()) checkCode();
               }}
@@ -310,15 +310,13 @@ export default function ClientGallery() {
               onClick={checkCode}
               disabled={loading || !code.trim()}
               className={cls(
-                "rounded-full px-5 py-3 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                loading || !code.trim()
-                  ? "bg-burgundy/10 text-charcoal/50 cursor-not-allowed"
-                  : "bg-wine text-white hover:bg-maroon"
+                "btn",
+                loading || !code.trim() ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary"
               )}
             >
               {loading ? "Checking…" : "Open Gallery"}
             </button>
-            {err && <div className="text-sm text-wine">{err}</div>}
+            {err && <div className="text-sm text-red-600">{err}</div>}
           </div>
         )}
 
@@ -327,10 +325,10 @@ export default function ClientGallery() {
           <div className="mt-8">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h3 className="font-serif text-xl text-charcoal">
+                <h3 className="text-xl font-semibold">
                   {booking?.details?.name || "Client"} ({booking.reference})
                 </h3>
-                <div className="text-xs text-charcoal/60">
+                <div className="text-xs text-[hsl(var(--muted))]">
                   {[booking.date, booking.time, booking.package?.name].filter(Boolean).join(" • ")}
                 </div>
               </div>
@@ -351,8 +349,8 @@ export default function ClientGallery() {
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    !someChecked || zipping ? "bg-burgundy/10 text-charcoal/50" : "bg-wine text-white hover:bg-maroon"
+                    "btn",
+                    !someChecked || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-ghost"
                   )}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
@@ -362,22 +360,22 @@ export default function ClientGallery() {
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
                   className={cls(
-                    "rounded-full px-4 py-2 text-sm font-semibold shadow-soft transition-colors focus:outline-none focus:ring-2 focus:ring-gold",
-                    !images.length || zipping ? "bg-burgundy/10 text-charcoal/50" : "bg-gold text-charcoal hover:bg-wine hover:text-white"
+                    "btn",
+                    !images.length || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary"
                   )}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
                 </button>
 
-                <button onClick={reset} className="text-sm underline text-charcoal/70 hover:text-burgundy">
+                <button onClick={reset} className="btn btn-ghost">
                   Use a different code
                 </button>
               </div>
             </div>
 
             {zipping && (
-              <div className="mt-3 h-2 w-full bg-burgundy/10 rounded-full overflow-hidden">
-                <div className="h-full bg-gold transition-all" style={{ width: `${zipProgress}%` }} />
+              <div className="mt-3 h-2 w-full bg-[hsl(var(--surface))] border border-[hsl(var(--border))] rounded-full overflow-hidden">
+                <div className="h-full bg-[hsl(var(--accent))] transition-all" style={{ width: `${zipProgress}%` }} />
               </div>
             )}
 
@@ -391,11 +389,14 @@ export default function ClientGallery() {
                 />
               </div>
             ) : (
-              <div className="mt-6 text-charcoal/60">No images yet for this gallery.</div>
+              <div className="mt-6 text-[hsl(var(--muted))]">No images yet for this gallery.</div>
             )}
           </div>
         )}
       </div>
+
+      {/* subtle accent strip */}
+      <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
 }

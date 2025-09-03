@@ -1,65 +1,64 @@
-// src/components/SiteHeader.jsx
-import React, { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
-import LogoWordmark from "./LogoWordmark";
-import ThemeToggle from "./ThemeToggle";
+import React, { useEffect, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 
-const navLink = ({ isActive }) =>
-  `px-3 py-2 rounded-pill transition-colors ${
-    isActive
-      ? "text-[var(--accent)]"
-      : "text-[color:var(--muted)] hover:text-[color:var(--text)] hover:bg-[color:var(--accent-soft)]"
-  }`;
+const links = [
+  { to: "/portfolio", label: "Work" },
+  { to: "/booking", label: "Book" },
+  { to: "/client-portal", label: "Client" },
+  { to: "/faq", label: "FAQ" },
+];
+
+function cls(...xs) { return xs.filter(Boolean).join(" "); }
 
 export default function SiteHeader() {
+  const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [pathname]);
+
+  const item = ({ isActive }) =>
+    cls(
+      "relative px-2 py-1 text-sm font-medium transition-colors",
+      isActive ? "text-[hsl(var(--brand))]" : "text-[hsl(var(--muted))] hover:text-[hsl(var(--text))]"
+    );
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[color:var(--border)] bg-[color:var(--bg)]/75 backdrop-blur">
-      <div className="container-site h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 group" aria-label="Home">
-          <LogoWordmark className="h-7 md:h-8 transition duration-300 group-hover:drop-shadow-[0_10px_24px_rgba(78,168,255,.45)]" />
+    <header className="sticky top-0 z-50 border-b border-[hsl(var(--border))] header-glass">
+      <div className="container-pro h-16 flex items-center justify-between">
+        <Link to="/" className="flex items-center gap-2 no-underline">
+          <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl bg-white ring-1 ring-[hsl(var(--border))] shadow-sm floaty">
+            <span className="h-1.5 w-1.5 rounded-full bg-[hsl(var(--brand))]" />
+          </span>
+          <span className="sr-only">A7mads Camera</span>
+          <img src="/a7mads-wordmark.svg" alt="" className="h-6 md:h-7" />
         </Link>
 
-        <nav className="hidden md:flex items-center gap-1">
-          <NavLink to="/" className={navLink} end>Home</NavLink>
-          <NavLink to="/portfolio" className={navLink}>Portfolio</NavLink>
-          <NavLink to="/booking" className={navLink}>Book</NavLink>
-          <NavLink to="/client-portal" className={navLink}>Client Portal</NavLink>
-          <NavLink to="/faq" className={navLink}>FAQ</NavLink>
-          {/* Admin link is in footer only */}
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-6">
+          {links.map(l => (
+            <NavLink key={l.to} to={l.to} className={item}>{l.label}</NavLink>
+          ))}
+          <Link to="/booking" className="no-underline">
+            <button className="btn btn-rose">Start a Project</button>
+          </Link>
         </nav>
 
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Link to="/booking" className="btn btn-primary">Book a Session</Link>
-        </div>
-
-        {/* Mobile toggle (optional) */}
-        <button
-          onClick={() => setOpen(!open)}
-          className="md:hidden ml-3 h-9 px-3 rounded-full ring-1 ring-[var(--border)]"
-          aria-expanded={open}
-          aria-label="Toggle menu"
-        >
-          Menu
+        {/* Mobile toggle */}
+        <button className="md:hidden btn btn-ghost" onClick={() => setOpen(s => !s)} aria-label="Toggle menu">
+          {open ? "✕" : "☰"}
         </button>
       </div>
 
       {open && (
-        <div className="md:hidden border-t border-[color:var(--border)] bg-[color:var(--bg)]/90 backdrop-blur">
-          <div className="container-site py-3 space-y-2">
-            {[
-              { to: "/", label: "Home" },
-              { to: "/portfolio", label: "Portfolio" },
-              { to: "/booking", label: "Book" },
-              { to: "/client-portal", label: "Client Portal" },
-              { to: "/faq", label: "FAQ" },
-            ].map((item) => (
-              <NavLink key={item.to} to={item.to} className={navLink} onClick={() => setOpen(false)}>
-                {item.label}
+        <div className="md:hidden border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
+          <div className="container-pro py-3 flex flex-col gap-2">
+            {links.map(l => (
+              <NavLink key={l.to} to={l.to} className="py-2 no-underline text-[hsl(var(--text))]">
+                {l.label}
               </NavLink>
             ))}
+            <Link to="/booking" className="no-underline">
+              <button className="btn btn-rose w-full">Start a Project</button>
+            </Link>
           </div>
         </div>
       )}

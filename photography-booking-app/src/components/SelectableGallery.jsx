@@ -1,4 +1,3 @@
-// src/components/SelectableGallery.jsx
 import React from "react";
 
 function cls(...xs) { return xs.filter(Boolean).join(" "); }
@@ -102,4 +101,3 @@ export default function SelectableGallery({ items, selected, onToggle, layout = 
     </div>
   );
 }
-
