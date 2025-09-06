@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
-// Zip + Storage for downloads
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { ref as sref, getBlob, getDownloadURL } from "firebase/storage";
@@ -31,63 +30,7 @@ function fileNameFrom(img) {
 function storagePathOf(img) {
   if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
   const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
-  return m ? decodeURIComponent(m[1]) : (img.public_id || null);
-}
-
-function bucketFromUrl(url) {
-  const m = String(url || "").match(/\/b\/([^/]+)\/o\//); // e.g. ahmad-port.firebasestorage.app
-  return m ? m[1] : null;
-}
-
-// CORS-safe blob fetcher: use gs:// URL via Storage SDK (works even across buckets)
-async function getImageBlob(storageInst, img) {
-  const path = storagePathOf(img);
-  const urlBucket = bucketFromUrl(img.secure_url);
-
-  // 1) Use explicit bucket from the file URL if present
-  if (path && urlBucket) {
-    try {
-      const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
-      return await getBlob(gsRef);
-    } catch {
-      try {
-        const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
-        const url = await getDownloadURL(gsRef);
-        const res = await fetch(url, { credentials: "omit" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.blob();
-      } catch {
-        // fall through
-      }
-    }
-  }
-
-  // 2) Try default bucket using path
-  if (path) {
-    try {
-      const r = sref(storageInst, path);
-      return await getBlob(r);
-    } catch {
-      try {
-        const r = sref(storageInst, path);
-        const url = await getDownloadURL(r);
-        const res = await fetch(url, { credentials: "omit" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.blob();
-      } catch {
-        // fall through
-      }
-    }
-  }
-
-  // 3) Last resort: direct fetch (may CORS-fail on some files)
-  if (img.secure_url) {
-    const res = await fetch(img.secure_url, { credentials: "omit" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.blob();
-  }
-
-  throw new Error("No readable source for image");
+  return m ? decodeURIComponent(m[1]) : img.public_id || null;
 }
 
 function parseRefFromUrl() {
@@ -101,34 +44,67 @@ function parseRefFromUrl() {
   }
 }
 
+/** CORS-safe blob fetch across any bucket.
+ * Order:
+ *  1) try ref(storage, HTTPS URL) → getBlob()
+ *  2) try ref(storage, gs://BUCKET/PATH) if we can build it from secure_url
+ *  3) try ref(storage, PATH) (default bucket)
+ *  4) as last resort, fetch(secure_url) (may be blocked by CORS; we only try if all else fails)
+ */
+async function getImageBlob(storageInst, img) {
+  const secure = img.secure_url;
+  const path = storagePathOf(img);
+
+  // 1) Use HTTPS URL directly as a Storage ref (Firebase SDK supports this)
+  if (secure) {
+    try {
+      const httpsRef = sref(storageInst, secure);
+      return await getBlob(httpsRef);
+    } catch (e) {
+      // continue
+    }
+  }
+
+  // 2) Try gs:// formed from secure_url if bucket is present
+  const m = String(secure || "").match(/\/b\/([^/]+)\/o\//); // extract bucket from URL
+  if (path && m) {
+    const bucket = m[1]; // e.g. ahmad-port.firebasestorage.app
+    try {
+      const gsRef = sref(storageInst, `gs://${bucket}/${path}`);
+      return await getBlob(gsRef);
+    } catch (e) {
+      // continue
+    }
+  }
+
+  // 3) Try default bucket with plain path
+  if (path) {
+    try {
+      const pRef = sref(storageInst, path);
+      return await getBlob(pRef);
+    } catch (e) {
+      // continue
+    }
+  }
+
+  // 4) Last-ditch: direct fetch (may CORS-fail, but we’ve tried SDK routes first)
+  if (secure) {
+    const res = await fetch(secure, { credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.blob();
+  }
+
+  throw new Error("No readable source for image");
+}
+
 /* ---------- small UI bits (themed) ---------- */
 function StatusPill({ status }) {
   const s = (status || "").toLowerCase();
-  const base =
-    "inline-flex items-center rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ring-1";
-  if (s === "confirmed")
-    return (
-      <span className={cls(base, "bg-[hsl(var(--surface))] text-green-700 ring-green-200")}>
-        Confirmed
-      </span>
-    );
-  if (s === "finished")
-    return (
-      <span className={cls(base, "bg-[hsl(var(--accent))]/15 text-[hsl(var(--text))] ring-[hsl(var(--accent))]/30")}>
-        Finished
-      </span>
-    );
-  if (s === "canceled")
-    return (
-      <span className={cls(base, "bg-red-50 text-red-700 ring-red-200")}>
-        Canceled
-      </span>
-    );
-  return (
-    <span className={cls(base, "bg-[hsl(var(--surface))] text-[hsl(var(--text))] ring-[hsl(var(--border))]")}>
-      Pending
-    </span>
-  );
+  const base = "inline-flex items-center rounded-pill px-2.5 py-0.5 text-[11px] font-semibold ring-1";
+  if (s === "confirmed") return <span className={cls(base, "bg-[hsl(var(--surface))] text-green-700 ring-green-200")}>Confirmed</span>;
+  if (s === "finished")  return <span className={cls(base, "bg-[hsl(var(--accent))]/15 text-[hsl(var(--text))] ring-[hsl(var(--accent))]/30")}>Finished</span>;
+  if (s === "canceled")  return <span className={cls(base, "bg-red-50 text-red-700 ring-red-200")}>Canceled</span>;
+  return <span className={cls(base, "bg-[hsl(var(--surface))] text-[hsl(var(--text))] ring-[hsl(var(--border))]")}>Pending</span>;
 }
 
 /* ----------------- SelectableGallery ----------------- */
@@ -150,12 +126,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
             />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <label className="absolute top-2 left-2 inline-flex items-center">
-              <input
-                type="checkbox"
-                checked={!!selected[img.public_id]}
-                onChange={() => onToggle(img.public_id)}
-                className="sr-only"
-              />
+              <input type="checkbox" checked={!!selected[img.public_id]} onChange={() => onToggle(img.public_id)} className="sr-only" />
               <span
                 className={cls(
                   "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
@@ -182,7 +153,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
     );
   }
 
-  // fallback: uniform squares
+  // fallback grid
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {items.map((img) => (
@@ -201,12 +172,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
           </div>
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <label className="absolute top-2 left-2 inline-flex items-center">
-            <input
-              type="checkbox"
-              checked={!!selected[img.public_id]}
-              onChange={() => onToggle(img.public_id)}
-              className="sr-only"
-            />
+            <input type="checkbox" checked={!!selected[img.public_id]} onChange={() => onToggle(img.public_id)} className="sr-only" />
             <span
               className={cls(
                 "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
@@ -319,7 +285,7 @@ export default function ClientPortal() {
     setZipProgress(0);
   }
 
-  // Client-side zipping via Firebase Storage + JSZip (CORS-safe)
+  // Client-side zipping via Firebase Storage SDK (CORS-safe)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -353,7 +319,7 @@ export default function ClientPortal() {
       saveAs(zipBlob, outName || "photos.zip");
     } catch (e) {
       console.error(e);
-      alert(e.message || "Preparing ZIP failed.");
+      alert(e?.message || "Preparing ZIP failed.");
     } finally {
       setZipping(false);
       setZipProgress(0);
@@ -362,10 +328,20 @@ export default function ClientPortal() {
 
   async function downloadSelectedZip() {
     const files = images.filter((i) => !!selected[i.public_id]);
-    await zipAndDownload(files, "selected-photos.zip").catch((e) => console.error(e));
+    try {
+      await zipAndDownload(files, "selected-photos.zip");
+    } catch (e) {
+      console.error(e);
+      alert(e?.message || "Download failed.");
+    }
   }
   async function downloadAllZip() {
-    await zipAndDownload(images, "all-photos.zip").catch((e) => console.error(e));
+    try {
+      await zipAndDownload(images, "all-photos.zip");
+    } catch (e) {
+      console.error(e);
+      alert(e?.message || "Download failed.");
+    }
   }
 
   const clientName = useMemo(() => booking?.details?.name || "Client", [booking]);
@@ -392,10 +368,7 @@ export default function ClientPortal() {
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl md:text-3xl font-semibold">Client Portal</h2>
           {booking && (
-            <button
-              onClick={signOut}
-              className="btn btn-ghost"
-            >
+            <button onClick={signOut} className="btn btn-ghost">
               Sign out
             </button>
           )}
@@ -459,10 +432,7 @@ export default function ClientPortal() {
                 <button
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
-                  className={cls(
-                    "btn",
-                    !someChecked || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-ghost"
-                  )}
+                  className={cls("btn", !someChecked || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-ghost")}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
                 </button>
@@ -470,10 +440,7 @@ export default function ClientPortal() {
                 <button
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
-                  className={cls(
-                    "btn",
-                    !images.length || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary"
-                  )}
+                  className={cls("btn", !images.length || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary")}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
                 </button>
@@ -482,21 +449,13 @@ export default function ClientPortal() {
 
             {zipping && (
               <div className="mt-3 h-2 w-full bg-[hsl(var(--surface))] border border-[hsl(var(--border))] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[hsl(var(--accent))] transition-all"
-                  style={{ width: `${zipProgress}%` }}
-                />
+                <div className="h-full bg-[hsl(var(--accent))] transition-all" style={{ width: `${zipProgress}%` }} />
               </div>
             )}
 
             {images.length > 0 ? (
               <div className="mt-6">
-                <SelectableGallery
-                  layout="masonry"
-                  items={images}
-                  selected={selected}
-                  onToggle={toggleOne}
-                />
+                <SelectableGallery layout="masonry" items={images} selected={selected} onToggle={toggleOne} />
               </div>
             ) : (
               <div className="mt-6 text-[hsl(var(--muted))]">No images yet for this booking.</div>
@@ -505,7 +464,6 @@ export default function ClientPortal() {
         )}
       </div>
 
-      {/* subtle accent strip */}
       <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
