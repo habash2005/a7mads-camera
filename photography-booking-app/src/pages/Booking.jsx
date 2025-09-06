@@ -24,7 +24,7 @@ const SERVICES = [
     name: "Events",
     duration: "2 hours",
     desc: "Gatherings and concerts captured with clarity.",
-    image: "src/muhtade.jpg",
+    image: "src/Muhtade.jpg",
   },
   {
     id: "branding",
