@@ -4,7 +4,7 @@ import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { ref as sref, getBlob, getDownloadURL } from "firebase/storage";
+import { ref as sref, getBlob } from "firebase/storage";
 
 import { Helmet } from "react-helmet-async";
 
@@ -44,31 +44,14 @@ function parseRefFromUrl() {
   }
 }
 
-/** CORS-safe blob fetch across any bucket.
- * Order:
- *  1) try ref(storage, HTTPS URL) → getBlob()
- *  2) try ref(storage, gs://BUCKET/PATH) if we can build it from secure_url
- *  3) try ref(storage, PATH) (default bucket)
- *  4) as last resort, fetch(secure_url) (may be blocked by CORS; we only try if all else fails)
- */
+/** CORS-safe blob fetch: always prefer your configured bucket. */
 async function getImageBlob(storageInst, img) {
-  const secure = img.secure_url;
+  const bucket = storageInst?.app?.options?.storageBucket; // e.g., "ahmad-port.appspot.com"
   const path = storagePathOf(img);
+  const https = img.secure_url;
 
-  // 1) Use HTTPS URL directly as a Storage ref (Firebase SDK supports this)
-  if (secure) {
-    try {
-      const httpsRef = sref(storageInst, secure);
-      return await getBlob(httpsRef);
-    } catch (e) {
-      // continue
-    }
-  }
-
-  // 2) Try gs:// formed from secure_url if bucket is present
-  const m = String(secure || "").match(/\/b\/([^/]+)\/o\//); // extract bucket from URL
-  if (path && m) {
-    const bucket = m[1]; // e.g. ahmad-port.firebasestorage.app
+  // 1) gs://<configured-bucket>/<path>
+  if (bucket && path) {
     try {
       const gsRef = sref(storageInst, `gs://${bucket}/${path}`);
       return await getBlob(gsRef);
@@ -77,7 +60,7 @@ async function getImageBlob(storageInst, img) {
     }
   }
 
-  // 3) Try default bucket with plain path
+  // 2) <path> in default bucket
   if (path) {
     try {
       const pRef = sref(storageInst, path);
@@ -87,9 +70,9 @@ async function getImageBlob(storageInst, img) {
     }
   }
 
-  // 4) Last-ditch: direct fetch (may CORS-fail, but we’ve tried SDK routes first)
-  if (secure) {
-    const res = await fetch(secure, { credentials: "omit" });
+  // 3) LAST RESORT: direct fetch (may CORS-fail, but we tried SDK paths)
+  if (https) {
+    const res = await fetch(https, { credentials: "omit" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.blob();
   }
@@ -220,7 +203,7 @@ export default function ClientPortal() {
     setSelected(next);
   };
 
-  // ensure “Select all” shows indeterminate state reliably
+  // ensure indeterminate state
   const allRef = useRef(null);
   useEffect(() => {
     if (!allRef.current) return;
@@ -285,7 +268,7 @@ export default function ClientPortal() {
     setZipProgress(0);
   }
 
-  // Client-side zipping via Firebase Storage SDK (CORS-safe)
+  // ZIP via Firebase Storage SDK (CORS-safe)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -293,7 +276,7 @@ export default function ClientPortal() {
     }
     const TOTAL_LIMIT_MB = 500;
     let approx = 0;
-    for (const f of files) approx += f.bytes || f.size || 5_000_000; // fallback estimate
+    for (const f of files) approx += f.bytes || f.size || 5_000_000;
     if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
@@ -357,21 +340,14 @@ export default function ClientPortal() {
     <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
       <Helmet>
         <title>Client Portal | A7mad’s Camera</title>
-        <meta
-          name="description"
-          content="Access your gallery using your reference code. Download selected photos or your full set."
-        />
+        <meta name="description" content="Access your gallery using your reference code. Download selected photos or your full set." />
         <link rel="canonical" href="https://a7madscamera.com/client" />
       </Helmet>
 
       <div className="container-pro py-16 md:py-24">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl md:text-3xl font-semibold">Client Portal</h2>
-          {booking && (
-            <button onClick={signOut} className="btn btn-ghost">
-              Sign out
-            </button>
-          )}
+          {booking && <button onClick={signOut} className="btn btn-ghost">Sign out</button>}
         </div>
 
         {!booking && (
@@ -385,17 +361,12 @@ export default function ClientPortal() {
               onChange={(e) => setRefInput(e.target.value)}
               placeholder="e.g., 8F2KQX"
               className="input"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !loading && refInput.trim()) loginWithRef();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !loading && refInput.trim()) loginWithRef(); }}
             />
             <button
               onClick={() => loginWithRef()}
               disabled={loading || !refInput.trim()}
-              className={cls(
-                "btn",
-                loading || !refInput.trim() ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary"
-              )}
+              className={cls("btn", loading || !refInput.trim() ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary")}
             >
               {loading ? "Opening…" : "Open Portal"}
             </button>
@@ -409,10 +380,7 @@ export default function ClientPortal() {
               <div>
                 <h3 className="text-xl font-semibold">Welcome, {clientName}</h3>
                 <div className="mt-1 text-xs text-[hsl(var(--muted))]">
-                  Ref: <code className="font-mono">{booking.reference}</code> •{" "}
-                  {booking.package?.name || "Package"}{" "}
-                  {booking.package?.duration ? `• ${booking.package.duration}` : ""}{" "}
-                  {whenText ? `• ${whenText}` : ""}
+                  Ref: <code className="font-mono">{booking.reference}</code> • {booking.package?.name || "Package"} {booking.package?.duration ? `• ${booking.package.duration}` : ""} {whenText ? `• ${whenText}` : ""}
                 </div>
                 <div className="mt-2"><StatusPill status={booking.status} /></div>
               </div>

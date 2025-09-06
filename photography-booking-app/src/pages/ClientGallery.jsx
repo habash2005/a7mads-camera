@@ -4,7 +4,7 @@ import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { ref as sref, getBlob, getDownloadURL } from "firebase/storage";
+import { ref as sref, getBlob } from "firebase/storage";
 
 import { Helmet } from "react-helmet-async";
 
@@ -30,30 +30,19 @@ function storagePathOf(img) {
   return m ? decodeURIComponent(m[1]) : img.public_id || null;
 }
 
-/** Same cross-bucket, CORS-safe blob fetch approach as ClientPortal */
+/** Prefer configured bucket → default bucket → last-resort direct fetch */
 async function getImageBlob(storageInst, img) {
-  const secure = img.secure_url;
+  const bucket = storageInst?.app?.options?.storageBucket;
   const path = storagePathOf(img);
+  const https = img.secure_url;
 
-  // 1) ref(storage, HTTPS URL)
-  if (secure) {
-    try {
-      const httpsRef = sref(storageInst, secure);
-      return await getBlob(httpsRef);
-    } catch (e) {}
-  }
-
-  // 2) gs:// via bucket from URL
-  const m = String(secure || "").match(/\/b\/([^/]+)\/o\//);
-  if (path && m) {
-    const bucket = m[1];
+  if (bucket && path) {
     try {
       const gsRef = sref(storageInst, `gs://${bucket}/${path}`);
       return await getBlob(gsRef);
     } catch (e) {}
   }
 
-  // 3) default bucket + path
   if (path) {
     try {
       const pRef = sref(storageInst, path);
@@ -61,9 +50,8 @@ async function getImageBlob(storageInst, img) {
     } catch (e) {}
   }
 
-  // 4) fallback fetch (might CORS-fail; only if everything else failed)
-  if (secure) {
-    const res = await fetch(secure, { credentials: "omit" });
+  if (https) {
+    const res = await fetch(https, { credentials: "omit" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.blob();
   }
@@ -228,11 +216,13 @@ export default function ClientGallery() {
       const data = docRef.data();
       setBooking({ id: docRef.id, ...data });
 
+      // load images
       const imgsSnap = await getDocs(collection(db, `bookings/${docRef.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
+      // pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -279,7 +269,7 @@ export default function ClientGallery() {
           const blob = await getImageBlob(storage, img);
           zip.file(fileNameFrom(img), blob, { compression: "STORE" });
         } catch (e) {
-          console.warn("Skipping file due to fetch/read error:", img.public_id || img.secure_url, e);
+          console.warn("Skipping file due to read error:", img.public_id || img.secure_url, e);
         }
 
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
@@ -324,6 +314,7 @@ export default function ClientGallery() {
       <div className="container-pro py-16 md:py-24">
         <h2 className="text-2xl md:text-3xl font-semibold">{headerTitle}</h2>
 
+        {/* Step 1: Access form */}
         {!booking && (
           <div className="mt-6 max-w-md space-y-3">
             <p className="text-[hsl(var(--muted))]">Enter your access code to view your photos.</p>
@@ -350,6 +341,7 @@ export default function ClientGallery() {
           </div>
         )}
 
+        {/* Step 2: Grid + actions */}
         {booking && (
           <div className="mt-8">
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -411,6 +403,7 @@ export default function ClientGallery() {
         )}
       </div>
 
+      {/* subtle accent strip */}
       <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
