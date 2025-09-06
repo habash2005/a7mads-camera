@@ -1,10 +1,10 @@
-// src/pages/ClientGallery.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "../lib/firebase";
+import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { ref as sref, getBlob } from "firebase/storage";
 
 import { Helmet } from "react-helmet-async";
 
@@ -22,6 +22,12 @@ function fileNameFrom(img) {
     (img.secure_url && (img.secure_url.split("?")[0].split(".").pop() || "").toLowerCase()) ||
     "jpg";
   return `${base}.${ext.replace(/[^a-z0-9]/gi, "") || "jpg"}`;
+}
+
+function storagePathOf(img) {
+  if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
+  const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
+  return m ? decodeURIComponent(m[1]) : (img.public_id || null);
 }
 
 /* ----------------- SelectableGallery ----------------- */
@@ -219,7 +225,7 @@ export default function ClientGallery() {
     setErr("");
   }
 
-  // ZIP by fetching the signed URLs in docs (no Storage SDK needed here)
+  // Robust ZIP: try Storage SDK first, then fetch URL as fallback
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -240,16 +246,29 @@ export default function ClientGallery() {
 
       for (let i = 0; i < files.length; i++) {
         const img = files[i];
-        const url = img.secure_url;
-        if (!url) continue;
+        let added = false;
 
-        try {
-          const res = await fetch(url, { credentials: "omit" });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const blob = await res.blob();
-          zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-        } catch (e) {
-          console.warn("Skipping file due to fetch error:", url, e);
+        const path = storagePathOf(img);
+        if (path) {
+          try {
+            const blob = await getBlob(sref(storage, path));
+            zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+            added = true;
+          } catch (e) {
+            console.warn("Storage getBlob failed, will try fetch()", path, e);
+          }
+        }
+
+        if (!added && img.secure_url) {
+          try {
+            const res = await fetch(img.secure_url, { credentials: "omit" });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+            added = true;
+          } catch (e) {
+            console.warn("Fetch fallback failed, skipping:", img.secure_url, e);
+          }
         }
 
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
@@ -395,7 +414,6 @@ export default function ClientGallery() {
         )}
       </div>
 
-      {/* subtle accent strip */}
       <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
