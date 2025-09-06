@@ -27,55 +27,43 @@ function fileNameFrom(img) {
 function storagePathOf(img) {
   if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
   const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
-  return m ? decodeURIComponent(m[1]) : (img.public_id || null);
+  return m ? decodeURIComponent(m[1]) : img.public_id || null;
 }
 
-function bucketFromUrl(url) {
-  const m = String(url || "").match(/\/b\/([^/]+)\/o\//);
-  return m ? m[1] : null;
-}
-
-// CORS-safe blob fetcher
+/** Same cross-bucket, CORS-safe blob fetch approach as ClientPortal */
 async function getImageBlob(storageInst, img) {
+  const secure = img.secure_url;
   const path = storagePathOf(img);
-  const urlBucket = bucketFromUrl(img.secure_url);
 
-  if (path && urlBucket) {
+  // 1) ref(storage, HTTPS URL)
+  if (secure) {
     try {
-      const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
-      return await getBlob(gsRef);
-    } catch {
-      try {
-        const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
-        const url = await getDownloadURL(gsRef);
-        const res = await fetch(url, { credentials: "omit" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.blob();
-      } catch {
-        // fall through
-      }
-    }
+      const httpsRef = sref(storageInst, secure);
+      return await getBlob(httpsRef);
+    } catch (e) {}
   }
 
+  // 2) gs:// via bucket from URL
+  const m = String(secure || "").match(/\/b\/([^/]+)\/o\//);
+  if (path && m) {
+    const bucket = m[1];
+    try {
+      const gsRef = sref(storageInst, `gs://${bucket}/${path}`);
+      return await getBlob(gsRef);
+    } catch (e) {}
+  }
+
+  // 3) default bucket + path
   if (path) {
     try {
-      const r = sref(storageInst, path);
-      return await getBlob(r);
-    } catch {
-      try {
-        const r = sref(storageInst, path);
-        const url = await getDownloadURL(r);
-        const res = await fetch(url, { credentials: "omit" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.blob();
-      } catch {
-        // fall through
-      }
-    }
+      const pRef = sref(storageInst, path);
+      return await getBlob(pRef);
+    } catch (e) {}
   }
 
-  if (img.secure_url) {
-    const res = await fetch(img.secure_url, { credentials: "omit" });
+  // 4) fallback fetch (might CORS-fail; only if everything else failed)
+  if (secure) {
+    const res = await fetch(secure, { credentials: "omit" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.blob();
   }
@@ -102,12 +90,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
             />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             <label className="absolute top-2 left-2 inline-flex items-center">
-              <input
-                type="checkbox"
-                checked={!!selected[img.public_id]}
-                onChange={() => onToggle(img.public_id)}
-                className="sr-only"
-              />
+              <input type="checkbox" checked={!!selected[img.public_id]} onChange={() => onToggle(img.public_id)} className="sr-only" />
               <span
                 className={cls(
                   "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
@@ -136,7 +119,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
     );
   }
 
-  // fallback: uniform grid
+  // fallback grid
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {items.map((img) => (
@@ -155,12 +138,7 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
           </div>
           <div className="pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <label className="absolute top-2 left-2 inline-flex items-center">
-            <input
-              type="checkbox"
-              checked={!!selected[img.public_id]}
-              onChange={() => onToggle(img.public_id)}
-              className="sr-only"
-            />
+            <input type="checkbox" checked={!!selected[img.public_id]} onChange={() => onToggle(img.public_id)} className="sr-only" />
             <span
               className={cls(
                 "grid place-items-center w-8 h-8 rounded-full text-[12px] font-bold shadow-soft ring-1 transition-colors",
@@ -250,13 +228,11 @@ export default function ClientGallery() {
       const data = docRef.data();
       setBooking({ id: docRef.id, ...data });
 
-      // load images
       const imgsSnap = await getDocs(collection(db, `bookings/${docRef.id}/images`));
       const imgs = imgsSnap.docs.map((d) => d.data());
       imgs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setImages(imgs);
 
-      // pre-select all
       const pre = {};
       imgs.forEach((img) => (pre[img.public_id] = true));
       setSelected(pre);
@@ -317,7 +293,7 @@ export default function ClientGallery() {
       saveAs(zipBlob, outName || "gallery.zip");
     } catch (e) {
       console.error(e);
-      alert(e.message || "Preparing ZIP failed.");
+      alert(e?.message || "Preparing ZIP failed.");
     } finally {
       setZipping(false);
       setZipProgress(0);
@@ -325,28 +301,29 @@ export default function ClientGallery() {
   }
 
   const downloadSelectedZip = () =>
-    zipAndDownload(images.filter((i) => !!selected[i.public_id]), "selected-images.zip").catch((e) =>
-      console.error(e)
-    );
-  const downloadAllZip = () => zipAndDownload(images, "all-images.zip").catch((e) => console.error(e));
+    zipAndDownload(images.filter((i) => !!selected[i.public_id]), "selected-images.zip")
+      .catch((e) => {
+        console.error(e);
+        alert(e?.message || "Download failed.");
+      });
+
+  const downloadAllZip = () =>
+    zipAndDownload(images, "all-images.zip").catch((e) => {
+      console.error(e);
+      alert(e?.message || "Download failed.");
+    });
 
   return (
     <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
       <Helmet>
         <title>Client Gallery | A7mad’s Camera</title>
-        <meta
-          name="description"
-          content="Enter your access code to view and download your photos."
-        />
+        <meta name="description" content="Enter your access code to view and download your photos." />
         <link rel="canonical" href="https://a7madscamera.com/client-gallery" />
       </Helmet>
 
       <div className="container-pro py-16 md:py-24">
-        <h2 className="text-2xl md:text-3xl font-semibold">
-          {headerTitle}
-        </h2>
+        <h2 className="text-2xl md:text-3xl font-semibold">{headerTitle}</h2>
 
-        {/* Step 1: Access form */}
         {!booking && (
           <div className="mt-6 max-w-md space-y-3">
             <p className="text-[hsl(var(--muted))]">Enter your access code to view your photos.</p>
@@ -365,10 +342,7 @@ export default function ClientGallery() {
             <button
               onClick={checkCode}
               disabled={loading || !code.trim()}
-              className={cls(
-                "btn",
-                loading || !code.trim() ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary"
-              )}
+              className={cls("btn", loading || !code.trim() ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary")}
             >
               {loading ? "Checking…" : "Open Gallery"}
             </button>
@@ -376,7 +350,6 @@ export default function ClientGallery() {
           </div>
         )}
 
-        {/* Step 2: Grid + actions */}
         {booking && (
           <div className="mt-8">
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -404,10 +377,7 @@ export default function ClientGallery() {
                 <button
                   onClick={downloadSelectedZip}
                   disabled={!someChecked || zipping}
-                  className={cls(
-                    "btn",
-                    !someChecked || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-ghost"
-                  )}
+                  className={cls("btn", !someChecked || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-ghost")}
                 >
                   {zipping ? `Preparing… ${zipProgress}%` : "Download Selected"}
                 </button>
@@ -415,17 +385,12 @@ export default function ClientGallery() {
                 <button
                   onClick={downloadAllZip}
                   disabled={!images.length || zipping}
-                  className={cls(
-                    "btn",
-                    !images.length || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary"
-                  )}
+                  className={cls("btn", !images.length || zipping ? "btn-ghost opacity-60 cursor-not-allowed" : "btn-primary")}
                 >
                   {zipping ? `Please wait… ${zipProgress}%` : "Download All"}
                 </button>
 
-                <button onClick={reset} className="btn btn-ghost">
-                  Use a different code
-                </button>
+                <button onClick={reset} className="btn btn-ghost">Use a different code</button>
               </div>
             </div>
 
@@ -437,12 +402,7 @@ export default function ClientGallery() {
 
             {images.length > 0 ? (
               <div className="mt-6">
-                <SelectableGallery
-                  layout="masonry"
-                  items={images}
-                  selected={selected}
-                  onToggle={toggleOne}
-                />
+                <SelectableGallery layout="masonry" items={images} selected={selected} onToggle={toggleOne} />
               </div>
             ) : (
               <div className="mt-6 text-[hsl(var(--muted))]">No images yet for this gallery.</div>
@@ -451,7 +411,6 @@ export default function ClientGallery() {
         )}
       </div>
 
-      {/* subtle accent strip */}
       <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
