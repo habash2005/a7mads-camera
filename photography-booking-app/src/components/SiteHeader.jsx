@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+// src/components/SiteHeader.jsx
+import React, { useEffect, useState, useMemo } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
@@ -14,10 +15,25 @@ export default function SiteHeader() {
   const { pathname } = useLocation();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [imgOk, setImgOk] = useState(true);
 
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  // ---- Choose where your file lives ----
+  // If the file is in /public, uncomment the next line:
+  // const publicLogo = "/a7mads-logo.svg";
+
+  // If the file is in src/assets, keep this line:
+  const moduleLogo = useMemo(() => {
+    try {
+      return new URL("src/a7mads-wordmark.png", import.meta.url).href;
+    } catch {
+      return ""; // if not found, we'll try public path
+    }
+  }, []);
+
+  // Pick module path first (dev/prod safe), fallback to public
+  const logoSrc = moduleLogo || "/a7mads-logo.svg";
+
+  useEffect(() => setOpen(false), [pathname]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 6);
@@ -32,13 +48,32 @@ export default function SiteHeader() {
         "sticky top-0 z-50 transition-all",
         "backdrop-blur supports-[backdrop-filter]:bg-[hsl(var(--bg))/0.72]",
         "bg-[hsl(var(--bg))/0.92]",
-        scrolled ? "shadow-[0_6px_20px_rgba(0,0,0,0.06)] border-b border-[hsl(var(--border))]" : "border-b border-transparent"
+        scrolled
+          ? "shadow-[0_6px_20px_rgba(0,0,0,0.06)] border-b border-[hsl(var(--border))]"
+          : "border-b border-transparent"
       )}
     >
       <div className="container-pro h-16 flex items-center justify-between">
         {/* Brand */}
         <Link to="/" className="flex items-center gap-3 no-underline">
-          <img src="/a7mads-wordmark.svg" alt="A7mads Camera" className="h-7" />
+          {imgOk ? (
+            <img
+              src={logoSrc}
+              alt="A7mads Camera"
+              className={cls(
+                // Bigger + visible on light backgrounds
+                "h-10 md:h-12 w-auto",
+                // If logo is white/transparent, this soft shadow keeps it visible
+                "[filter:drop-shadow(0_0_1px_rgba(0,0,0,0.35))_drop-shadow(0_2px_6px_rgba(0,0,0,0.20))]"
+              )}
+              onError={() => setImgOk(false)}
+            />
+          ) : (
+            // Fallback text wordmark if the image path is wrong or file missing
+            <span className="text-xl md:text-2xl font-extrabold tracking-tight text-[hsl(var(--text))]">
+              A7mads<span className="text-[hsl(var(--accent))]"> Camera</span>
+            </span>
+          )}
           <span className="sr-only">A7mads Camera</span>
         </Link>
 
@@ -94,7 +129,6 @@ export default function SiteHeader() {
         </div>
       )}
 
-      {/* local styles for the underline animation */}
       <style>{`
         .nav-pill { position: relative; }
         .nav-pill::after {

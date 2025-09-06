@@ -1,13 +1,30 @@
-import React, { useState } from "react";
-import { Link, NavLink } from "react-router-dom";
+// src/components/Nav.jsx
+import React, { useMemo, useState } from "react";
+import { Link, NavLink, useLocation } from "react-router-dom";
 
-function cls(...xs) {
-  return xs.filter(Boolean).join(" ");
-}
+const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
+  const [imgOk, setImgOk] = useState(true);
+  const { pathname } = useLocation();
   const menuId = "mobile-nav-menu";
+
+  // Close mobile menu on route change
+  React.useEffect(() => setOpen(false), [pathname]);
+
+  // Try module path first (works in dev & prod builds)
+  const moduleLogo = useMemo(() => {
+    try {
+      // put your file at: src/a7mads-wordmark.png  (or change the filename here)
+      return new URL("src/a7mads-wordmark.png", import.meta.url).href;
+    } catch {
+      return "";
+    }
+  }, []);
+
+  // Fallback to public path if the module import isn't available
+  const logoSrc = moduleLogo || "/a7mads-logo.svg";
 
   const itemClass = ({ isActive }) =>
     cls(
@@ -27,14 +44,29 @@ export default function Nav() {
       )}
     >
       <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-        {/* Brand */}
-        <Link to="/" onClick={() => setOpen(false)} className="flex items-center gap-2">
-          <span className="relative inline-flex h-8 w-8 items-center justify-center rounded-md bg-white shadow ring-1 ring-[var(--border)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-rose" />
-          </span>
-          <span className="text-base font-serif font-semibold tracking-tight text-charcoal">
-            A7mads Camera
-          </span>
+        {/* Brand / Logo (image with fallback text, same as SiteHeader) */}
+        <Link
+          to="/"
+          onClick={() => setOpen(false)}
+          className="flex items-center gap-2 no-underline"
+        >
+          {imgOk ? (
+            <img
+              src={logoSrc}
+              alt="A7mads Camera"
+              className={cls(
+                "h-9 md:h-10 w-auto",
+                "[filter:drop-shadow(0_0_1px_rgba(0,0,0,0.35))_drop-shadow(0_2px_6px_rgba(0,0,0,0.20))]"
+              )}
+              onError={() => setImgOk(false)}
+            />
+          ) : (
+            <span className="text-xl font-extrabold tracking-tight">
+              <span className="text-black">A7mads</span>{" "}
+              <span className="text-sky-500">Camera</span>
+            </span>
+          )}
+          <span className="sr-only">A7mads Camera</span>
         </Link>
 
         {/* Desktop nav */}
@@ -73,11 +105,11 @@ export default function Nav() {
           className="md:hidden relative z-40 overflow-hidden transition-[max-height,opacity] duration-300 max-h-96 opacity-100 border-t border-default bg-white/95 backdrop-blur"
         >
           <div className="px-4 py-3 space-y-2">
-            <NavLink to="/portfolio" className={itemClass}>Portfolio</NavLink>
-            <NavLink to="/booking" className={itemClass}>Book</NavLink>
-            <NavLink to="/client-portal" className={itemClass}>Client Portal</NavLink>
-            <NavLink to="/faq" className={itemClass}>FAQ</NavLink>
-            <Link to="/booking">
+            <NavLink to="/portfolio" className={itemClass} onClick={() => setOpen(false)}>Portfolio</NavLink>
+            <NavLink to="/booking" className={itemClass} onClick={() => setOpen(false)}>Book</NavLink>
+            <NavLink to="/client-portal" className={itemClass} onClick={() => setOpen(false)}>Client Portal</NavLink>
+            <NavLink to="/faq" className={itemClass} onClick={() => setOpen(false)}>FAQ</NavLink>
+            <Link to="/booking" onClick={() => setOpen(false)}>
               <button className="btn btn-primary w-full mt-2">Book Now →</button>
             </Link>
           </div>

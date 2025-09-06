@@ -10,28 +10,28 @@ const SERVICES = [
     name: "Portraits",
     duration: "45–60 min",
     desc: "Clean, modern portraits for seniors and creatives.",
-    image: "/home/portrait.jpg",
+    image: "src/moe.jpg",
   },
   {
     id: "couples",
     name: "Couples",
     duration: "60 min",
     desc: "Celebrate your story with a relaxed session.",
-    image: "/home/couples.jpg",
+    image: "src/couple.png",
   },
   {
     id: "events",
     name: "Events",
     duration: "2 hours",
     desc: "Gatherings and concerts captured with clarity.",
-    image: "/home/events.jpg",
+    image: "src/muhtade.jpg",
   },
   {
     id: "branding",
     name: "Branding",
     duration: "60–90 min",
     desc: "Images for websites, products, and launches.",
-    image: "/home/branding.jpg",
+    image: "src/ameir.jpg",
   },
 ];
 

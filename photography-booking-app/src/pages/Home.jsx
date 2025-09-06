@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
@@ -11,13 +12,19 @@ import {
   where,
 } from "firebase/firestore";
 
+// Local images
+import eventsImg from "../Muhtade.jpg";
+import brandingImg from "../ameir.jpg";
+import ahmadHero from "../Ahmad.jpg";   // hero image
+import ahmadAbout from "../ahmad2.jpg"; // about section image
+
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
 export default function Home() {
   const [thumbs, setThumbs] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // recent work thumbnails from the “portfolio” gallery
+  // recent work thumbnails
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -25,14 +32,13 @@ export default function Home() {
         const galSnap = await getDocs(
           query(collection(db, "galleries"), where("tag", "==", "portfolio"), fbLimit(1))
         );
-        if (galSnap.empty) return setThumbs([]);
+        if (galSnap.empty) {
+          if (alive) setThumbs([]);
+          return;
+        }
         const gid = galSnap.docs[0].id;
         const imgsSnap = await getDocs(
-          query(
-            collection(db, `galleries/${gid}/images`),
-            orderBy("createdAt", "desc"),
-            fbLimit(8)
-          )
+          query(collection(db, `galleries/${gid}/images`), orderBy("createdAt", "desc"), fbLimit(8))
         );
         const rows = imgsSnap.docs.map((d) => d.data());
         if (alive) {
@@ -66,9 +72,7 @@ export default function Home() {
 
       {/* ————————————————— Hero ————————————————— */}
       <section className="relative overflow-hidden bg-[hsl(var(--bg))]">
-        {/* soft vignette */}
         <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background:radial-gradient(1000px_600px_at_20%_-20%,#000_0%,transparent_60%)]" />
-        {/* accent glow */}
         <div className="pointer-events-none absolute -left-40 top-40 h-80 w-80 rounded-full bg-[hsl(var(--accent))/0.18] blur-3xl" />
 
         <div className="container-pro relative py-14 md:py-20">
@@ -107,13 +111,12 @@ export default function Home() {
               <figure className="relative">
                 <div className="hero-frame">
                   <img
-                    src="/hero/primary.jpg"
+                    src={ahmadHero}
                     alt="Featured photograph"
-                    className="h-full w-full object-cover"
+                    className="h-full w-full object-cover object-[center_35%]"
                     loading="eager"
                   />
                 </div>
-                {/* floating chip */}
                 <figcaption className="absolute -bottom-3 left-4 select-none rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-3 py-1 text-[11px] text-[hsl(var(--muted))] shadow-soft">
                   North Carolina • on location
                 </figcaption>
@@ -122,7 +125,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* local styles */}
         <style>{`
           .hero-frame {
             position: relative;
@@ -141,13 +143,6 @@ export default function Home() {
             transform: translateY(6px) scaleX(.96);
             filter: blur(6px);
           }
-          @media (prefers-reduced-motion:no-preference) {
-            .hero-underline { animation: underlineEntrance .9s ease .1s both; }
-            @keyframes underlineEntrance {
-              from { opacity:.6; filter: blur(4px); }
-              to { opacity:1; filter: blur(0); }
-            }
-          }
         `}</style>
       </section>
 
@@ -157,7 +152,7 @@ export default function Home() {
           <div className="md:col-span-2">
             <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
               <img
-                src="/about.jpg"
+                src={ahmadAbout} // ✅ ahmad2.jpg here
                 alt="Ahmad, photographer"
                 className="w-full h-auto object-cover"
                 loading="lazy"
@@ -190,25 +185,25 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ————————————————— Approach ————————————————— */}
-      <section className="bg-[hsl(var(--bg))]">
+      {/* ————————————————— Process ————————————————— */}
+      <section className="border-t border-[hsl(var(--border))] bg-[hsl(var(--surface))]">
         <div className="container-pro py-12 md:py-16">
-          <h2 className="text-2xl md:text-4xl font-serif tracking-tight">
-            The approach
+          <h2 className="text-2xl md:text-4xl font-serif tracking-tight text-center mb-8">
+            How It Works
           </h2>
-          <div className="mt-6 grid md:grid-cols-3 gap-4 md:gap-6">
-            {PILLARS.map((p) => (
+          <div className="grid md:grid-cols-3 gap-6 md:gap-8">
+            {PROCESS.map((step, i) => (
               <article
-                key={p.title}
-                className="relative overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--surface))] p-5"
+                key={step.title}
+                className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-sm hover:shadow-md transition-transform hover:-translate-y-0.5"
               >
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="inline-grid h-6 w-6 place-items-center rounded-full bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent-600))] font-extrabold">
-                    {p.icon}
-                  </span>
-                  <h3 className="text-lg font-semibold">{p.title}</h3>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-[hsl(var(--accent-soft))] text-[hsl(var(--accent))] font-bold">
+                    {i + 1}
+                  </div>
+                  <h3 className="text-base md:text-lg font-semibold">{step.title}</h3>
                 </div>
-                <p className="text-sm text-[hsl(var(--muted))]">{p.body}</p>
+                <p className="text-sm text-[hsl(var(--muted))]">{step.body}</p>
               </article>
             ))}
           </div>
@@ -236,32 +231,27 @@ export default function Home() {
             {SERVICES.map((s) => (
               <article
                 key={s.id}
-                className={cls(
-                  "group relative overflow-hidden rounded-2xl border border-[hsl(var(--border))]",
-                  "bg-[hsl(var(--card))] transition shadow-[0_10px_30px_rgba(0,0,0,0.05)] hover:shadow-[0_14px_38px_rgba(0,0,0,0.10)]"
-                )}
+                className="group relative overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-sm hover:shadow-md transition"
               >
                 <div className="aspect-[4/3] overflow-hidden">
                   <img
                     src={s.image}
-                    alt=""
+                    alt={s.name}
                     loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    className={cls(
+                      "w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]",
+                      IMAGE_POS[s.id] || ""
+                    )}
                   />
                 </div>
                 <div className="p-4">
                   <h3 className="text-lg font-semibold">{s.name}</h3>
-                  <p className="mt-1 text-sm text-[hsl(var(--muted))]">
-                    {s.desc}
-                  </p>
+                  <p className="mt-1 text-sm text-[hsl(var(--muted))]">{s.desc}</p>
                   <div className="mt-3 flex items-center justify-between">
                     <span className="inline-flex items-center rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--surface))] px-2.5 py-0.5 text-[11px] font-semibold">
                       {s.duration}
                     </span>
-                    <Link
-                      to="/booking"
-                      className="no-underline text-[13px] font-semibold hover:underline"
-                    >
+                    <Link to="/booking" className="no-underline text-[13px] font-semibold hover:underline">
                       Book →
                     </Link>
                   </div>
@@ -277,9 +267,7 @@ export default function Home() {
         <div className="container-pro py-12 md:py-16">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h2 className="text-2xl md:text-4xl font-serif tracking-tight">
-                Recent work
-              </h2>
+              <h2 className="text-2xl md:text-4xl font-serif tracking-tight">Recent work</h2>
               <p className="mt-2 text-[hsl(var(--muted))]">
                 A few fresh frames from the portfolio.
               </p>
@@ -292,10 +280,7 @@ export default function Home() {
           {loading ? (
             <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-[4/5] rounded-xl bg-[hsl(var(--card))] animate-pulse border border-[hsl(var(--border))]"
-                />
+                <div key={i} className="aspect-[4/5] rounded-xl bg-[hsl(var(--card))] animate-pulse border border-[hsl(var(--border))]" />
               ))}
             </div>
           ) : thumbs.length ? (
@@ -333,8 +318,7 @@ export default function Home() {
             Ready when you are.
           </h2>
           <p className="mt-2 text-[hsl(var(--muted))]">
-            Tell me what you’re planning and I’ll follow up with times and
-            simple next steps.
+            Tell me what you’re planning and I’ll follow up with times and simple next steps.
           </p>
           <div className="mt-6 flex items-center justify-center gap-3">
             <Link to="/booking" className="no-underline">
@@ -357,7 +341,7 @@ function Primary({ children }) {
       className={cls(
         "inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold",
         "bg-[hsl(var(--accent))] text-[#0b0e11] ring-1 ring-[hsl(var(--accent-600))]",
-        "shadow-[0_8px_22px_rgba(0,0,0,0.08)] hover:shadow-[0_12px_28px_rgba(0,0,0,0.12)] transition"
+        "shadow-sm hover:shadow-md transition"
       )}
     >
       {children} <span className="ml-2" aria-hidden>→</span>
@@ -377,12 +361,29 @@ function Ghost({ children }) {
   );
 }
 
-/* ——— Content data ——— */
-const PILLARS = [
-  { icon: "I", title: "Intentional", body: "We plan just enough to keep the session relaxed and purposeful—no stiff posing." },
-  { icon: "C", title: "Consistent", body: "Clean light and true-to-tone color for a cohesive look across your gallery." },
-  { icon: "E", title: "Effortless", body: "Clear direction when needed, space when not. You focus on the moment; I’ll handle the rest." },
+/* ——— Process steps ——— */
+const PROCESS = [
+  {
+    title: "Inquiry",
+    body: "Reach out with your vision and preferred dates. I’ll respond quickly with availability.",
+  },
+  {
+    title: "Session",
+    body: "Relaxed direction and natural light to create authentic, editorial-quality photos.",
+  },
+  {
+    title: "Delivery",
+    body: "Curated online gallery delivered fast, ready to share or print.",
+  },
 ];
+
+/* ——— Services ——— */
+const IMAGE_POS = {
+  portraits: "object-center",
+  couples: "object-[center_40%]",
+  events: "object-[center_35%]",
+  branding: "object-[center_45%]",
+};
 
 const SERVICES = [
   {
@@ -390,27 +391,27 @@ const SERVICES = [
     name: "Portraits",
     desc: "Clean, modern portraits for seniors, creatives, and milestones.",
     duration: "45–60 min",
-    image: "/home/portrait.jpg",
+    image: "src/moe.jpg",
   },
   {
     id: "couples",
     name: "Couples",
     desc: "Celebrate your story with a relaxed session and editorial finish.",
     duration: "60 min",
-    image: "/home/couples.jpg",
+    image: "/src/couple.png",
   },
   {
     id: "events",
     name: "Events",
     desc: "Gatherings, concerts, and celebrations captured with energy and clarity.",
     duration: "2 hours",
-    image: "/home/events.jpg",
+    image: eventsImg,
   },
   {
     id: "branding",
     name: "Branding",
     desc: "Content for websites and launches—products, people, and spaces.",
     duration: "60–90 min",
-    image: "/home/branding.jpg",
+    image: brandingImg,
   },
 ];
