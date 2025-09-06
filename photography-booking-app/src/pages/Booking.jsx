@@ -1,7 +1,14 @@
 // src/pages/Booking.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { checkAvailability, submitBooking } from "../lib/api";
+
+/* ----------------------------- Local images ----------------------------- */
+/* Use RELATIVE paths from this file (src/pages/Booking.jsx) */
+import portraitsImg from "../moe.jpg";
+import couplesImg from "../couple.png";
+import eventsImg from "../Muhtade.jpg";
+import brandingImg from "../ameir.jpg";
 
 /* ----------------------------- Content data ----------------------------- */
 const SERVICES = [
@@ -10,28 +17,28 @@ const SERVICES = [
     name: "Portraits",
     duration: "45–60 min",
     desc: "Clean, modern portraits for seniors and creatives.",
-    image: "src/moe.jpg",
+    image: portraitsImg,
   },
   {
     id: "couples",
     name: "Couples",
     duration: "60 min",
     desc: "Celebrate your story with a relaxed session.",
-    image: "src/couple.png",
+    image: couplesImg,
   },
   {
     id: "events",
     name: "Events",
     duration: "2 hours",
     desc: "Gatherings and concerts captured with clarity.",
-    image: "src/Muhtade.jpg",
+    image: eventsImg,
   },
   {
     id: "branding",
     name: "Branding",
     duration: "60–90 min",
     desc: "Images for websites, products, and launches.",
-    image: "src/ameir.jpg",
+    image: brandingImg,
   },
 ];
 
@@ -133,7 +140,7 @@ export default function Booking() {
 
   // time
   const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  the [time, setTime] = useState("");
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState(null);
   const [avErr, setAvErr] = useState("");
