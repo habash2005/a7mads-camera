@@ -1,10 +1,11 @@
+// src/pages/ClientGallery.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
 
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { ref as sref, getBlob } from "firebase/storage";
+import { ref as sref, getBlob, getDownloadURL } from "firebase/storage";
 
 import { Helmet } from "react-helmet-async";
 
@@ -28,6 +29,31 @@ function storagePathOf(img) {
   if (img.path || img.storagePath || img.fullPath) return img.path || img.storagePath || img.fullPath;
   const m = String(img.secure_url || "").match(/\/o\/([^?]+)/);
   return m ? decodeURIComponent(m[1]) : (img.public_id || null);
+}
+
+/** Resolve a Blob CORS-safely (SDK first, then URL) */
+async function getImageBlob(storageInst, img) {
+  const path = storagePathOf(img);
+  if (path) {
+    try {
+      return await getBlob(sref(storageInst, path));
+    } catch {
+      try {
+        const url = await getDownloadURL(sref(storageInst, path));
+        const res = await fetch(url, { credentials: "omit" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+      } catch {
+        // fall through
+      }
+    }
+  }
+  if (img.secure_url) {
+    const res = await fetch(img.secure_url, { credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.blob();
+  }
+  throw new Error("No readable source for image");
 }
 
 /* ----------------- SelectableGallery ----------------- */
@@ -225,7 +251,7 @@ export default function ClientGallery() {
     setErr("");
   }
 
-  // Robust ZIP: try Storage SDK first, then fetch URL as fallback
+  // ZIP using Storage SDK (CORS-safe), with URL fallback
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -233,7 +259,7 @@ export default function ClientGallery() {
     }
 
     const TOTAL_LIMIT_MB = 500;
-    const approxBytes = files.reduce((sum, f) => sum + (f.bytes || 5_000_000), 0);
+    const approxBytes = files.reduce((sum, f) => sum + (f.bytes || f.size || 5_000_000), 0);
     if (approxBytes / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
@@ -246,31 +272,12 @@ export default function ClientGallery() {
 
       for (let i = 0; i < files.length; i++) {
         const img = files[i];
-        let added = false;
-
-        const path = storagePathOf(img);
-        if (path) {
-          try {
-            const blob = await getBlob(sref(storage, path));
-            zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-            added = true;
-          } catch (e) {
-            console.warn("Storage getBlob failed, will try fetch()", path, e);
-          }
+        try {
+          const blob = await getImageBlob(storage, img);
+          zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+        } catch (e) {
+          console.warn("Skipping unreadable file:", img.public_id || img.secure_url, e);
         }
-
-        if (!added && img.secure_url) {
-          try {
-            const res = await fetch(img.secure_url, { credentials: "omit" });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-            added = true;
-          } catch (e) {
-            console.warn("Fetch fallback failed, skipping:", img.secure_url, e);
-          }
-        }
-
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
 
@@ -414,6 +421,7 @@ export default function ClientGallery() {
         )}
       </div>
 
+      {/* subtle accent strip */}
       <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );

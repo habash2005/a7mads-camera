@@ -1,3 +1,4 @@
+// src/pages/ClientPortal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
@@ -5,7 +6,7 @@ import { collection, getDocs, limit, query, where } from "firebase/firestore";
 // Zip + Storage for downloads
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
-import { ref as sref, getBlob } from "firebase/storage";
+import { ref as sref, getBlob, getDownloadURL } from "firebase/storage";
 
 import { Helmet } from "react-helmet-async";
 
@@ -43,6 +44,35 @@ function parseRefFromUrl() {
   } catch {
     return "";
   }
+}
+
+/** Robustly resolve a Blob for an image:
+ *  1) Try Storage SDK by storage path (best, no CORS)
+ *  2) If that fails, get a signed URL via SDK and fetch it
+ *  3) If there's only a secure_url in the doc, fetch it
+ */
+async function getImageBlob(storageInst, img) {
+  const path = storagePathOf(img);
+  if (path) {
+    try {
+      return await getBlob(sref(storageInst, path));
+    } catch {
+      try {
+        const url = await getDownloadURL(sref(storageInst, path));
+        const res = await fetch(url, { credentials: "omit" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+      } catch {
+        // fall through to final fallback
+      }
+    }
+  }
+  if (img.secure_url) {
+    const res = await fetch(img.secure_url, { credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.blob();
+  }
+  throw new Error("No readable source for image");
 }
 
 /* ---------- small UI bits (themed) ---------- */
@@ -112,14 +142,16 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
                 {selected[img.public_id] ? "✓" : "+"}
               </span>
             </label>
-            <a
-              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
-              href={img.secure_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Original
-            </a>
+            {img.secure_url && (
+              <a
+                className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
+                href={img.secure_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Original
+              </a>
+            )}
           </figure>
         ))}
       </div>
@@ -162,14 +194,16 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               {selected[img.public_id] ? "✓" : "+"}
             </span>
           </label>
-          <a
-            className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
-            href={img.secure_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Original
-          </a>
+          {img.secure_url && (
+            <a
+              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
+              href={img.secure_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Original
+            </a>
+          )}
         </figure>
       ))}
     </div>
@@ -263,7 +297,7 @@ export default function ClientPortal() {
     setZipProgress(0);
   }
 
-  // Robust ZIP: try Storage SDK first (no CORS), then fall back to fetch()
+  // Client-side zipping via Firebase Storage + JSZip (CORS-safe)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -271,7 +305,7 @@ export default function ClientPortal() {
     }
     const TOTAL_LIMIT_MB = 500;
     let approx = 0;
-    for (const f of files) approx += f.size || 5_000_000;
+    for (const f of files) approx += f.size || f.bytes || 5_000_000; // fallback estimate
     if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
@@ -282,33 +316,12 @@ export default function ClientPortal() {
       const zip = new JSZip();
       for (let i = 0; i < files.length; i++) {
         const img = files[i];
-        let added = false;
-
-        // 1) Try Firebase Storage (best: no CORS issue)
-        const path = storagePathOf(img);
-        if (path) {
-          try {
-            const blob = await getBlob(sref(storage, path));
-            zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-            added = true;
-          } catch (e) {
-            console.warn("Storage getBlob failed, will try fetch()", path, e);
-          }
+        try {
+          const blob = await getImageBlob(storage, img);
+          zip.file(fileNameFrom(img), blob, { compression: "STORE" });
+        } catch (e) {
+          console.warn("Skipping file due to read error:", img.public_id || img.secure_url, e);
         }
-
-        // 2) Fallback to fetching the secure_url
-        if (!added && img.secure_url) {
-          try {
-            const res = await fetch(img.secure_url, { credentials: "omit" });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            zip.file(fileNameFrom(img), blob, { compression: "STORE" });
-            added = true;
-          } catch (e) {
-            console.warn("Fetch fallback failed, skipping:", img.secure_url, e);
-          }
-        }
-
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
       const zipBlob = await zip.generateAsync(
@@ -354,7 +367,7 @@ export default function ClientPortal() {
       </Helmet>
 
       <div className="container-pro py-16 md:py-24">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <h2 className="text-2xl md:text-3xl font-semibold">Client Portal</h2>
           {booking && (
             <button
@@ -470,6 +483,7 @@ export default function ClientPortal() {
         )}
       </div>
 
+      {/* subtle accent strip */}
       <div className="h-2 bg-gradient-to-r from-[hsl(var(--accent))]/40 via-[hsl(var(--accent))]/20 to-transparent" />
     </section>
   );
