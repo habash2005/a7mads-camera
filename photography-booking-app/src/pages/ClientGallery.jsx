@@ -1,4 +1,3 @@
-// src/pages/ClientGallery.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
@@ -31,15 +30,24 @@ function storagePathOf(img) {
   return m ? decodeURIComponent(m[1]) : (img.public_id || null);
 }
 
-/** Resolve a Blob CORS-safely (SDK first, then URL) */
+function bucketFromUrl(url) {
+  const m = String(url || "").match(/\/b\/([^/]+)\/o\//);
+  return m ? m[1] : null;
+}
+
+// CORS-safe blob fetcher
 async function getImageBlob(storageInst, img) {
   const path = storagePathOf(img);
-  if (path) {
+  const urlBucket = bucketFromUrl(img.secure_url);
+
+  if (path && urlBucket) {
     try {
-      return await getBlob(sref(storageInst, path));
+      const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
+      return await getBlob(gsRef);
     } catch {
       try {
-        const url = await getDownloadURL(sref(storageInst, path));
+        const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
+        const url = await getDownloadURL(gsRef);
         const res = await fetch(url, { credentials: "omit" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return await res.blob();
@@ -48,11 +56,30 @@ async function getImageBlob(storageInst, img) {
       }
     }
   }
+
+  if (path) {
+    try {
+      const r = sref(storageInst, path);
+      return await getBlob(r);
+    } catch {
+      try {
+        const r = sref(storageInst, path);
+        const url = await getDownloadURL(r);
+        const res = await fetch(url, { credentials: "omit" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+      } catch {
+        // fall through
+      }
+    }
+  }
+
   if (img.secure_url) {
     const res = await fetch(img.secure_url, { credentials: "omit" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.blob();
   }
+
   throw new Error("No readable source for image");
 }
 
@@ -251,7 +278,7 @@ export default function ClientGallery() {
     setErr("");
   }
 
-  // ZIP using Storage SDK (CORS-safe), with URL fallback
+  // ZIP via Firebase Storage SDK (CORS-safe)
   async function zipAndDownload(files, outName) {
     if (!files.length) {
       alert("No files selected");
@@ -276,8 +303,9 @@ export default function ClientGallery() {
           const blob = await getImageBlob(storage, img);
           zip.file(fileNameFrom(img), blob, { compression: "STORE" });
         } catch (e) {
-          console.warn("Skipping unreadable file:", img.public_id || img.secure_url, e);
+          console.warn("Skipping file due to fetch/read error:", img.public_id || img.secure_url, e);
         }
+
         setZipProgress(Math.round(((i + 1) / files.length) * 80));
       }
 
@@ -297,8 +325,10 @@ export default function ClientGallery() {
   }
 
   const downloadSelectedZip = () =>
-    zipAndDownload(images.filter((i) => !!selected[i.public_id]), "selected-images.zip");
-  const downloadAllZip = () => zipAndDownload(images, "all-images.zip");
+    zipAndDownload(images.filter((i) => !!selected[i.public_id]), "selected-images.zip").catch((e) =>
+      console.error(e)
+    );
+  const downloadAllZip = () => zipAndDownload(images, "all-images.zip").catch((e) => console.error(e));
 
   return (
     <section className="w-full border-y border-[hsl(var(--border))] bg-[hsl(var(--surface))]">

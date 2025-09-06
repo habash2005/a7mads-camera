@@ -1,4 +1,3 @@
-// src/pages/ClientPortal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db, storage } from "../lib/firebase";
 import { collection, getDocs, limit, query, where } from "firebase/firestore";
@@ -35,6 +34,62 @@ function storagePathOf(img) {
   return m ? decodeURIComponent(m[1]) : (img.public_id || null);
 }
 
+function bucketFromUrl(url) {
+  const m = String(url || "").match(/\/b\/([^/]+)\/o\//); // e.g. ahmad-port.firebasestorage.app
+  return m ? m[1] : null;
+}
+
+// CORS-safe blob fetcher: use gs:// URL via Storage SDK (works even across buckets)
+async function getImageBlob(storageInst, img) {
+  const path = storagePathOf(img);
+  const urlBucket = bucketFromUrl(img.secure_url);
+
+  // 1) Use explicit bucket from the file URL if present
+  if (path && urlBucket) {
+    try {
+      const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
+      return await getBlob(gsRef);
+    } catch {
+      try {
+        const gsRef = sref(storageInst, `gs://${urlBucket}/${path}`);
+        const url = await getDownloadURL(gsRef);
+        const res = await fetch(url, { credentials: "omit" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+      } catch {
+        // fall through
+      }
+    }
+  }
+
+  // 2) Try default bucket using path
+  if (path) {
+    try {
+      const r = sref(storageInst, path);
+      return await getBlob(r);
+    } catch {
+      try {
+        const r = sref(storageInst, path);
+        const url = await getDownloadURL(r);
+        const res = await fetch(url, { credentials: "omit" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+      } catch {
+        // fall through
+      }
+    }
+  }
+
+  // 3) Last resort: direct fetch (may CORS-fail on some files)
+  if (img.secure_url) {
+    const res = await fetch(img.secure_url, { credentials: "omit" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.blob();
+  }
+
+  throw new Error("No readable source for image");
+}
+
 function parseRefFromUrl() {
   try {
     const search = window.location.search || "";
@@ -44,35 +99,6 @@ function parseRefFromUrl() {
   } catch {
     return "";
   }
-}
-
-/** Robustly resolve a Blob for an image:
- *  1) Try Storage SDK by storage path (best, no CORS)
- *  2) If that fails, get a signed URL via SDK and fetch it
- *  3) If there's only a secure_url in the doc, fetch it
- */
-async function getImageBlob(storageInst, img) {
-  const path = storagePathOf(img);
-  if (path) {
-    try {
-      return await getBlob(sref(storageInst, path));
-    } catch {
-      try {
-        const url = await getDownloadURL(sref(storageInst, path));
-        const res = await fetch(url, { credentials: "omit" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return await res.blob();
-      } catch {
-        // fall through to final fallback
-      }
-    }
-  }
-  if (img.secure_url) {
-    const res = await fetch(img.secure_url, { credentials: "omit" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.blob();
-  }
-  throw new Error("No readable source for image");
 }
 
 /* ---------- small UI bits (themed) ---------- */
@@ -142,16 +168,14 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
                 {selected[img.public_id] ? "✓" : "+"}
               </span>
             </label>
-            {img.secure_url && (
-              <a
-                className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
-                href={img.secure_url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Original
-              </a>
-            )}
+            <a
+              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
+              href={img.secure_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Original
+            </a>
           </figure>
         ))}
       </div>
@@ -194,16 +218,14 @@ function SelectableGallery({ items, selected, onToggle, layout = "masonry" }) {
               {selected[img.public_id] ? "✓" : "+"}
             </span>
           </label>
-          {img.secure_url && (
-            <a
-              className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
-              href={img.secure_url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Original
-            </a>
-          )}
+          <a
+            className="absolute top-2 right-2 text-[11px] underline decoration-1 text-white/95 hover:text-[hsl(var(--accent))] opacity-0 group-hover:opacity-100 transition-opacity"
+            href={img.secure_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Original
+          </a>
         </figure>
       ))}
     </div>
@@ -305,7 +327,7 @@ export default function ClientPortal() {
     }
     const TOTAL_LIMIT_MB = 500;
     let approx = 0;
-    for (const f of files) approx += f.size || f.bytes || 5_000_000; // fallback estimate
+    for (const f of files) approx += f.bytes || f.size || 5_000_000; // fallback estimate
     if (approx / (1024 * 1024) > TOTAL_LIMIT_MB) {
       alert(`Too many or too large files (>${TOTAL_LIMIT_MB}MB). Try fewer at once.`);
       return;
@@ -340,10 +362,10 @@ export default function ClientPortal() {
 
   async function downloadSelectedZip() {
     const files = images.filter((i) => !!selected[i.public_id]);
-    await zipAndDownload(files, "selected-photos.zip");
+    await zipAndDownload(files, "selected-photos.zip").catch((e) => console.error(e));
   }
   async function downloadAllZip() {
-    await zipAndDownload(images, "all-photos.zip");
+    await zipAndDownload(images, "all-photos.zip").catch((e) => console.error(e));
   }
 
   const clientName = useMemo(() => booking?.details?.name || "Client", [booking]);
@@ -367,7 +389,7 @@ export default function ClientPortal() {
       </Helmet>
 
       <div className="container-pro py-16 md:py-24">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl md:text-3xl font-semibold">Client Portal</h2>
           {booking && (
             <button
