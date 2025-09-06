@@ -13,10 +13,10 @@ import {
 } from "firebase/firestore";
 
 // Local images
-import eventsImg from "../Muhtade.jpg";
-import brandingImg from "../ameir.jpg";
-import ahmadHero from "../Ahmad.jpg";   // hero image
-import ahmadAbout from "../ahmad2.jpg"; // about section image
+import eventsImg from "src/Muhtade.jpg";
+import brandingImg from "src/ameir.jpg";
+import ahmadHero from "src/Ahmad.jpg";   // hero image
+import ahmadAbout from "src/ahmad2.jpg"; // about section image
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
@@ -398,7 +398,7 @@ const SERVICES = [
     name: "Couples",
     desc: "Celebrate your story with a relaxed session and editorial finish.",
     duration: "60 min",
-    image: "/src/couple.png",
+    image: "src/couple.png",
   },
   {
     id: "events",
