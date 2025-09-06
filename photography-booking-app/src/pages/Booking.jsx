@@ -4,7 +4,8 @@ import { Helmet } from "react-helmet-async";
 import { checkAvailability, submitBooking } from "../lib/api";
 
 /* ----------------------------- Local images ----------------------------- */
-/* Use RELATIVE paths from this file (src/pages/Booking.jsx) */
+/* These paths are RELATIVE to this file (src/pages/Booking.jsx). */
+/* If you later move files to /src/assets, update the imports accordingly. */
 import portraitsImg from "../moe.jpg";
 import couplesImg from "../couple.png";
 import eventsImg from "../Muhtade.jpg";
@@ -18,6 +19,7 @@ const SERVICES = [
     duration: "45–60 min",
     desc: "Clean, modern portraits for seniors and creatives.",
     image: portraitsImg,
+    publicFallback: "/moe.jpg",
   },
   {
     id: "couples",
@@ -25,6 +27,7 @@ const SERVICES = [
     duration: "60 min",
     desc: "Celebrate your story with a relaxed session.",
     image: couplesImg,
+    publicFallback: "/couple.png",
   },
   {
     id: "events",
@@ -32,6 +35,7 @@ const SERVICES = [
     duration: "2 hours",
     desc: "Gatherings and concerts captured with clarity.",
     image: eventsImg,
+    publicFallback: "/Muhtade.jpg",
   },
   {
     id: "branding",
@@ -39,6 +43,7 @@ const SERVICES = [
     duration: "60–90 min",
     desc: "Images for websites, products, and launches.",
     image: brandingImg,
+    publicFallback: "/ameir.jpg",
   },
 ];
 
@@ -140,7 +145,8 @@ export default function Booking() {
 
   // time
   const [date, setDate] = useState("");
-  the [time, setTime] = useState("");
+  const [time, setTime] = useState(""); // ✅ fixed typo
+
   const [checking, setChecking] = useState(false);
   const [available, setAvailable] = useState(null);
   const [avErr, setAvErr] = useState("");
@@ -327,6 +333,12 @@ export default function Booking() {
                                 src={s.image}
                                 alt=""
                                 loading="lazy"
+                                onError={(e) => {
+                                  // fall back to a public-path version if the module import fails at runtime
+                                  if (s.publicFallback && e.currentTarget.src !== window.location.origin + s.publicFallback) {
+                                    e.currentTarget.src = s.publicFallback;
+                                  }
+                                }}
                                 className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                               />
                             </div>
