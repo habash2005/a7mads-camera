@@ -12,11 +12,13 @@ import {
   where,
 } from "firebase/firestore";
 
-// Local images
-import eventsImg from "src/Muhtade.jpg";
-import brandingImg from "src/ameir.jpg";
-import ahmadHero from "src/Ahmad.jpg";   // hero image
-import ahmadAbout from "src/ahmad2.jpg"; // about section image
+/* -------- Local images (import from /src using relative paths) -------- */
+import eventsImg from "../Muhtade.jpg";
+import brandingImg from "../ameir.jpg";
+import ahmadHero from "../Ahmad.jpg";   // hero image
+import ahmadAbout from "../ahmad2.jpg"; // about section image
+import portraitImg from "../moe.jpg";
+import couplesImg from "../couple.png";
 
 const cls = (...xs) => xs.filter(Boolean).join(" ");
 
@@ -152,7 +154,7 @@ export default function Home() {
           <div className="md:col-span-2">
             <div className="overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
               <img
-                src={ahmadAbout} // ✅ ahmad2.jpg here
+                src={ahmadAbout}
                 alt="Ahmad, photographer"
                 className="w-full h-auto object-cover"
                 loading="lazy"
@@ -391,14 +393,14 @@ const SERVICES = [
     name: "Portraits",
     desc: "Clean, modern portraits for seniors, creatives, and milestones.",
     duration: "45–60 min",
-    image: "src/moe.jpg",
+    image: portraitImg,
   },
   {
     id: "couples",
     name: "Couples",
     desc: "Celebrate your story with a relaxed session and editorial finish.",
     duration: "60 min",
-    image: "src/couple.png",
+    image: couplesImg,
   },
   {
     id: "events",
